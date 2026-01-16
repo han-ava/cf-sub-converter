@@ -20,7 +20,7 @@ export default {
 
     // 2. GET /path (Shortlink Redirect)
     let urlParam = url.searchParams.get('url');
-    const path = url.pathname.slice(1); // 這是短鏈名稱 (例如 my-office)
+    const path = url.pathname.slice(1); // 這是短鏈路徑
     let isShortLink = false;
 
     // 如果路徑存在且不是 favicon，嘗試從 KV 讀取
@@ -73,7 +73,7 @@ export default {
       // 6. 生成配置
       let result = ''; 
       let contentType = 'text/plain; charset=utf-8';
-      let fileExt = '.txt'; // 預設副檔名
+      let fileExt = '.txt';
 
       if (target === 'clash') { 
         result = await toClashWithTemplate(uniqueNodes); 
@@ -89,25 +89,35 @@ export default {
         fileExt = '.json';
       }
 
-      // 7. 設定檔案名稱
-      // 如果是短鏈，就用短鏈名稱 (例如 my-office.json)
-      // 如果不是，預設叫 subscription
+      // 7. 設定名稱
+      // 如果是短鏈，用短鏈名稱；否則用 subscription
+      // 使用 encodeURIComponent 處理中文檔名，但 profile-title 通常吃原始字串
       const rawFilename = isShortLink ? decodeURIComponent(path) : 'subscription';
       const filename = `${rawFilename}${fileExt}`;
-      // 處理中文檔名編碼
       const encodedFilename = encodeURIComponent(filename);
+      // 這裡將名稱再做一次編碼，確保 header 不會因為中文報錯
+      const safeProfileTitle = encodeURIComponent(rawFilename);
 
       // 8. 回傳結果
       return new Response(result, { 
         headers: { 
           'Content-Type': contentType, 
           'Access-Control-Allow-Origin': '*', 
+          
+          // 禁止快取
           'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
           'Pragma': 'no-cache',
           'Expires': '0',
-          // 關鍵：告訴瀏覽器/App 這個檔案的名字
+
+          // [關鍵新增] 告訴 Shadowrocket/Clash 這個訂閱叫什麼名字
+          // 優先使用 UTF-8 編碼的標頭，若不支援則使用 safeProfileTitle
+          'profile-title': rawFilename, 
+          'subscription-title': rawFilename, // 部分軟體使用這個
+
+          // 檔案下載名稱
           'Content-Disposition': `attachment; filename="${filename}"; filename*=UTF-8''${encodedFilename}`,
-          // 額外資訊：有些 App 會讀取這個標頭作為更新間隔 (例如 3600 秒)
+          
+          // 更新間隔 (1小時)
           'Profile-Update-Interval': '3600',
         } 
       });
