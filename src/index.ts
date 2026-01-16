@@ -20,7 +20,7 @@ export default {
 
     // 2. GET /path (Shortlink Redirect)
     let urlParam = url.searchParams.get('url');
-    // 解碼路徑 (例如 /myself)
+    // 解碼路徑
     const path = decodeURIComponent(url.pathname.slice(1)); 
     let isShortLink = false;
 
@@ -86,11 +86,10 @@ export default {
       }
 
       // 7. 設定名稱
-      // 如果是短鏈，就用短鏈名稱；否則用 subscription
       const rawFilename = isShortLink ? path : 'subscription';
       const filename = `${rawFilename}${fileExt}`;
       
-      // 使用 URL Encode，這是大部分 App 支援的標準
+      // 編碼名稱 (Cloudflare Worker Header 不支援直接中文，必須編碼)
       const encodedName = encodeURIComponent(rawFilename);
 
       // 8. 回傳結果
@@ -98,18 +97,19 @@ export default {
         headers: { 
           'Content-Type': contentType, 
           'Access-Control-Allow-Origin': '*', 
-          // 告訴 App 這些標頭是安全的，可以讀取
+          // [關鍵] 允許客戶端讀取這些自定義 Header
           'Access-Control-Expose-Headers': 'Content-Disposition, profile-title, subscription-title',
           
           'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
           'Pragma': 'no-cache',
           'Expires': '0',
 
-          // 設定標題 (URL Encoded)
+          // 給 Shadowrocket / Clash / V2RayN 的標題
+          // 使用 encodeURIComponent 是目前最通用的相容做法
           'profile-title': encodedName, 
           'subscription-title': encodedName,
           
-          // 下載檔名 (UTF-8)
+          // 檔案下載名稱
           'Content-Disposition': `inline; filename="${encodedName}${fileExt}"; filename*=UTF-8''${encodeURIComponent(filename)}`,
           
           'Profile-Update-Interval': '3600',
