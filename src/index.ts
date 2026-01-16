@@ -25,7 +25,6 @@ export default {
     let isShortLink = false;
 
     if (path && path !== 'favicon.ico' && !urlParam) {
-      // KV key 也是儲存為原始字串 (包含中文)
       const storedContent = await env.SUB_CACHE.get(path);
       if (storedContent) { 
         urlParam = storedContent; 
@@ -39,7 +38,7 @@ export default {
     const target = url.searchParams.get('target') || 'singbox';
     
     try {
-      // 4. 解析訂閱
+      // 4. 解析訂閱來源
       const inputs = urlParam.split('|'); 
       const allNodes: ProxyNode[] = [];
       
@@ -87,11 +86,10 @@ export default {
       }
 
       // 7. 設定名稱
-      // 如果是短鏈，直接使用路徑名稱 (支援中文)
       const rawFilename = isShortLink ? path : 'subscription';
       const filename = `${rawFilename}${fileExt}`;
       
-      // 編碼名稱以放入 Header
+      // 編碼名稱 (用於 Header)
       const encodedFilename = encodeURIComponent(filename);
       const encodedTitle = encodeURIComponent(rawFilename);
 
@@ -103,12 +101,14 @@ export default {
           'Pragma': 'no-cache',
           'Expires': '0',
 
-          // 給小火箭/Clash 的標題 (URL Encoded)
+          // [重點修正]
+          // 1. 使用 URL 編碼的標題
           'profile-title': encodedTitle, 
           'subscription-title': encodedTitle,
           
-          // 標準下載檔名 (RFC 5987)
-          'Content-Disposition': `attachment; filename*=UTF-8''${encodedFilename}`,
+          // 2. 改為 inline，並提供 UTF-8 檔名
+          // 讓 App 知道這是一個可以直接讀取的配置，而不是下載檔
+          'Content-Disposition': `inline; filename="${encodedFilename}"; filename*=UTF-8''${encodedFilename}`,
           
           'Profile-Update-Interval': '3600',
         } 
