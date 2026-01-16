@@ -4,21 +4,6 @@ import { parseContent } from './parser';
 import { toSingBoxWithTemplate, toClashWithTemplate, toBase64 } from './generator';
 import { deduplicateNodeNames } from './utils';
 
-// 輔助：將字串轉為 RFC 2047 編碼 (=?UTF-8?B?...?=)
-// 這是讓 HTTP Header 支援中文的標準做法
-function encodeRFC2047(str: string): string {
-  try {
-    // 如果只有英文數字，直接回傳
-    if (/^[\x00-\x7F]*$/.test(str)) return str;
-    
-    // 轉為 UTF-8 Base64
-    const base64 = btoa(unescape(encodeURIComponent(str)));
-    return `=?UTF-8?B?${base64}?=`;
-  } catch (e) {
-    return str; // 失敗則回傳原字串 (雖然可能會報錯，但總比掛掉好)
-  }
-}
-
 export default {
   async fetch(request: Request, env: Env, ctx: any): Promise<Response> {
     const url = new URL(request.url); 
@@ -35,7 +20,7 @@ export default {
 
     // 2. GET /path (Shortlink Redirect)
     let urlParam = url.searchParams.get('url');
-    // 解碼路徑 (例如 /我的節點)
+    // 解碼路徑 (例如 /myself)
     const path = decodeURIComponent(url.pathname.slice(1)); 
     let isShortLink = false;
 
@@ -101,28 +86,31 @@ export default {
       }
 
       // 7. 設定名稱
+      // 如果是短鏈，就用短鏈名稱；否則用 subscription
       const rawFilename = isShortLink ? path : 'subscription';
       const filename = `${rawFilename}${fileExt}`;
-      const encodedFilename = encodeURIComponent(filename);
-
-      // [重點] 使用 RFC 2047 編碼處理中文標題
-      const rfcTitle = encodeRFC2047(rawFilename);
+      
+      // 使用 URL Encode，這是大部分 App 支援的標準
+      const encodedName = encodeURIComponent(rawFilename);
 
       // 8. 回傳結果
       return new Response(result, { 
         headers: { 
           'Content-Type': contentType, 
           'Access-Control-Allow-Origin': '*', 
+          // 告訴 App 這些標頭是安全的，可以讀取
+          'Access-Control-Expose-Headers': 'Content-Disposition, profile-title, subscription-title',
+          
           'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
           'Pragma': 'no-cache',
           'Expires': '0',
 
-          // 給小火箭/Clash 的標題
-          'profile-title': rfcTitle,
-          'subscription-title': rfcTitle,
+          // 設定標題 (URL Encoded)
+          'profile-title': encodedName, 
+          'subscription-title': encodedName,
           
-          // 檔案下載名稱
-          'Content-Disposition': `inline; filename="${encodedFilename}"; filename*=UTF-8''${encodedFilename}`,
+          // 下載檔名 (UTF-8)
+          'Content-Disposition': `inline; filename="${encodedName}${fileExt}"; filename*=UTF-8''${encodeURIComponent(filename)}`,
           
           'Profile-Update-Interval': '3600',
         } 
