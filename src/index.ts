@@ -8,7 +8,7 @@ export default {
   async fetch(request: Request, env: Env, ctx: any): Promise<Response> {
     const url = new URL(request.url); 
     
-    // 1. POST /save (KV Shortlink)
+    // 1. POST /save (儲存短連結到 KV)
     if (request.method === 'POST' && url.pathname === '/save') {
       try {
         const body: any = await request.json();
@@ -18,27 +18,25 @@ export default {
       } catch (e) { return new Response('Error saving profile', { status: 500 }); }
     }
 
-    // 2. GET /path (Shortlink Redirect)
+    // 2. GET /path (讀取短連結)
     let urlParam = url.searchParams.get('url');
-    // 解碼路徑
+    // 解碼路徑 (例如 /myself)
     const path = decodeURIComponent(url.pathname.slice(1)); 
-    let isShortLink = false;
 
     if (path && path !== 'favicon.ico' && !urlParam) {
       const storedContent = await env.SUB_CACHE.get(path);
       if (storedContent) { 
         urlParam = storedContent; 
-        isShortLink = true; 
       }
     }
 
-    // 3. 顯示前端
+    // 3. 顯示前端頁面
     if (!urlParam) return new Response(HTML_PAGE, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
     
     const target = url.searchParams.get('target') || 'singbox';
     
     try {
-      // 4. 解析訂閱來源
+      // 4. 解析訂閱來源 (支援多行)
       const inputs = urlParam.split('|'); 
       const allNodes: ProxyNode[] = [];
       
@@ -48,6 +46,7 @@ export default {
         
         if (trimmed.startsWith('http')) { 
           try { 
+            // 加入隨機參數防止 fetch 緩存，確保拿到最新節點
             const separator = trimmed.includes('?') ? '&' : '?';
             const resp = await fetch(`${trimmed}${separator}t=${Date.now()}`, { 
               headers: { 'User-Agent': 'v2rayNG/1.8.5' } 
@@ -59,14 +58,17 @@ export default {
             } 
           } catch (e) {} 
         } else { 
+          // 處理直接貼上的節點連結
           allNodes.push(...await parseContent(trimmed)); 
         }
       }));
 
       if (allNodes.length === 0) return new Response('未解析到任何有效節點', { status: 400 });
       
+      // 5. 節點去重
       const uniqueNodes = deduplicateNodeNames(allNodes);
 
+      // 6. 生成配置
       let result = ''; 
       let contentType = 'text/plain; charset=utf-8';
       let fileExt = '.txt';
@@ -85,33 +87,26 @@ export default {
         fileExt = '.json';
       }
 
-      // 7. 設定名稱
-      const rawFilename = isShortLink ? path : 'subscription';
-      const filename = `${rawFilename}${fileExt}`;
-      
-      // 編碼名稱 (Cloudflare Worker Header 不支援直接中文，必須編碼)
-      const encodedName = encodeURIComponent(rawFilename);
+      // 7. 設定基本檔名
+      // 使用 URL 編碼確保標頭不報錯，客戶端能解就解，不能解就顯示亂碼或網域，手動改名即可
+      const filename = `subscription${fileExt}`;
+      const encodedName = encodeURIComponent(path || 'subscription');
 
       // 8. 回傳結果
       return new Response(result, { 
         headers: { 
           'Content-Type': contentType, 
           'Access-Control-Allow-Origin': '*', 
-          // [關鍵] 允許客戶端讀取這些自定義 Header
-          'Access-Control-Expose-Headers': 'Content-Disposition, profile-title, subscription-title',
           
+          // 強制不快取，確保每次更新都是最新的
           'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
           'Pragma': 'no-cache',
           'Expires': '0',
 
-          // 給 Shadowrocket / Clash / V2RayN 的標題
-          // 使用 encodeURIComponent 是目前最通用的相容做法
+          // 標準標頭
           'profile-title': encodedName, 
           'subscription-title': encodedName,
-          
-          // 檔案下載名稱
-          'Content-Disposition': `inline; filename="${encodedName}${fileExt}"; filename*=UTF-8''${encodeURIComponent(filename)}`,
-          
+          'Content-Disposition': `inline; filename="${filename}"; filename*=UTF-8''${encodeURIComponent(filename)}`,
           'Profile-Update-Interval': '3600',
         } 
       });
