@@ -4,6 +4,21 @@ import { parseContent } from './parser';
 import { toSingBoxWithTemplate, toClashWithTemplate, toBase64 } from './generator';
 import { deduplicateNodeNames } from './utils';
 
+// 輔助：將字串轉為 RFC 2047 編碼 (=?UTF-8?B?...?=)
+// 這是讓 HTTP Header 支援中文的標準做法
+function encodeRFC2047(str: string): string {
+  try {
+    // 如果只有英文數字，直接回傳
+    if (/^[\x00-\x7F]*$/.test(str)) return str;
+    
+    // 轉為 UTF-8 Base64
+    const base64 = btoa(unescape(encodeURIComponent(str)));
+    return `=?UTF-8?B?${base64}?=`;
+  } catch (e) {
+    return str; // 失敗則回傳原字串 (雖然可能會報錯，但總比掛掉好)
+  }
+}
+
 export default {
   async fetch(request: Request, env: Env, ctx: any): Promise<Response> {
     const url = new URL(request.url); 
@@ -20,7 +35,7 @@ export default {
 
     // 2. GET /path (Shortlink Redirect)
     let urlParam = url.searchParams.get('url');
-    // 使用 decodeURIComponent 確保中文路徑能被正確讀取
+    // 解碼路徑 (例如 /我的節點)
     const path = decodeURIComponent(url.pathname.slice(1)); 
     let isShortLink = false;
 
@@ -88,11 +103,12 @@ export default {
       // 7. 設定名稱
       const rawFilename = isShortLink ? path : 'subscription';
       const filename = `${rawFilename}${fileExt}`;
-      
-      // 編碼名稱 (用於 Header)
       const encodedFilename = encodeURIComponent(filename);
-      const encodedTitle = encodeURIComponent(rawFilename);
 
+      // [重點] 使用 RFC 2047 編碼處理中文標題
+      const rfcTitle = encodeRFC2047(rawFilename);
+
+      // 8. 回傳結果
       return new Response(result, { 
         headers: { 
           'Content-Type': contentType, 
@@ -101,13 +117,11 @@ export default {
           'Pragma': 'no-cache',
           'Expires': '0',
 
-          // [重點修正]
-          // 1. 使用 URL 編碼的標題
-          'profile-title': encodedTitle, 
-          'subscription-title': encodedTitle,
+          // 給小火箭/Clash 的標題
+          'profile-title': rfcTitle,
+          'subscription-title': rfcTitle,
           
-          // 2. 改為 inline，並提供 UTF-8 檔名
-          // 讓 App 知道這是一個可以直接讀取的配置，而不是下載檔
+          // 檔案下載名稱
           'Content-Disposition': `inline; filename="${encodedFilename}"; filename*=UTF-8''${encodedFilename}`,
           
           'Profile-Update-Interval': '3600',
