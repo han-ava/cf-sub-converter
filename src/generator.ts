@@ -30,16 +30,20 @@ export async function toClashWithTemplate(nodes: ProxyNode[]) {
   const processedProxies = nodes.map(n => {
     const p = { ...n.clashObj };
     
-    // 強制校正 Meta 核心要求的特定欄位格式
+    // 1. VMess 強制補充 alterId (解決報錯關鍵)
+    if (p.type === 'vmess') {
+      if (p.alterId === undefined) p.alterId = 0;
+    }
+
+    // 2. Reality 強制格式校正
     if (p.type === 'vless' && p.reality) {
-      // 確保 reality-opts 是明確的巢狀物件
       if (p['reality-opts'] && typeof p['reality-opts'] === 'string') {
-        p['reality-opts'] = JSON.parse(p['reality-opts']);
+        try { p['reality-opts'] = JSON.parse(p['reality-opts']); } catch(e) {}
       }
-      p.reality = true; // Meta 要求顯式開啟
+      p.reality = true;
     }
     
-    // 強制校正 alpn 為陣列，防止因字串格式導致的啟動失敗
+    // 3. ALPN 陣列校正
     if (p.alpn && typeof p.alpn === 'string') {
       p.alpn = p.alpn.split(',');
     }
@@ -53,12 +57,12 @@ export async function toClashWithTemplate(nodes: ProxyNode[]) {
   if (Array.isArray(config['proxy-groups'])) {
     config['proxy-groups'].forEach((group: any) => {
       if (!Array.isArray(group.proxies)) group.proxies = [];
-      // 僅添加名稱，避免重複加入
       processedProxies.forEach(p => {
         if (!group.proxies.includes(p.name)) group.proxies.push(p.name);
       });
     });
   }
   
+  // 輸出時強制關閉複雜的 YAML 引用，這對於 OpenClash 至關重要
   return yaml.dump(config, { noRefs: true, indent: 2 });
 }
