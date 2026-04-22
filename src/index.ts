@@ -44,9 +44,10 @@ export default {
         const trimmed = input.trim(); 
         if (!trimmed) return;
         
+        // 過濾不支援的 anytls 協議，防止解析報錯
+        if (trimmed.startsWith('anytls://')) return;
         if (trimmed.startsWith('http')) { 
           try { 
-            // 加入隨機參數防止 fetch 緩存，確保拿到最新節點
             const separator = trimmed.includes('?') ? '&' : '?';
             const resp = await fetch(`${trimmed}${separator}t=${Date.now()}`, { 
               headers: { 'User-Agent': 'v2rayNG/1.8.5' } 
@@ -58,7 +59,6 @@ export default {
             } 
           } catch (e) {} 
         } else { 
-          // 處理直接貼上的節點連結
           allNodes.push(...await parseContent(trimmed)); 
         }
       }));
@@ -87,23 +87,16 @@ export default {
         fileExt = '.json';
       }
 
-      // 7. 設定基本檔名
-      // 使用 URL 編碼確保標頭不報錯，客戶端能解就解，不能解就顯示亂碼或網域，手動改名即可
       const filename = `subscription${fileExt}`;
       const encodedName = encodeURIComponent(path || 'subscription');
 
-      // 8. 回傳結果
       return new Response(result, { 
         headers: { 
           'Content-Type': contentType, 
           'Access-Control-Allow-Origin': '*', 
-          
-          // 強制不快取，確保每次更新都是最新的
           'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
           'Pragma': 'no-cache',
           'Expires': '0',
-
-          // 標準標頭
           'profile-title': encodedName, 
           'subscription-title': encodedName,
           'Content-Disposition': `inline; filename="${filename}"; filename*=UTF-8''${encodeURIComponent(filename)}`,
