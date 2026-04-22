@@ -27,21 +27,38 @@ export async function toClashWithTemplate(nodes: ProxyNode[]) {
   const text = await fetchWithUA(REMOTE_CONFIG.clash);
   let config: any = yaml.load(text);
   
-  // 核心修正：將 parser 輸出的 clashObj 進行 Meta 格式校驗
-  const proxies = nodes.map(n => n.clashObj).filter(Boolean).map(p => {
-    // 確保 alpn 是陣列
-    if (p.alpn && typeof p.alpn === 'string') p.alpn = [p.alpn];
+  const processedProxies = nodes.map(n => {
+    const p = { ...n.clashObj };
+    
+    // 強制校正 Meta 核心要求的特定欄位格式
+    if (p.type === 'vless' && p.reality) {
+      // 確保 reality-opts 是明確的巢狀物件
+      if (p['reality-opts'] && typeof p['reality-opts'] === 'string') {
+        p['reality-opts'] = JSON.parse(p['reality-opts']);
+      }
+      p.reality = true; // Meta 要求顯式開啟
+    }
+    
+    // 強制校正 alpn 為陣列，防止因字串格式導致的啟動失敗
+    if (p.alpn && typeof p.alpn === 'string') {
+      p.alpn = p.alpn.split(',');
+    }
+    
     return p;
-  });
+  }).filter(Boolean);
 
-  if (!Array.isArray(config.proxies)) config.proxies = []; 
-  config.proxies.push(...proxies);
+  if (!Array.isArray(config.proxies)) config.proxies = [];
+  config.proxies.push(...processedProxies);
   
-  if (Array.isArray(config['proxy-groups'])) { 
-    config['proxy-groups'].forEach((group: any) => { 
-      if (!Array.isArray(group.proxies)) group.proxies = []; 
-      group.proxies.push(...proxies.map(p => p.name)); 
-    }); 
+  if (Array.isArray(config['proxy-groups'])) {
+    config['proxy-groups'].forEach((group: any) => {
+      if (!Array.isArray(group.proxies)) group.proxies = [];
+      // 僅添加名稱，避免重複加入
+      processedProxies.forEach(p => {
+        if (!group.proxies.includes(p.name)) group.proxies.push(p.name);
+      });
+    });
   }
-  return yaml.dump(config, { noRefs: true });
+  
+  return yaml.dump(config, { noRefs: true, indent: 2 });
 }
