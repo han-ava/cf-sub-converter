@@ -1,9 +1,8 @@
 import yaml from 'js-yaml';
 import { ProxyNode } from './types';
 import { REMOTE_CONFIG } from './constants';
-import { utf8ToBase64, adjustSS2022Key } from './utils';
+import { utf8ToBase64 } from './utils';
 
-// --- 1. Base64 生成器 ---
 export function toBase64(nodes: ProxyNode[]) {
   const links = nodes.map(node => {
     try {
@@ -45,6 +44,11 @@ export function toBase64(nodes: ProxyNode[]) {
             if (node.fingerprint) params.set('fp', node.fingerprint);
             params.set('type', node.network || 'tcp');
         }
+        if (node.clashObj && node.clashObj.plugin && !node.tls) {
+             const pluginOpts = node.clashObj['plugin-opts'];
+             const optStr = pluginOpts ? ';' + new URLSearchParams(pluginOpts).toString().replace(/&/g, ';') : '';
+             params.set('plugin', node.clashObj.plugin + optStr);
+        }
         const query = params.toString();
         return `ss://${method}:${pass}@${node.server}:${node.port}${query ? '/?' + query : ''}#${encodeURIComponent(node.name)}`;
       }
@@ -56,26 +60,18 @@ export function toBase64(nodes: ProxyNode[]) {
 
 async function fetchWithUA(url: string) {
   const resp = await fetch(`${url}?t=${Math.random()}`, {
-    headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36', 'Cache-Control': 'no-cache' }
+    headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' }
   });
-  if (!resp.ok) throw new Error(`GitHub 下載失敗: ${resp.status}`);
+  if (!resp.ok) throw new Error(`Template fetch failed: ${resp.status}`);
   return await resp.text();
 }
 
-// --- 2. Sing-Box 生成器 ---
 export async function toSingBoxWithTemplate(nodes: ProxyNode[]) {
   const text = await fetchWithUA(REMOTE_CONFIG.singbox);
   let config = JSON.parse(text);
-  const outbounds = nodes.map(n => {
-     const obj = JSON.parse(JSON.stringify(n.singboxObj));
-     if (obj.type === 'shadowsocks' && obj.method.toLowerCase().includes('2022')) {
-         obj.password = adjustSS2022Key(obj.password, obj.method.toLowerCase());
-         delete obj.plugin; delete obj.plugin_opts; delete obj.transport; delete obj.tls; delete obj.multiplex;
-         obj.udp_over_tcp = true; 
-     }
-     return obj;
-  });
+  const outbounds = nodes.map(n => JSON.parse(JSON.stringify(n.singboxObj)));
   const nodeTags = outbounds.map((o:any) => o.tag);
+  
   if (!Array.isArray(config.outbounds)) config.outbounds = [];
   config.outbounds.push(...outbounds);
   config.outbounds.forEach((out: any) => {
@@ -87,16 +83,17 @@ export async function toSingBoxWithTemplate(nodes: ProxyNode[]) {
   return JSON.stringify(config, null, 2);
 }
 
-// --- 3. Clash Meta 生成器 ---
 export async function toClashWithTemplate(nodes: ProxyNode[]) {
   const text = await fetchWithUA(REMOTE_CONFIG.clash);
   let config: any = yaml.load(text);
+  
   const proxies = nodes.map(n => {
     const obj = JSON.parse(JSON.stringify(n.clashObj));
     Object.keys(obj).forEach(key => obj[key] === undefined && delete obj[key]);
     return obj;
   }); 
   const proxyNames = proxies.map((p: any) => p.name);
+
   if (!Array.isArray(config.proxies)) config.proxies = [];
   config.proxies.push(...proxies);
 
@@ -106,5 +103,7 @@ export async function toClashWithTemplate(nodes: ProxyNode[]) {
       proxyNames.forEach(name => { if (!group.proxies.includes(name)) group.proxies.push(name); });
     });
   }
+  
+  // 關鍵：noRefs: true 禁止錨點引用，這是 OpenClash 不會報錯的關鍵
   return yaml.dump(config, { indent: 2, noRefs: true });
 }
