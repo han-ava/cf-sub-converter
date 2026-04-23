@@ -6,19 +6,6 @@ const tryDecodeURIComponent = (str: string) => {
   try { return decodeURIComponent(str); } catch (e) { return str; }
 };
 
-// --- 輔助：完美修復 SS-2022 Key ---
-function fixSS2022Key(key: string): string {
-  if (!key) return "";
-  try { key = decodeURIComponent(key); } catch(e) {}
-  if (key.includes(':')) { key = key.split(':')[0]; }
-  let clean = key.replace(/-/g, '+').replace(/_/g, '/');
-  clean = clean.replace(/[^A-Za-z0-9\+\/]/g, "");
-  if (clean.length > 44) { clean = clean.substring(0, 44); }
-  const pad = clean.length % 4;
-  if (pad) { clean += '='.repeat(4 - pad); }
-  return clean;
-}
-
 function parsePluginParams(str: string): Record<string, string> {
   const params: Record<string, string> = {};
   str.split(';').forEach(p => {
@@ -126,7 +113,6 @@ function parseShadowsocks(urlStr: string): ProxyNode | null {
 // --- 解析 VLESS & AnyTLS ---
 function parseVless(urlStr: string): ProxyNode | null {
   try {
-    // [相容性修正] X-UI 的 anytls 協議，本質上可作為 VLESS 解析
     if (urlStr.startsWith('anytls://')) {
         urlStr = urlStr.replace('anytls://', 'vless://');
     }
@@ -135,7 +121,6 @@ function parseVless(urlStr: string): ProxyNode | null {
     const params = url.searchParams; 
     const name = tryDecodeURIComponent(url.hash.slice(1)) || 'VLESS';
     
-    // [相容性修正] 確保 WebSocket 路徑必定以 "/" 開頭 (OpenClash 強制要求)
     let wsPath = params.get('path') || '/';
     if (!wsPath.startsWith('/')) wsPath = '/' + wsPath;
 
@@ -143,14 +128,12 @@ function parseVless(urlStr: string): ProxyNode | null {
     if (params.get('security') === 'reality') { node.reality = { publicKey: params.get('pbk') || '', shortId: params.get('sid') || '' }; if (!node.sni) node.sni = node.server; }
     if (node.network === 'ws') { node.wsPath = wsPath; node.wsHeaders = { Host: params.get('host') || node.server }; }
     
-    // SingBox
     const sb: any = { tag: name, type: 'vless', server: node.server, server_port: node.port, uuid: node.uuid };
     if(node.flow) sb.flow = node.flow; sb.tls = { enabled: node.tls, server_name: node.sni || node.server, insecure: node.skipCertVerify, utls: { enabled: true, fingerprint: node.fingerprint }};
     if(node.reality) sb.tls.reality = { enabled: true, public_key: node.reality.publicKey, short_id: node.reality.shortId };
     if(node.network === 'ws') sb.transport = { type: 'ws', path: node.wsPath, headers: node.wsHeaders };
     node.singboxObj = sb;
     
-    // OpenClash / Clash Meta
     const cl: any = { name, type: 'vless', server: node.server, port: node.port, uuid: node.uuid, udp: true, tls: node.tls, servername: node.sni || node.server, 'skip-cert-verify': node.skipCertVerify, 'client-fingerprint': node.fingerprint };
     if(node.flow) cl.flow = node.flow; 
     if(node.reality) { cl.reality = true; cl['reality-opts'] = { 'public-key': node.reality.publicKey, 'short-id': node.reality.shortId }; }
@@ -179,18 +162,14 @@ function parseVmess(vmessUrl: string): ProxyNode | null {
   try {
     const b64 = vmessUrl.replace('vmess://', ''); const jsonStr = safeBase64Decode(b64); const config = JSON.parse(jsonStr); const name = config.ps || 'VMess';
     
-    // [相容性修正] 確保 WebSocket 路徑必定以 "/" 開頭 (OpenClash 強制要求)
     let wsPath = config.path || '/';
     if (!wsPath.startsWith('/')) wsPath = '/' + wsPath;
 
     const node: ProxyNode = { type: 'vmess', name, server: config.add, port: parseInt(config.port), uuid: config.id, cipher: 'auto', tls: config.tls === 'tls', sni: config.sni || config.host, network: config.net || 'tcp', wsPath: wsPath, wsHeaders: config.host ? { Host: config.host } : undefined, skipCertVerify: true };
     
-    // SingBox
     const sb: any = { tag: name, type: 'vmess', server: node.server, server_port: node.port, uuid: node.uuid, security: 'auto' };
     sb.tls = { enabled: node.tls, server_name: node.sni || node.server, insecure: true }; if(node.network === 'ws') sb.transport = { type: 'ws', path: node.wsPath, headers: node.wsHeaders }; node.singboxObj = sb;
     
-    // OpenClash / Clash Meta
-    // [相容性修正] OpenClash 強制要求 alterId 欄位，即便為 0 也不能省略
     const cl: any = { name, type: 'vmess', server: node.server, port: node.port, uuid: node.uuid, alterId: parseInt(config.aid) || 0, cipher: config.scy || 'auto', udp: true, tls: node.tls, servername: node.sni || config.host || node.server, network: node.network };
     if(node.network === 'ws') cl['ws-opts'] = { path: wsPath, headers: node.wsHeaders }; 
     node.clashObj = cl;
@@ -205,4 +184,13 @@ export async function parseContent(content: string): Promise<ProxyNode[]> {
   if (!content.includes('://') || !content.match(/^[a-z0-9]+:\/\//i)) { 
     const decoded = safeBase64Decode(content); if (decoded) plainText = decoded; 
   }
-  const lines = plainText.split(/\r?\n/); const nodes: ProxyNode[] =
+  const lines = plainText.split(/\r?\n/); const nodes: ProxyNode[] =[];
+  for (const line of lines) { 
+    const l = line.trim(); if (!l) continue;
+    if (l.startsWith('ss://')) { const n = parseShadowsocks(l); if (n) nodes.push(n); } 
+    else if (l.startsWith('vless://')) { const n = parseVless(l); if (n) nodes.push(n); } 
+    else if (l.startsWith('hysteria2://') || l.startsWith('hy2://')) { const n = parseHysteria2(l); if (n) nodes.push(n); } 
+    else if (l.startsWith('vmess://')) { const n = parseVmess(l); if (n) nodes.push(n); }
+  } 
+  return nodes;
+}
