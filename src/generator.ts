@@ -51,13 +51,11 @@ export function toBase64(nodes: ProxyNode[]) {
 
       // --- Shadowsocks ---
       if (node.type === 'shadowsocks') {
-        // V2RayN 支援明文格式，這裡使用 URL Encode 確保包含冒號等特殊字元的密碼不會報錯
         const method = encodeURIComponent(node.cipher || '');
         const pass = encodeURIComponent(node.password || '');
         
         const params = new URLSearchParams();
         
-        // 寫入標準 SIP002 參數
         if (node.tls) {
             params.set('security', 'tls');
             if (node.sni) params.set('sni', node.sni);
@@ -65,13 +63,11 @@ export function toBase64(nodes: ProxyNode[]) {
             if (node.fingerprint) params.set('fp', node.fingerprint);
             params.set('type', node.network || 'tcp');
             
-            // ECH 參數 (若有的話，存放在 reality.shortId 中)
             if (node.reality && node.reality.shortId) {
                 params.set('ech', node.reality.shortId);
             }
         }
         
-        // 寫回原本的 plugin 參數 (如果有的話)
         if (node.clashObj && node.clashObj.plugin && !node.tls) {
              const pluginOpts = node.clashObj['plugin-opts'];
              const optStr = pluginOpts ? ';' + new URLSearchParams(pluginOpts).toString().replace(/&/g, ';') : '';
@@ -103,7 +99,7 @@ async function fetchWithUA(url: string) {
   return await resp.text();
 }
 
-// --- 2. Sing-Box 生成器 (處理遠端 JSON) ---
+// --- 2. Sing-Box 生成器 ---
 export async function toSingBoxWithTemplate(nodes: ProxyNode[]) {
   const text = await fetchWithUA(REMOTE_CONFIG.singbox);
   let config: any;
@@ -113,35 +109,25 @@ export async function toSingBoxWithTemplate(nodes: ProxyNode[]) {
     throw new Error('Sing-Box_Rules.JSON 格式錯誤，請確認 GitHub 上的檔案是合法的 JSON'); 
   }
 
-  // 映射節點並進行最終清洗
   const outbounds = nodes.map(n => {
-     // 深拷貝一份，避免污染原始物件
      const obj = JSON.parse(JSON.stringify(n.singboxObj));
      
-     // [關鍵相容性保護] 
-     // Sing-Box 的 SS-2022 只需要 Server Key (冒號前面的部分)
-     // 如果密碼中包含冒號，強制切斷，防止出現 "bad key length, got 72" 崩潰
      if (obj.type === 'shadowsocks' && obj.method.toLowerCase().includes('2022')) {
          if (obj.password && obj.password.includes(':')) {
              obj.password = obj.password.split(':')[0];
          }
      }
-     
      return obj;
   });
   
   const nodeTags = outbounds.map((o:any) => o.tag);
 
-  if (!Array.isArray(config.outbounds)) config.outbounds = [];
-  
-  // 將節點加入到設定的最後方
+  if (!Array.isArray(config.outbounds)) config.outbounds =[];
   config.outbounds.push(...outbounds);
 
-  // 自動將節點加入所有的 selector 與 urltest 策略組中
   config.outbounds.forEach((out: any) => {
     if (out.type === 'selector' || out.type === 'urltest') {
-      if (!Array.isArray(out.outbounds)) out.outbounds = [];
-      // 避免重複加入
+      if (!Array.isArray(out.outbounds)) out.outbounds =[];
       const currentOutbounds = new Set(out.outbounds);
       nodeTags.forEach((tag: string) => {
           if (!currentOutbounds.has(tag)) {
@@ -154,7 +140,7 @@ export async function toSingBoxWithTemplate(nodes: ProxyNode[]) {
   return JSON.stringify(config, null, 2);
 }
 
-// --- 3. Clash Meta / OpenClash 生成器 (處理遠端 YAML) ---
+// --- 3. Clash Meta / OpenClash 生成器 ---
 export async function toClashWithTemplate(nodes: ProxyNode[]) {
   const text = await fetchWithUA(REMOTE_CONFIG.clash);
   let config: any;
@@ -164,19 +150,53 @@ export async function toClashWithTemplate(nodes: ProxyNode[]) {
     throw new Error('Clash_Rules.YAML 格式錯誤，請確認 GitHub 上的檔案是合法的 YAML'); 
   }
   
-  const proxies = nodes.map(n => n.clashObj); 
-  const proxyNames = proxies.map(p => p.name);
+  // 處理與過濾 Clash 節點
+  const proxies = nodes.map(n => {
+    const obj = JSON.parse(JSON.stringify(n.clashObj));
+    
+    //[關鍵修復 1] OpenClash 對於 SS obfs 插件的嚴格格式要求
+    // 必須將 obfs-local 轉為 obfs，並修改內部參數鍵值
+    if (obj.type === 'ss' && (obj.plugin === 'obfs-local' || obj.plugin === 'simple-obfs')) {
+        obj.plugin = 'obfs'; // Clash 只認識 obfs
+        if (obj['plugin-opts']) {
+            if (obj['plugin-opts']['obfs']) {
+                obj['plugin-opts'].mode = obj['plugin-opts']['obfs'];
+                delete obj['plugin-opts']['obfs'];
+            }
+            if (obj['plugin-opts']['obfs-host']) {
+                obj['plugin-opts'].host = obj['plugin-opts']['obfs-host'];
+                delete obj['plugin-opts']['obfs-host'];
+            }
+        }
+    }
+    
+    // 清理 undefined 屬性，避免 yaml.dump 報錯
+    Object.keys(obj).forEach(key => obj[key] === undefined && delete obj[key]);
+    return obj;
+  }); 
+  
+  const proxyNames = proxies.map((p: any) => p.name);
 
-  if (!Array.isArray(config.proxies)) config.proxies = [];
+  if (!Array.isArray(config.proxies)) config.proxies =[];
   config.proxies.push(...proxies);
 
-  // 將節點加入 proxy-groups
+  // [關鍵修復 2] 將節點加入 proxy-groups 並避免重複，防止 OpenClash 報錯
   if (Array.isArray(config['proxy-groups'])) {
     config['proxy-groups'].forEach((group: any) => {
-      if (!Array.isArray(group.proxies)) group.proxies = [];
-      group.proxies.push(...proxyNames);
+      if (!Array.isArray(group.proxies)) group.proxies =[];
+      
+      const currentProxies = new Set(group.proxies);
+      proxyNames.forEach((name: string) => {
+          if (!currentProxies.has(name)) {
+              group.proxies.push(name);
+          }
+      });
     });
   }
 
-  return yaml.dump(config);
+  // [關鍵修復 3] noRefs: true 關閉 YAML 的 alias 引用，OpenClash 不支援這種語法
+  return yaml.dump(config, {
+      indent: 2,
+      noRefs: true 
+  });
 }
