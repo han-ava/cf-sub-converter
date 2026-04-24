@@ -9,12 +9,20 @@ export function toBase64(nodes: ProxyNode[]) {
     try {
       if (node.type === 'vless') {
         const params = new URLSearchParams();
-        params.set('security', node.reality ? 'reality' : (node.tls ? 'tls' : 'none'));
+        params.set(
+  'security',
+  node.reality?.publicKey ? 'reality' : (node.tls ? 'tls' : 'none')
+);
         params.set('type', node.network || 'tcp');
         if (node.flow) params.set('flow', node.flow);
         if (node.sni) params.set('sni', node.sni);
         if (node.fingerprint) params.set('fp', node.fingerprint);
-        if (node.reality) { params.set('pbk', node.reality.publicKey); params.set('sid', node.reality.shortId); }
+        if (node.reality?.publicKey) { 
+  params.set('pbk', node.reality.publicKey); 
+  if (node.reality.shortId) {
+    params.set('sid', node.reality.shortId);
+  }
+}
         if (node.network === 'ws') { if (node.wsPath) params.set('path', node.wsPath); if (node.wsHeaders?.Host) params.set('host', node.wsHeaders.Host); }
         return `vless://${node.uuid}@${node.server}:${node.port}?${params.toString()}#${encodeURIComponent(node.name)}`;
       }
@@ -30,7 +38,7 @@ export function toBase64(nodes: ProxyNode[]) {
       if (node.type === 'vmess') {
         const vmessObj = {
           v: "2", ps: node.name, add: node.server, port: node.port, id: node.uuid,
-          aid: node.clashObj?.alterId || 0, scy: "auto", net: node.network, type: "none",
+          aid: 0, scy: "auto", net: node.network, type: "none",
           host: node.wsHeaders?.Host || "", path: node.wsPath || "",
           tls: node.tls ? "tls" : "", sni: node.sni || ""
         };
@@ -38,8 +46,8 @@ export function toBase64(nodes: ProxyNode[]) {
       }
 
       if (node.type === 'shadowsocks') {
-        const method = encodeURIComponent(node.cipher || '');
-        const pass = encodeURIComponent(node.password || '');
+        const userinfo = utf8ToBase64(`${node.cipher}:${node.password}`);
+
         const params = new URLSearchParams();
         
         if (node.tls) {
@@ -52,7 +60,8 @@ export function toBase64(nodes: ProxyNode[]) {
         }
         
         const query = params.toString();
-        return `ss://${method}:${pass}@${node.server}:${node.port}${query ? '/?' + query : ''}#${encodeURIComponent(node.name)}`;
+        return `ss://${userinfo}@${node.server}:${node.port}${query ? '/?' + query : ''}#${encodeURIComponent(node.name)}`;
+
       }
 
       return null;
@@ -63,8 +72,8 @@ export function toBase64(nodes: ProxyNode[]) {
 }
 
 async function fetchWithUA(url: string) {
-  const separator = url.includes('?') ? '&' : '?';
-  const resp = await fetch(`${url}${separator}t=${Math.random()}`, {
+  const resp = await fetch(url, {
+  cache: 'no-store',
     headers: {
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36',
       'Cache-Control': 'no-cache',
@@ -114,18 +123,27 @@ export async function toClashWithTemplate(nodes: ProxyNode[]) {
   }); 
   const proxyNames = proxies.map((p: any) => p.name);
 
-  if (!Array.isArray(config.proxies)) config.proxies =[];
-  config.proxies.push(...proxies);
+  if (!Array.isArray(config.proxies)) config.proxies = [];
+
+const existing = new Set(config.proxies.map((p:any) => p.name));
+
+proxies.forEach(p => {
+  if (!existing.has(p.name)) {
+    config.proxies.push(p);
+  }
+});
 
   if (Array.isArray(config['proxy-groups'])) {
     config['proxy-groups'].forEach((group: any) => {
       if (!Array.isArray(group.proxies)) group.proxies = [];
-      const currentProxies = new Set(group.proxies);
-      proxyNames.forEach((name: string) => {
-          if (!currentProxies.has(name)) {
-              group.proxies.push(name);
-          }
-      });
+
+const currentProxies = new Set(group.proxies);
+
+proxyNames.forEach((name: string) => {
+  if (!currentProxies.has(name)) {
+    group.proxies.push(name);
+  }
+});
     });
   }
 
