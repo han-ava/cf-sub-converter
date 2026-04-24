@@ -1,9 +1,8 @@
 import yaml from 'js-yaml';
 import { ProxyNode } from './types';
 import { REMOTE_CONFIG } from './constants';
-import { utf8ToBase64 } from './utils';
+import { utf8ToBase64, adjustSS2022Key } from './utils';
 
-// --- 1. Base64 生成器 ---
 export function toBase64(nodes: ProxyNode[]) {
   const links = nodes.map(node => {
     try {
@@ -62,10 +61,8 @@ export function toBase64(nodes: ProxyNode[]) {
   return utf8ToBase64(links.join('\n'));
 }
 
-// 修正：移除不支援的 cache 欄位，改用 URL 時間戳
 async function fetchWithUA(url: string) {
-  const separator = url.includes('?') ? '&' : '?';
-  const cacheBusterUrl = `${url}${separator}t=${Date.now()}`;
+  const cacheBusterUrl = `${url}${url.includes('?') ? '&' : '?'}t=${Date.now()}`;
   const resp = await fetch(cacheBusterUrl, {
     headers: {
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36',
@@ -77,7 +74,6 @@ async function fetchWithUA(url: string) {
   return await resp.text();
 }
 
-// --- 2. Sing-Box 生成器 ---
 export async function toSingBoxWithTemplate(nodes: ProxyNode[]) {
   const text = await fetchWithUA(REMOTE_CONFIG.singbox);
   let config: any;
@@ -101,7 +97,6 @@ export async function toSingBoxWithTemplate(nodes: ProxyNode[]) {
   return JSON.stringify(config, null, 2);
 }
 
-// --- 3. Clash Meta 生成器 ---
 export async function toClashWithTemplate(nodes: ProxyNode[]) {
   const text = await fetchWithUA(REMOTE_CONFIG.clash);
   let config: any;
@@ -115,18 +110,23 @@ export async function toClashWithTemplate(nodes: ProxyNode[]) {
   const proxyNames = proxies.map((p: any) => p.name);
 
   if (!Array.isArray(config.proxies)) config.proxies = [];
+  // 建立現有節點名稱的集合，避免重複加入
   const existingProxies = new Set(config.proxies.map((p:any) => p.name));
 
   proxies.forEach(p => {
-    if (!existingProxies.has(p.name)) config.proxies.push(p);
+    if (!existingProxies.has(p.name)) {
+      config.proxies.push(p);
+    }
   });
 
   if (Array.isArray(config['proxy-groups'])) {
     config['proxy-groups'].forEach((group: any) => {
       if (!Array.isArray(group.proxies)) group.proxies = [];
-      const currentProxies = new Set(group.proxies);
+      const currentProxiesInGroup = new Set(group.proxies);
       proxyNames.forEach((name: string) => {
-        if (!currentProxies.has(name)) group.proxies.push(name);
+        if (!currentProxiesInGroup.has(name)) {
+          group.proxies.push(name);
+        }
       });
     });
   }
