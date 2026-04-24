@@ -3,6 +3,7 @@ import { ProxyNode } from './types';
 import { REMOTE_CONFIG } from './constants';
 import { utf8ToBase64, adjustSS2022Key } from './utils';
 
+// --- 1. Base64 生成器 ---
 export function toBase64(nodes: ProxyNode[]) {
   const links = nodes.map(node => {
     try {
@@ -62,73 +63,84 @@ export function toBase64(nodes: ProxyNode[]) {
 }
 
 async function fetchWithUA(url: string) {
-  const cacheBusterUrl = `${url}${url.includes('?') ? '&' : '?'}t=${Date.now()}`;
-  const resp = await fetch(cacheBusterUrl, {
+  const separator = url.includes('?') ? '&' : '?';
+  const resp = await fetch(`${url}${separator}t=${Date.now()}`, {
     headers: {
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36',
-      'Cache-Control': 'no-cache',
-      'Pragma': 'no-cache'
+      'Cache-Control': 'no-cache'
     }
   });
-  if (!resp.ok) throw new Error(`GitHub 範本下載失敗: ${resp.status}`);
+  if (!resp.ok) throw new Error(`Template fetch failed: ${resp.status}`);
   return await resp.text();
 }
 
+// --- 2. Sing-Box 生成器 ---
 export async function toSingBoxWithTemplate(nodes: ProxyNode[]) {
   const text = await fetchWithUA(REMOTE_CONFIG.singbox);
-  let config: any;
-  try { config = JSON.parse(text); } catch (e) { throw new Error('Sing-Box_Rules.JSON 格式錯誤'); }
-
+  let config = JSON.parse(text);
   const outbounds = nodes.map(n => JSON.parse(JSON.stringify(n.singboxObj)));
   const nodeTags = outbounds.map((o:any) => o.tag);
-
+  
   if (!Array.isArray(config.outbounds)) config.outbounds = [];
   config.outbounds.push(...outbounds);
-
   config.outbounds.forEach((out: any) => {
     if (out.type === 'selector' || out.type === 'urltest') {
       if (!Array.isArray(out.outbounds)) out.outbounds = [];
-      const currentOutbounds = new Set(out.outbounds);
-      nodeTags.forEach((tag: string) => {
-          if (!currentOutbounds.has(tag)) out.outbounds.push(tag);
-      });
+      nodeTags.forEach(tag => { if (!out.outbounds.includes(tag)) out.outbounds.push(tag); });
     }
   });
   return JSON.stringify(config, null, 2);
 }
 
+// --- 3. Clash Meta 生成器 (核心修正) ---
 export async function toClashWithTemplate(nodes: ProxyNode[]) {
   const text = await fetchWithUA(REMOTE_CONFIG.clash);
-  let config: any;
-  try { config = yaml.load(text); } catch (e) { throw new Error('Clash_Rules.YAML 格式錯誤'); }
+  let config: any = yaml.load(text);
   
   const proxies = nodes.map(n => {
     const obj = JSON.parse(JSON.stringify(n.clashObj));
-    Object.keys(obj).forEach(key => obj[key] === undefined && delete obj[key]);
+    // 確保所有布林值都是正確的類型，而非字串
+    if (obj.tls !== undefined) obj.tls = !!obj.tls;
+    if (obj.reality !== undefined) obj.reality = !!obj.reality;
+    if (obj['skip-cert-verify'] !== undefined) obj['skip-cert-verify'] = !!obj['skip-cert-verify'];
+    if (obj.udp !== undefined) obj.udp = !!obj.udp;
+    
+    // 清理 undefined 屬性
+    Object.keys(obj).forEach(key => (obj[key] === undefined || obj[key] === null) && delete obj[key]);
     return obj;
-  }); 
+  }).filter(p => p && p.name && p.server); // 確保沒有空節點
+  
   const proxyNames = proxies.map((p: any) => p.name);
 
   if (!Array.isArray(config.proxies)) config.proxies = [];
-  // 建立現有節點名稱的集合，避免重複加入
-  const existingProxies = new Set(config.proxies.map((p:any) => p.name));
-
+  
+  // 避免重複添加節點 (如果模板裡已經有了)
+  const existingNames = new Set(config.proxies.map((p:any) => p.name));
   proxies.forEach(p => {
-    if (!existingProxies.has(p.name)) {
+    if (!existingNames.has(p.name)) {
       config.proxies.push(p);
     }
   });
 
+  // 將新節點加入所有策略組
   if (Array.isArray(config['proxy-groups'])) {
     config['proxy-groups'].forEach((group: any) => {
       if (!Array.isArray(group.proxies)) group.proxies = [];
-      const currentProxiesInGroup = new Set(group.proxies);
-      proxyNames.forEach((name: string) => {
-        if (!currentProxiesInGroup.has(name)) {
+      const currentGroupProxies = new Set(group.proxies);
+      proxyNames.forEach(name => {
+        if (!currentGroupProxies.has(name)) {
           group.proxies.push(name);
         }
       });
     });
   }
-  return yaml.dump(config, { indent: 2, noRefs: true });
+  
+  // 重要：noRefs: true 關閉 YAML 錨點引用
+  // 重要：lineWidth: -1 防止長字串換行
+  return yaml.dump(config, { 
+    indent: 2, 
+    noRefs: true, 
+    lineWidth: -1,
+    noCompatMode: true 
+  });
 }
