@@ -120,3 +120,18 @@ export async function toClashWithTemplate(nodes: ProxyNode[]) {
   if (Array.isArray(config['proxy-groups'])) {
     config['proxy-groups'].forEach((group: any) => {
       if (!Array.isArray(group.proxies)) group.proxies =
+        const currentProxies = new Set(group.proxies);
+      proxyNames.forEach((name: string) => {
+          if (!currentProxies.has(name)) {
+              group.proxies.push(name);
+          }
+      });
+    });
+  }
+
+  // 關鍵：noRefs: true 禁止錨點引用，這是 OpenClash 不會報錯的關鍵
+  return yaml.dump(config, { 
+    indent: 2, 
+    noRefs: true 
+  });
+}
