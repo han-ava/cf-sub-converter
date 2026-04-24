@@ -38,10 +38,21 @@ export function toBase64(nodes: ProxyNode[]) {
       }
 
       if (node.type === 'shadowsocks') {
-        const userInfo = `${node.cipher}:${node.password}`;
-        // 使用 URL-Safe Base64 (SIP002 標準)
-        const base64User = utf8ToBase64(userInfo).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-        return `ss://${base64User}@${node.server}:${node.port}#${encodeURIComponent(node.name)}`;
+        const method = encodeURIComponent(node.cipher || '');
+        const pass = encodeURIComponent(node.password || '');
+        const params = new URLSearchParams();
+        
+        if (node.tls) {
+            params.set('security', 'tls');
+            if (node.sni) params.set('sni', node.sni);
+            params.set('type', node.network || 'tcp');
+            if (node.network === 'ws' && node.wsPath) {
+                params.set('path', node.wsPath);
+            }
+        }
+        
+        const query = params.toString();
+        return `ss://${method}:${pass}@${node.server}:${node.port}${query ? '/?' + query : ''}#${encodeURIComponent(node.name)}`;
       }
 
       return null;
@@ -55,7 +66,7 @@ async function fetchWithUA(url: string) {
   const separator = url.includes('?') ? '&' : '?';
   const resp = await fetch(`${url}${separator}t=${Math.random()}`, {
     headers: {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36',
       'Cache-Control': 'no-cache',
       'Pragma': 'no-cache'
     }
@@ -70,6 +81,7 @@ export async function toSingBoxWithTemplate(nodes: ProxyNode[]) {
   let config: any;
   try { config = JSON.parse(text); } catch (e) { throw new Error('Sing-Box_Rules.JSON 格式錯誤'); }
 
+  // 直接拿 parser.ts 處理好的完美物件
   const outbounds = nodes.map(n => JSON.parse(JSON.stringify(n.singboxObj)));
   const nodeTags = outbounds.map((o:any) => o.tag);
 
@@ -108,14 +120,3 @@ export async function toClashWithTemplate(nodes: ProxyNode[]) {
   if (Array.isArray(config['proxy-groups'])) {
     config['proxy-groups'].forEach((group: any) => {
       if (!Array.isArray(group.proxies)) group.proxies =
-        proxyNames.forEach((name: string) => {
-          if (!group.proxies.includes(name)) {
-              group.proxies.push(name);
-          }
-      });
-    });
-  }
-
-  // 匯出成 YAML，加上 noRefs: true 防止 OpenClash 報錯
-  return yaml.dump(config, { indent: 2, noRefs: true });
-}
