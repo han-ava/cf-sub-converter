@@ -41,4 +41,35 @@ export function tryDecodeURIComponent(str: string): string {
   }
 }
 
-export function deduplicateNodeNames(nodes: ProxyNode[]): ProxyNode
+export function deduplicateNodeNames(nodes: ProxyNode[]): ProxyNode[] {
+  const seenKey = new Set<string>();
+  const nameCount = new Map<string, number>();
+
+  return nodes.filter(node => {
+    // 🔑 關鍵：唯一識別（server + port + uuid）
+    const key = `${node.server}:${node.port}:${node.uuid || node.password || ''}`;
+
+    // 👉 已存在 → 直接丟掉（真正去重）
+    if (seenKey.has(key)) {
+      return false;
+    }
+
+    seenKey.add(key);
+
+    // 👉 再處理「名稱重複」
+    let name = node.name || 'node';
+
+    if (!nameCount.has(name)) {
+      nameCount.set(name, 1);
+      node.name = name;
+      return true;
+    }
+
+    const count = nameCount.get(name)! + 1;
+    nameCount.set(name, count);
+
+    node.name = `${name} (${count})`;
+    return true;
+  });
+}
+
