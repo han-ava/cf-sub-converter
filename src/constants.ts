@@ -81,7 +81,7 @@ export const HTML_PAGE = `
     <div class="header"><h1>🔄 <span class="gradient-text">訂閱轉換中心</span></h1><p>客製化遠端規則 • 智能合併多訂閱</p></div>
     
     <div class="fav-section">
-      <h3 class="fav-title">⭐ 我的訂閱收藏 (雲端儲存)</h3>
+      <h3 class="fav-title">⭐ 我的訂閱收藏 (本機儲存)</h3>
       <div class="fav-form">
         <div class="fav-row">
           <input type="text" id="favName" placeholder="自訂名稱 (例如: my-office)">
@@ -105,7 +105,7 @@ export const HTML_PAGE = `
       </div>
 
       <div class="controls">
-        <div><label>🛠 轉換目標</label><select id="target"><option value="base64">Base64 (純節點)</option><option value="clash">Clash Meta (YAML 模板)</option><option value="singbox">Sing-Box (JSON 模板)</option></select></div>
+        <div><label>🛠 轉換目標</label><select id="target"><option value="singbox">Sing-Box (JSON 模板)</option><option value="clash">Clash Meta (YAML 模板)</option><option value="base64">Base64 (純節點)</option></select></div>
         <button onclick="generate()">⚡ 立即生成</button>
       </div>
     </div>
@@ -134,85 +134,29 @@ export const HTML_PAGE = `
   <div id="toast" class="toast">✅ 複製成功！</div>
   
   <script>
-    let profiles = [];
-    let editingIndex = null;
-
-    async function loadProfiles() {
-      try {
-        const resp = await fetch('/favs');
-        if (resp.ok) {
-          profiles = await resp.json();
-          renderProfiles();
-        }
-      } catch (e) {}
-    }
-
-    async function renderProfiles() {
+    const STORAGE_KEY = 'sub_converter_profiles';
+    let profiles = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+    function renderProfiles() {
       const container = document.getElementById('favList');
       if (profiles.length === 0) { container.innerHTML = '<span style="color:#94a3b8; font-size:0.9rem;">暫無收藏...</span>'; return; }
-      container.innerHTML = profiles.map((p, index) => \`<div class="fav-item">
-        <span class="fav-name" onclick="insertProfile(\${index})" title="點擊加入">\${p.name}</span>
-        <span class="fav-action" onclick="editProfile(\${index})" title="編輯">✎</span>
-        <span class="fav-action fav-delete" onclick="deleteProfile(\${index})" title="刪除">✕</span>
-      </div>\`).join('');
+      container.innerHTML = profiles.map((p, index) => \`<div class="fav-item"><span class="fav-name" onclick="insertProfile(\${index})" title="點擊加入: \${p.name}">\${p.name}</span><span class="fav-action fav-delete" onclick="deleteProfile(\${index})" title="刪除">✕</span></div>\`).join('');
     }
-
-    async function saveProfile() {
-      const name = document.getElementById('favName').value.trim();
+    function saveProfile() {
+      const name = document.getElementById('favName').value.trim(); 
       const url = document.getElementById('favUrl').value.trim();
       if (!name || !url) { alert('請輸入名稱和連結內容'); return; }
-
-      try {
-        const method = editingIndex !== null ? 'PUT' : 'POST';
-        const body = editingIndex !== null 
-          ? JSON.stringify({ index: editingIndex, name, url })
-          : JSON.stringify({ name, url });
-        
-        const resp = await fetch('/favs', { method, headers: { 'Content-Type': 'application/json' }, body });
-        if (!resp.ok) throw new Error('儲存失敗');
-        
-        editingIndex = null;
-        document.getElementById('favName').value = '';
-        document.getElementById('favUrl').value = '';
-        await loadProfiles();
-        showToast('💾 已儲存');
-      } catch (e) { alert('儲存失敗: ' + e.message); }
+      profiles.push({ name, url }); localStorage.setItem(STORAGE_KEY, JSON.stringify(profiles));
+      document.getElementById('favName').value = ''; document.getElementById('favUrl').value = ''; renderProfiles(); showToast('💾 已儲存至收藏夾');
     }
-
-    function editProfile(index) {
-      const profile = profiles[index];
-      if (!profile) return;
-      editingIndex = index;
-      document.getElementById('favName').value = profile.name;
-      document.getElementById('favUrl').value = profile.url;
-      showToast('✎ 編輯模式');
-    }
-
-    async function deleteProfile(index) {
-      if(!confirm('確定要刪除這個收藏嗎？')) return;
-      try {
-        const resp = await fetch('/favs', { 
-          method: 'DELETE', 
-          headers: { 'Content-Type': 'application/json' }, 
-          body: JSON.stringify({ index }) 
-        });
-        if (!resp.ok) throw new Error('刪除失敗');
-        await loadProfiles();
-        showToast('🗑️ 已刪除');
-      } catch (e) { alert('刪除失敗: ' + e.message); }
-    }
-
+    function deleteProfile(index) { if(!confirm('確定要刪除這個收藏嗎？')) return; profiles.splice(index, 1); localStorage.setItem(STORAGE_KEY, JSON.stringify(profiles)); renderProfiles(); }
     function insertProfile(index) {
-      const profile = profiles[index];
-      if (!profile) return;
-      const textarea = document.getElementById('url');
-      const currentVal = textarea.value.trim();
-      textarea.value = currentVal ? (currentVal + '\\n' + profile.url) : profile.url;
+      const profile = profiles[index]; if (!profile) return;
+      const textarea = document.getElementById('url'); const currentVal = textarea.value.trim();
+      textarea.value = currentVal ? (currentVal + '\\n' + profile.url) : profile.url; 
       document.getElementById('shortCode').value = profile.name;
       showToast('📥 已加入: ' + profile.name);
     }
-
-    loadProfiles();
+    renderProfiles();
 
     async function generate() {
       const rawInput = document.getElementById('url').value; const target = document.getElementById('target').value;

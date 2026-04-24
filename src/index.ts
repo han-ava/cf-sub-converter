@@ -17,66 +17,6 @@ if (request.method === 'POST' && url.pathname === '/save') {
   } catch (e) { return new Response('Error saving profile', { status: 500 }); }
 }
 
-// 2. KV 收藏 API
-const FAVS_KEY = 'favorites';
-
-async function getFavs(): Promise<any[]> {
-  const data = await env.SUB_CACHE.get(FAVS_KEY);
-  return data ? JSON.parse(data) : [];
-}
-
-async function saveFavs(favs: any[]): Promise<void> {
-  await env.SUB_CACHE.put(FAVS_KEY, JSON.stringify(favs));
-}
-
-// GET /favs (讀取收藏)
-if (request.method === 'GET' && url.pathname === '/favs') {
-  const favs = await getFavs();
-  return new Response(JSON.stringify(favs), { 
-    headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } 
-  });
-}
-
-// POST /favs (新增收藏)
-if (request.method === 'POST' && url.pathname === '/favs') {
-  try {
-    const body: any = await request.json();
-    if (!body.name || !body.url) return new Response('Missing name or url', { status: 400 });
-    const favs = await getFavs();
-    favs.push({ name: body.name, url: body.url });
-    await saveFavs(favs);
-    return new Response('OK', { status: 200 });
-  } catch (e) { return new Response('Error saving favorite', { status: 500 }); }
-}
-
-// PUT /favs (更新收藏)
-if (request.method === 'PUT' && url.pathname === '/favs') {
-  try {
-    const body: any = await request.json();
-    if (body.index === undefined || !body.name || !body.url) return new Response('Missing data', { status: 400 });
-    const favs = await getFavs();
-    if (body.index >= 0 && body.index < favs.length) {
-      favs[body.index] = { name: body.name, url: body.url };
-      await saveFavs(favs);
-    }
-    return new Response('OK', { status: 200 });
-  } catch (e) { return new Response('Error updating favorite', { status: 500 }); }
-}
-
-// DELETE /favs (刪除收藏)
-if (request.method === 'DELETE' && url.pathname === '/favs') {
-  try {
-    const body: any = await request.json();
-    if (body.index === undefined) return new Response('Missing index', { status: 400 });
-    const favs = await getFavs();
-    if (body.index >= 0 && body.index < favs.length) {
-      favs.splice(body.index, 1);
-      await saveFavs(favs);
-    }
-    return new Response('OK', { status: 200 });
-  } catch (e) { return new Response('Error deleting favorite', { status: 500 }); }
-}
-
 // 2. GET /path (讀取短連結)
 let urlParam = url.searchParams.get('url');
 // 解碼路徑 (例如 /myself)
