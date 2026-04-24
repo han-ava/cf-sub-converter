@@ -9,21 +9,19 @@ export function toBase64(nodes: ProxyNode[]) {
     try {
       if (node.type === 'vless') {
         const params = new URLSearchParams();
-        params.set(
-  'security',
-  node.reality?.publicKey ? 'reality' : (node.tls ? 'tls' : 'none')
-);
+        params.set('security', node.reality?.publicKey ? 'reality' : (node.tls ? 'tls' : 'none'));
         params.set('type', node.network || 'tcp');
         if (node.flow) params.set('flow', node.flow);
         if (node.sni) params.set('sni', node.sni);
         if (node.fingerprint) params.set('fp', node.fingerprint);
         if (node.reality?.publicKey) { 
-  params.set('pbk', node.reality.publicKey); 
-  if (node.reality.shortId) {
-    params.set('sid', node.reality.shortId);
-  }
-}
-        if (node.network === 'ws') { if (node.wsPath) params.set('path', node.wsPath); if (node.wsHeaders?.Host) params.set('host', node.wsHeaders.Host); }
+          params.set('pbk', node.reality.publicKey); 
+          if (node.reality.shortId) params.set('sid', node.reality.shortId);
+        }
+        if (node.network === 'ws') { 
+          if (node.wsPath) params.set('path', node.wsPath); 
+          if (node.wsHeaders?.Host) params.set('host', node.wsHeaders.Host); 
+        }
         return `vless://${node.uuid}@${node.server}:${node.port}?${params.toString()}#${encodeURIComponent(node.name)}`;
       }
       
@@ -38,7 +36,7 @@ export function toBase64(nodes: ProxyNode[]) {
       if (node.type === 'vmess') {
         const vmessObj = {
           v: "2", ps: node.name, add: node.server, port: node.port, id: node.uuid,
-          aid: 0, scy: "auto", net: node.network, type: "none",
+          aid: node.clashObj?.alterId || 0, scy: "auto", net: node.network, type: "none",
           host: node.wsHeaders?.Host || "", path: node.wsPath || "",
           tls: node.tls ? "tls" : "", sni: node.sni || ""
         };
@@ -47,23 +45,16 @@ export function toBase64(nodes: ProxyNode[]) {
 
       if (node.type === 'shadowsocks') {
         const userinfo = utf8ToBase64(`${node.cipher}:${node.password}`);
-
         const params = new URLSearchParams();
-        
         if (node.tls) {
             params.set('security', 'tls');
             if (node.sni) params.set('sni', node.sni);
             params.set('type', node.network || 'tcp');
-            if (node.network === 'ws' && node.wsPath) {
-                params.set('path', node.wsPath);
-            }
+            if (node.network === 'ws' && node.wsPath) params.set('path', node.wsPath);
         }
-        
         const query = params.toString();
         return `ss://${userinfo}@${node.server}:${node.port}${query ? '/?' + query : ''}#${encodeURIComponent(node.name)}`;
-
       }
-
       return null;
     } catch { return null; }
   }).filter(l => l !== null);
@@ -71,9 +62,11 @@ export function toBase64(nodes: ProxyNode[]) {
   return utf8ToBase64(links.join('\n'));
 }
 
+// 修正：移除不支援的 cache 欄位，改用 URL 時間戳
 async function fetchWithUA(url: string) {
-  const resp = await fetch(url, {
-  cache: 'no-store',
+  const separator = url.includes('?') ? '&' : '?';
+  const cacheBusterUrl = `${url}${separator}t=${Date.now()}`;
+  const resp = await fetch(cacheBusterUrl, {
     headers: {
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36',
       'Cache-Control': 'no-cache',
@@ -90,23 +83,21 @@ export async function toSingBoxWithTemplate(nodes: ProxyNode[]) {
   let config: any;
   try { config = JSON.parse(text); } catch (e) { throw new Error('Sing-Box_Rules.JSON 格式錯誤'); }
 
-  // 直接拿 parser.ts 處理好的完美物件
   const outbounds = nodes.map(n => JSON.parse(JSON.stringify(n.singboxObj)));
   const nodeTags = outbounds.map((o:any) => o.tag);
 
-  if (!Array.isArray(config.outbounds)) config.outbounds =[];
+  if (!Array.isArray(config.outbounds)) config.outbounds = [];
   config.outbounds.push(...outbounds);
 
   config.outbounds.forEach((out: any) => {
     if (out.type === 'selector' || out.type === 'urltest') {
-      if (!Array.isArray(out.outbounds)) out.outbounds =[];
+      if (!Array.isArray(out.outbounds)) out.outbounds = [];
       const currentOutbounds = new Set(out.outbounds);
       nodeTags.forEach((tag: string) => {
           if (!currentOutbounds.has(tag)) out.outbounds.push(tag);
       });
     }
   });
-
   return JSON.stringify(config, null, 2);
 }
 
@@ -124,33 +115,20 @@ export async function toClashWithTemplate(nodes: ProxyNode[]) {
   const proxyNames = proxies.map((p: any) => p.name);
 
   if (!Array.isArray(config.proxies)) config.proxies = [];
+  const existingProxies = new Set(config.proxies.map((p:any) => p.name));
 
-const existing = new Set(config.proxies.map((p:any) => p.name));
-
-proxies.forEach(p => {
-  if (!existing.has(p.name)) {
-    config.proxies.push(p);
-  }
-});
+  proxies.forEach(p => {
+    if (!existingProxies.has(p.name)) config.proxies.push(p);
+  });
 
   if (Array.isArray(config['proxy-groups'])) {
     config['proxy-groups'].forEach((group: any) => {
       if (!Array.isArray(group.proxies)) group.proxies = [];
-
-const currentProxies = new Set(group.proxies);
-
-proxyNames.forEach((name: string) => {
-  if (!currentProxies.has(name)) {
-    group.proxies.push(name);
-  }
-});
+      const currentProxies = new Set(group.proxies);
+      proxyNames.forEach((name: string) => {
+        if (!currentProxies.has(name)) group.proxies.push(name);
+      });
     });
   }
-
-  // 關鍵：noRefs: true 禁止錨點引用，這是 OpenClash 不會報錯的關鍵
-  return yaml.dump(config, { 
-    indent: 2, 
-    noRefs: true 
-  });
+  return yaml.dump(config, { indent: 2, noRefs: true });
 }
-
