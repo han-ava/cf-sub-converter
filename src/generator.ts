@@ -3,6 +3,7 @@ import { ProxyNode } from './types';
 import { REMOTE_CONFIG } from './constants';
 import { utf8ToBase64 } from './utils';
 
+// --- Base64 生成器 ---
 export function toBase64(nodes: ProxyNode[]) {
   const links = nodes.map(node => {
     try {
@@ -17,6 +18,7 @@ export function toBase64(nodes: ProxyNode[]) {
         if (node.network === 'ws') { if (node.wsPath) params.set('path', node.wsPath); if (node.wsHeaders?.Host) params.set('host', node.wsHeaders.Host); }
         return `vless://${node.uuid}@${node.server}:${node.port}?${params.toString()}#${encodeURIComponent(node.name)}`;
       }
+      
       if (node.type === 'hysteria2') {
         const params = new URLSearchParams();
         if (node.sni) params.set('sni', node.sni);
@@ -24,6 +26,7 @@ export function toBase64(nodes: ProxyNode[]) {
         if (node.skipCertVerify) params.set('insecure', '1');
         return `hysteria2://${node.password}@${node.server}:${node.port}?${params.toString()}#${encodeURIComponent(node.name)}`;
       }
+
       if (node.type === 'vmess') {
         const vmessObj = {
           v: "2", ps: node.name, add: node.server, port: node.port, id: node.uuid,
@@ -33,53 +36,48 @@ export function toBase64(nodes: ProxyNode[]) {
         };
         return 'vmess://' + utf8ToBase64(JSON.stringify(vmessObj));
       }
+
       if (node.type === 'shadowsocks') {
         const method = encodeURIComponent(node.cipher || '');
         const pass = encodeURIComponent(node.password || '');
-        const params = new URLSearchParams();
-        if (node.tls) {
-            params.set('security', 'tls');
-            if (node.sni) params.set('sni', node.sni);
-            if (node.alpn) params.set('alpn', node.alpn.join(','));
-            if (node.fingerprint) params.set('fp', node.fingerprint);
-            params.set('type', node.network || 'tcp');
-        }
-        if (node.clashObj && node.clashObj.plugin && !node.tls) {
-             const pluginOpts = node.clashObj['plugin-opts'];
-             const optStr = pluginOpts ? ';' + new URLSearchParams(pluginOpts).toString().replace(/&/g, ';') : '';
-             params.set('plugin', node.clashObj.plugin + optStr);
-        }
-        const query = params.toString();
-        return `ss://${method}:${pass}@${node.server}:${node.port}${query ? '/?' + query : ''}#${encodeURIComponent(node.name)}`;
+        return `ss://${method}:${pass}@${node.server}:${node.port}#${encodeURIComponent(node.name)}`;
       }
+
       return null;
     } catch { return null; }
   }).filter(l => l !== null);
+  
   return utf8ToBase64(links.join('\n'));
 }
 
 async function fetchWithUA(url: string) {
-  const resp = await fetch(`${url}?t=${Math.random()}`, {
-    headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' }
+  const separator = url.includes('?') ? '&' : '?';
+  const resp = await fetch(`${url}${separator}t=${Math.random()}`, {
+    headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36', 'Cache-Control': 'no-cache' }
   });
-  if (!resp.ok) throw new Error(`Template fetch failed: ${resp.status}`);
+  if (!resp.ok) throw new Error(`GitHub 範本下載失敗: ${resp.status}`);
   return await resp.text();
 }
 
+// --- Sing-Box 生成器 ---
 export async function toSingBoxWithTemplate(nodes: ProxyNode[]) {
   const text = await fetchWithUA(REMOTE_CONFIG.singbox);
-  let config = JSON.parse(text);
-  const outbounds = nodes.map(n => JSON.parse(JSON.stringify(n.singboxObj)));
+  let config: any;
+  try { config = JSON.parse(text); } catch (e) { throw new Error('Sing-Box_Rules.JSON 格式錯誤'); }
+
+  const outbounds = nodes.map(n => n.singboxObj);
   const nodeTags = outbounds.map((o:any) => o.tag);
-  
-  if (!Array.isArray(config.outbounds)) config.outbounds = [];
+
+  if (!Array.isArray(config.outbounds)) config.outbounds =[];
   config.outbounds.push(...outbounds);
+
   config.outbounds.forEach((out: any) => {
     if (out.type === 'selector' || out.type === 'urltest') {
-      if (!Array.isArray(out.outbounds)) out.outbounds = [];
+      if (!Array.isArray(out.outbounds)) out.outbounds =[];
       nodeTags.forEach(tag => { if (!out.outbounds.includes(tag)) out.outbounds.push(tag); });
     }
   });
+
   return JSON.stringify(config, null, 2);
 }
 
@@ -94,16 +92,14 @@ export async function toClashWithTemplate(nodes: ProxyNode[]) {
   }); 
   const proxyNames = proxies.map((p: any) => p.name);
 
-  if (!Array.isArray(config.proxies)) config.proxies = [];
+  if (!Array.isArray(config.proxies)) config.proxies =[];
   config.proxies.push(...proxies);
 
   if (Array.isArray(config['proxy-groups'])) {
     config['proxy-groups'].forEach((group: any) => {
-      if (!Array.isArray(group.proxies)) group.proxies = [];
+      if (!Array.isArray(group.proxies)) group.proxies =[];
       proxyNames.forEach(name => { if (!group.proxies.includes(name)) group.proxies.push(name); });
     });
   }
-  
-  // 關鍵：noRefs: true 禁止錨點引用，這是 OpenClash 不會報錯的關鍵
   return yaml.dump(config, { indent: 2, noRefs: true });
 }
