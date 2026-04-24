@@ -3,7 +3,7 @@ import { ProxyNode } from './types';
 import { REMOTE_CONFIG } from './constants';
 import { utf8ToBase64 } from './utils';
 
-// --- Base64 生成器 ---
+// --- 1. Base64 生成器 ---
 export function toBase64(nodes: ProxyNode[]) {
   const links = nodes.map(node => {
     try {
@@ -38,9 +38,10 @@ export function toBase64(nodes: ProxyNode[]) {
       }
 
       if (node.type === 'shadowsocks') {
-        const method = encodeURIComponent(node.cipher || '');
-        const pass = encodeURIComponent(node.password || '');
-        return `ss://${method}:${pass}@${node.server}:${node.port}#${encodeURIComponent(node.name)}`;
+        const userInfo = `${node.cipher}:${node.password}`;
+        // 使用 URL-Safe Base64 (SIP002 標準)
+        const base64User = utf8ToBase64(userInfo).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+        return `ss://${base64User}@${node.server}:${node.port}#${encodeURIComponent(node.name)}`;
       }
 
       return null;
@@ -53,19 +54,23 @@ export function toBase64(nodes: ProxyNode[]) {
 async function fetchWithUA(url: string) {
   const separator = url.includes('?') ? '&' : '?';
   const resp = await fetch(`${url}${separator}t=${Math.random()}`, {
-    headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36', 'Cache-Control': 'no-cache' }
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      'Cache-Control': 'no-cache',
+      'Pragma': 'no-cache'
+    }
   });
   if (!resp.ok) throw new Error(`GitHub 範本下載失敗: ${resp.status}`);
   return await resp.text();
 }
 
-// --- Sing-Box 生成器 ---
+// --- 2. Sing-Box 生成器 ---
 export async function toSingBoxWithTemplate(nodes: ProxyNode[]) {
   const text = await fetchWithUA(REMOTE_CONFIG.singbox);
   let config: any;
   try { config = JSON.parse(text); } catch (e) { throw new Error('Sing-Box_Rules.JSON 格式錯誤'); }
 
-  const outbounds = nodes.map(n => n.singboxObj);
+  const outbounds = nodes.map(n => JSON.parse(JSON.stringify(n.singboxObj)));
   const nodeTags = outbounds.map((o:any) => o.tag);
 
   if (!Array.isArray(config.outbounds)) config.outbounds =[];
@@ -74,16 +79,21 @@ export async function toSingBoxWithTemplate(nodes: ProxyNode[]) {
   config.outbounds.forEach((out: any) => {
     if (out.type === 'selector' || out.type === 'urltest') {
       if (!Array.isArray(out.outbounds)) out.outbounds =[];
-      nodeTags.forEach(tag => { if (!out.outbounds.includes(tag)) out.outbounds.push(tag); });
+      const currentOutbounds = new Set(out.outbounds);
+      nodeTags.forEach((tag: string) => {
+          if (!currentOutbounds.has(tag)) out.outbounds.push(tag);
+      });
     }
   });
 
   return JSON.stringify(config, null, 2);
 }
 
+// --- 3. Clash Meta 生成器 ---
 export async function toClashWithTemplate(nodes: ProxyNode[]) {
   const text = await fetchWithUA(REMOTE_CONFIG.clash);
-  let config: any = yaml.load(text);
+  let config: any;
+  try { config = yaml.load(text); } catch (e) { throw new Error('Clash_Rules.YAML 格式錯誤'); }
   
   const proxies = nodes.map(n => {
     const obj = JSON.parse(JSON.stringify(n.clashObj));
@@ -97,9 +107,4 @@ export async function toClashWithTemplate(nodes: ProxyNode[]) {
 
   if (Array.isArray(config['proxy-groups'])) {
     config['proxy-groups'].forEach((group: any) => {
-      if (!Array.isArray(group.proxies)) group.proxies =[];
-      proxyNames.forEach(name => { if (!group.proxies.includes(name)) group.proxies.push(name); });
-    });
-  }
-  return yaml.dump(config, { indent: 2, noRefs: true });
-}
+      if (!Array.isArray(group.proxies)) group.proxies =
