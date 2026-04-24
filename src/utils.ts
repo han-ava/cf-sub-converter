@@ -6,16 +6,11 @@ export function safeBase64Decode(str: string): string {
     let b64 = str.replace(/-/g, '+').replace(/_/g, '/');
     while (b64.length % 4) b64 += '=';
     
-    // 1. 先解碼為二進制字串
     const binaryStr = atob(b64);
-    
-    // 2. 轉為 Uint8Array
     const bytes = new Uint8Array(binaryStr.length);
     for (let i = 0; i < binaryStr.length; i++) {
       bytes[i] = binaryStr.charCodeAt(i);
     }
-    
-    // 3. 使用 TextDecoder 以 UTF-8 格式解碼 (這是保留 Emoji 的關鍵)
     return new TextDecoder('utf-8').decode(bytes);
   } catch (e) {
     return "";
@@ -46,30 +41,26 @@ export function deduplicateNodeNames(nodes: ProxyNode[]): ProxyNode[] {
   const nameCount = new Map<string, number>();
 
   return nodes.filter(node => {
-    // 🔑 關鍵：唯一識別（server + port + uuid）
+    // 🔑 唯一識別：server + port + uuid/password
     const key = `${node.server}:${node.port}:${node.uuid || node.password || ''}`;
 
-    // 👉 已存在 → 直接丟掉（真正去重）
-    if (seenKey.has(key)) {
-      return false;
-    }
-
+    if (seenKey.has(key)) return false;
     seenKey.add(key);
 
-    // 👉 再處理「名稱重複」
     let name = node.name || 'node';
-
     if (!nameCount.has(name)) {
       nameCount.set(name, 1);
       node.name = name;
-      return true;
+    } else {
+      const count = nameCount.get(name)! + 1;
+      nameCount.set(name, count);
+      node.name = `${name} (${count})`;
     }
+    
+    // 同步更新子物件中的名稱/標籤
+    if (node.singboxObj) node.singboxObj.tag = node.name;
+    if (node.clashObj) node.clashObj.name = node.name;
 
-    const count = nameCount.get(name)! + 1;
-    nameCount.set(name, count);
-
-    node.name = `${name} (${count})`;
     return true;
   });
 }
-
