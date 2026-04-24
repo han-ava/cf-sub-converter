@@ -129,7 +129,15 @@ function parseVless(urlStr: string): ProxyNode | null {
     if (node.network === 'ws') { node.wsPath = wsPath; node.wsHeaders = { Host: params.get('host') || node.server }; }
     
     const sb: any = { tag: name, type: 'vless', server: node.server, server_port: node.port, uuid: node.uuid };
-    if(node.flow) sb.flow = node.flow; sb.tls = { enabled: node.tls, server_name: node.sni || node.server, insecure: node.skipCertVerify, utls: { enabled: true, fingerprint: node.fingerprint }};
+    sb.tls = { enabled: node.tls, server_name: node.sni || node.server, insecure: node.skipCertVerify, utls: { enabled: true, fingerprint: node.fingerprint }};
+    
+    // flow 要放在 TLS 塊裡面 (SingBox 正確用法)
+    if(node.flow && node.flow.includes('vision')) {
+      sb.tls.flow = node.flow;
+    } else if(node.flow) {
+      sb.flow = node.flow;
+    }
+    
     if(node.reality) sb.tls.reality = { enabled: true, public_key: node.reality.publicKey, short_id: node.reality.shortId };
     if(node.network === 'ws') sb.transport = { type: 'ws', path: node.wsPath, headers: node.wsHeaders };
     node.singboxObj = sb;
