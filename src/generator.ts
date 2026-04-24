@@ -108,3 +108,14 @@ export async function toClashWithTemplate(nodes: ProxyNode[]) {
   if (Array.isArray(config['proxy-groups'])) {
     config['proxy-groups'].forEach((group: any) => {
       if (!Array.isArray(group.proxies)) group.proxies =
+        proxyNames.forEach((name: string) => {
+          if (!group.proxies.includes(name)) {
+              group.proxies.push(name);
+          }
+      });
+    });
+  }
+
+  // 匯出成 YAML，加上 noRefs: true 防止 OpenClash 報錯
+  return yaml.dump(config, { indent: 2, noRefs: true });
+}
