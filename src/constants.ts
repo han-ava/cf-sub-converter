@@ -169,7 +169,7 @@ export const HTML_PAGE = `
     <div class="card fav-section">
       <div class="fav-header">
         <div class="card-title" style="margin:0">⭐ 收藏的訂閱</div>
-        <button class="fav-add-btn" onclick="openModal()">+ 新��</button>
+        <button class="fav-add-btn" onclick="openModal()">+ 新增</button>
       </div>
       <div class="fav-grid" id="favGrid">
         <div style="color: var(--text-sub); font-size: 0.9rem;">暫無收藏...</div>
