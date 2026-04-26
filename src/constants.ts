@@ -325,27 +325,26 @@ export const HTML_PAGE = `
       btn.textContent = '⏳ 處理中...';
       
       const host = window.location.origin;
-      const shortCode = document.getElementById('shortCode').value.trim();
-      let final = '';
-      let urlToFetch = '';
-      
-      try {
+const shortCode = document.getElementById('shortCode').value.trim();
+       
+       try {
         if (shortCode) {
           await fetch('/save', { 
             method: 'POST', 
             headers: { 'Content-Type': 'application/json' }, 
             body: JSON.stringify({ path: shortCode, content: raw }) 
           });
-          // 短連結需要加 ? 再加 target
-          urlToFetch = \`\${host}/\${shortCode}?target=singbox\`;
+          const baseUrl = host + '/' + shortCode + '?target=singbox';
+          document.getElementById('singboxUrl').value = baseUrl;
+          document.getElementById('clashUrl').value = baseUrl.replace('target=singbox', 'target=clash');
+          document.getElementById('base64Url').value = baseUrl.replace('target=singbox', 'target=base64');
         } else {
           const encodedUrl = encodeURIComponent(raw);
-          urlToFetch = \`\${host}/?url=\${encodedUrl}&target=singbox\`;
+          const baseUrl = host + '/?url=' + encodedUrl + '&target=singbox';
+          document.getElementById('singboxUrl').value = baseUrl;
+          document.getElementById('clashUrl').value = baseUrl.replace('target=singbox', 'target=clash');
+          document.getElementById('base64Url').value = baseUrl.replace('target=singbox', 'target=base64');
         }
-        
-        document.getElementById('singboxUrl').value = urlToFetch;
-        document.getElementById('clashUrl').value = urlToFetch.replace('target=singbox', 'target=clash');
-        document.getElementById('base64Url').value = urlToFetch.replace('target=singbox', 'target=base64');
         
         document.getElementById('results').classList.add('show');
         
