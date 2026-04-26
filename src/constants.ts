@@ -11,237 +11,342 @@ export const HTML_PAGE = `
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>訂閱轉換器</title>
+  <title>訂閱轉換器 | Sub Converter</title>
   
-  <!-- 網站圖示 -->
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🔄</text></svg>">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚡</text></svg>">
   
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
   <style>
-    :root { --bg: #0f172a; --card-bg: #1e293b; --input-bg: #020617; --text-main: #f8fafc; --text-sub: #94a3b8; --accent: #38bdf8; --accent-hover: #0ea5e9; --border: #334155; --success: #22c55e; --danger: #ef4444; --card-hover: #2d3a52; }
-    * { box-sizing: border-box; }
-    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text-main); margin: 0; padding: 40px 20px; display: flex; justify-content: center; min-height: 100vh; }
-    .container { background: var(--card-bg); padding: 2.5rem; border-radius: 20px; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3); width: 100%; max-width: 1000px; border: 1px solid var(--border); display: flex; flex-direction: column; gap: 2rem; }
-    .header { text-align: center; padding-bottom: 1rem; border-bottom: 1px solid var(--border); }
-    .header h1 { margin: 0; font-size: 2.2rem; font-weight: 800; color: #fff; display: flex; align-items: center; justify-content: center; gap: 10px; }
-    .gradient-text { background: linear-gradient(90deg, #fff, #94a3b8); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
-    .header p { color: var(--text-sub); margin-top: 0.5rem; font-size: 1rem; }
-    .fav-section { background: #253045; padding: 1.5rem; border-radius: 12px; border: 1px solid var(--border); }
-    .fav-title { margin: 0 0 1rem 0; font-size: 1.1rem; color: var(--accent); display: flex; align-items: center; gap: 0.5rem; }
-    .fav-form { display: flex; flex-direction: column; gap: 1rem; margin-bottom: 1rem; }
-    .fav-row { display: flex; gap: 1rem; align-items: center; } 
-    .fav-list { display: flex; flex-wrap: wrap; gap: 0.8rem; }
-    .fav-item { background: #1e293b; border: 1px solid var(--border); border-radius: 8px; padding: 0.5rem 0.8rem; display: flex; align-items: center; gap: 0.8rem; transition: all 0.2s; }
-    .fav-item:hover { border-color: var(--accent); background: #2d3a52; }
-    .fav-name { font-weight: 600; cursor: pointer; color: #fff; }
-    .fav-action { cursor: pointer; color: var(--text-sub); font-size: 0.9rem; padding: 2px 6px; border-radius: 4px; }
-    .fav-action:hover { background: rgba(255,255,255,0.1); color: #fff; }
-    .fav-delete { color: var(--danger); }
-    .fav-delete:hover { background: rgba(239, 68, 68, 0.2); }
-    .main-grid { display: grid; grid-template-columns: 1fr; gap: 2rem; }
-    label { display: block; margin-bottom: 0.8rem; font-size: 0.95rem; color: var(--accent); font-weight: 600; }
-    input[type="text"] { background: var(--input-bg); border: 1px solid var(--border); color: var(--text-main); padding: 0.8rem; border-radius: 8px; outline: none; transition: all 0.2s; width: 100%; }
-    input[type="text"]:focus { border-color: var(--accent); }
-    textarea { width: 100%; background: var(--input-bg); border: 1px solid var(--border); color: var(--text-main); padding: 1.2rem; border-radius: 12px; font-family: monospace; font-size: 0.95rem; outline: none; transition: all 0.2s; resize: vertical; min-height: 100px; line-height: 1.6; }
-    textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.1); }
-    #favUrl { min-height: 80px; }
-    .controls { display: grid; grid-template-columns: 1fr 200px; gap: 1.5rem; align-items: end; }
-    select, button { width: 100%; border-radius: 10px; font-size: 1rem; height: 52px; }
-    select { background: var(--input-bg); border: 1px solid var(--border); color: var(--text-main); padding: 1rem; outline: none; }
-    button { background: var(--accent); color: #0f172a; border: none; font-weight: 700; cursor: pointer; transition: all 0.2s; }
-    button:hover { background: var(--accent-hover); transform: translateY(-2px); }
-    .btn-add { background: var(--success); color: white; height: auto; padding: 0.8rem 1.5rem; width: auto; white-space: nowrap; flex-shrink: 0; font-size: 1rem; display: flex; align-items: center; justify-content: center; gap: 0.5rem; }
-    .btn-add:hover { background: #16a34a; }
-    .result-group { margin-top: 1rem; display: none; background: #0f172a; padding: 1.5rem; border-radius: 12px; border: 1px dashed var(--border); }
-    .result-group.show { display: block; }
-    .result-row { display: flex; gap: 1rem; }
-    .result-row input { flex: 1; background: #1e293b; border: none; color: #fff; padding: 0.8rem; border-radius: 6px; font-family: monospace; }
-    .copy-btn { width: auto; background: var(--success); height: auto; padding: 0 2rem; }
-    #qrcode { display: flex; justify-content: center; margin-top: 1.5rem; }
-    #qrcode img { padding: 10px; background: #fff; border-radius: 8px; }
-    .rules-section { margin-top: 1rem; padding: 1rem; background: #253045; border-radius: 10px; border: 1px solid var(--border); }
-    .rules-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; padding-bottom: 0.5rem; border-bottom: 1px dashed var(--border); }
-    .rules-link { color: var(--accent); text-decoration: none; font-size: 0.9rem; }
-    .rules-link:hover { text-decoration: underline; }
-    .rules-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-top: 1rem; }
-    .rule-card { background: #1e293b; padding: 0.8rem 1rem; border-radius: 8px; border: 1px solid transparent; transition: all 0.2s; display: flex; flex-direction: column; gap: 0.3rem; }
-    .rule-card:hover { border-color: var(--accent); transform: translateY(-2px); }
-    .rule-name { font-weight: 700; color: #f1f5f9; font-size: 0.95rem; }
-    .rule-desc { font-size: 0.8rem; color: #94a3b8; }
-    .file-info { margin-top: 1.5rem; padding-top: 1rem; border-top: 1px dashed var(--border); font-size: 0.9rem; color: #94a3b8; display: flex; flex-direction: column; gap: 0.5rem; }
-    .file-row { display: flex; align-items: center; gap: 0.5rem; }
-    .dot { width: 6px; height: 6px; background: var(--success); border-radius: 50%; }
-    .toast { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); background: var(--success); color: white; padding: 12px 24px; border-radius: 50px; opacity: 0; transition: 0.3s; pointer-events: none; font-weight: 600; z-index: 100; }
-    .toast.show { opacity: 1; }
-    @media (max-width: 768px) { .controls { grid-template-columns: 1fr; } .fav-row { flex-direction: column; align-items: stretch; } }
+    :root { --bg: #09090b; --card-bg: #18181b; --input-bg: #27272a; --text-main: #fafafa; --text-sub: #a1a1aa; --accent: #22d3ee; --accent-hover: #06b6d4; --border: #3f3f46; --success: #22c55e; --danger: #ef4444; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: "SF Pro Display", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text-main); min-height: 100vh; padding: 0; }
+    
+    .hero { background: linear-gradient(180deg, #18181b 0%, #09090b 100%); padding: 60px 20px 40px; text-align: center; border-bottom: 1px solid var(--border); }
+    .logo { font-size: 3.5rem; margin-bottom: 1rem; }
+    .hero h1 { font-size: 2.5rem; font-weight: 700; letter-spacing: -0.03em; margin-bottom: 0.5rem; background: linear-gradient(135deg, #fafafa 0%, #a1a1aa 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .hero p { color: var(--text-sub); font-size: 1.1rem; max-width: 500px; margin: 0 auto; }
+    .tagline { display: inline-flex; align-items: center; gap: 8px; margin-top: 1.5rem; padding: 8px 16px; background: rgba(34, 211, 238, 0.1); border: 1px solid rgba(34, 211, 238, 0.2); border-radius: 100px; }
+    .tagline span { color: var(--accent); font-size: 0.9rem; font-weight: 500; }
+    
+    .container { max-width: 900px; margin: 0 auto; padding: 40px 20px; }
+    
+    .card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 16px; padding: 24px; margin-bottom: 24px; }
+    .card-title { font-size: 1rem; font-weight: 600; color: var(--accent); margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+    
+    .input-section label { display: block; font-size: 0.85rem; color: var(--text-sub); margin-bottom: 8px; font-weight: 500; }
+    textarea { width: 100%; background: var(--input-bg); border: 1px solid var(--border); color: var(--text-main); padding: 16px; border-radius: 12px; font-family: "SF Mono", Monaco, Consolas, monospace; font-size: 0.9rem; outline: none; resize: vertical; min-height: 120px; line-height: 1.6; transition: all 0.2s; }
+    textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(34, 211, 248, 0.1); }
+    
+    .short-link { margin-top: 16px; }
+    .short-link input { width: 100%; background: var(--input-bg); border: 1px solid var(--border); color: var(--text-main); padding: 14px 16px; border-radius: 10px; outline: none; font-size: 0.95rem; }
+    .short-link input:focus { border-color: var(--accent); }
+    .short-link-hint { font-size: 0.8rem; color: var(--text-sub); margin-top: 8px; }
+    
+    .generate-btn { width: 100%; background: linear-gradient(135deg, var(--accent) 0%, var(--accent-hover) 100%); color: #09090b; border: none; padding: 18px; border-radius: 12px; font-size: 1.1rem; font-weight: 700; cursor: pointer; transition: all 0.2s; margin-top: 24px; display: flex; align-items: center; justify-content: center; gap: 10px; }
+    .generate-btn:hover { transform: translateY(-2px); box-shadow: 0 10px 30px rgba(34, 211, 238, 0.3); }
+    .generate-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+    
+    .results { display: none; margin-top: 32px; }
+    .results.show { display: block; }
+    .results-title { font-size: 1.1rem; font-weight: 600; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+    
+    .result-item { background: var(--input-bg); border: 1px solid var(--border); border-radius: 12px; padding: 16px; margin-bottom: 12px; display: flex; align-items: center; gap: 16px; }
+    .result-icon { width: 48px; height: 48px; background: var(--card-bg); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; }
+    .result-info { flex: 1; }
+    .result-name { font-weight: 600; font-size: 1rem; margin-bottom: 4px; }
+    .result-desc { font-size: 0.8rem; color: var(--text-sub); }
+    .result-link { flex: 2; }
+    .result-link input { width: 100%; background: var(--card-bg); border: none; color: var(--text-main); padding: 10px 14px; border-radius: 8px; font-family: monospace; font-size: 0.85rem; }
+    .result-copy { background: var(--border); color: var(--text-main); border: none; padding: 10px 20px; border-radius: 8px; font-weight: 600; cursor: pointer; transition: all 0.2s; white-space: nowrap; }
+    .result-copy:hover { background: var(--accent); color: #09090b; }
+    
+    .qr-section { display: flex; flex-direction: column; align-items: center; margin-top: 24px; padding: 24px; background: var(--input-bg); border-radius: 12px; }
+    .qr-section h4 { color: var(--text-sub); margin-bottom: 16px; font-weight: 500; }
+    #qrcode { padding: 12px; background: #fff; border-radius: 12px; }
+    
+    .fav-section { margin-top: 24px; }
+    .fav-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+    .fav-add-btn { background: var(--border); color: var(--text-main); border: none; padding: 10px 16px; border-radius: 8px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px; }
+    .fav-add-btn:hover { background: var(--accent); color: #09090b; }
+    .fav-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
+    .fav-card { background: var(--input-bg); border: 1px solid var(--border); border-radius: 10px; padding: 14px; cursor: pointer; transition: all 0.2s; }
+    .fav-card:hover { border-color: var(--accent); transform: translateY(-2px); }
+    .fav-card-name { font-weight: 600; margin-bottom: 4px; }
+    .fav-card-url { font-size: 0.8rem; color: var(--text-sub); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .fav-card-actions { display: flex; gap: 8px; margin-top: 10px; }
+    .fav-card-btn { font-size: 0.8rem; color: var(--text-sub); cursor: pointer; padding: 4px 8px; border-radius: 4px; }
+    .fav-card-btn:hover { background: rgba(255,255,255,0.1); color: var(--text-main); }
+    .fav-card-delete { color: var(--danger); }
+    .fav-card-delete:hover { background: rgba(239, 68, 68, 0.2); }
+    
+    .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 100; align-items: center; justify-content: center; }
+    .modal.show { display: flex; }
+    .modal-content { background: var(--card-bg); border: 1px solid var(--border); border-radius: 16px; padding: 24px; width: 90%; max-width: 500px; }
+    .modal-title { font-size: 1.2rem; font-weight: 700; margin-bottom: 20px; }
+    .modal-actions { display: flex; gap: 12px; margin-top: 20px; }
+    .modal-btn { flex: 1; padding: 12px; border-radius: 10px; font-weight: 600; cursor: pointer; border: none; }
+    .modal-btn-cancel { background: var(--input-bg); color: var(--text-main); }
+    .modal-btn-save { background: var(--accent); color: #09090b; }
+    
+    .footer { text-align: center; padding: 40px 20px; color: var(--text-sub); font-size: 0.9rem; }
+    .footer a { color: var(--accent); text-decoration: none; }
+    .footer a:hover { text-decoration: underline; }
+    
+    .toast { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%) translateY(100px); background: var(--success); color: white; padding: 14px 28px; border-radius: 12px; font-weight: 600; opacity: 0; transition: all 0.3s; z-index: 200; }
+    .toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+    
+    @media (max-width: 640px) {
+      .hero h1 { font-size: 1.8rem; }
+      .result-item { flex-direction: column; align-items: flex-start; }
+      .result-link { width: 100%; }
+      .result-copy { width: 100%; }
+    }
   </style>
 </head>
 <body>
+  <div class="hero">
+    <div class="logo">⚡</div>
+    <h1>Sub Converter</h1>
+    <p>一鍵生成 SingBox / Clash / Base64 三種訂閱格式，適用於所有主流客戶端</p>
+    <div class="tagline"><span>🌍 智能分流</span> · <span>☁️ 雲端儲存</span> · <span>🔒 隱私保護</span></div>
+  </div>
+  
   <div class="container">
-    <div class="header"><h1>🔄 <span class="gradient-text">訂閱轉換中心</span></h1><p>客製化遠端規則 • 智能合併多訂閱</p></div>
+    <div class="card">
+      <div class="input-section">
+        <label>📥 輸入訂閱連結或節點 (多個用換行分隔)</label>
+        <textarea id="urlInput" placeholder="vmess://xxxxxx|ss://xxxxxx|trojan://xxxxxx&#10;https://example.com/sub"></textarea>
+      </div>
+      
+      <div class="short-link">
+        <label>🔗 自訂短連結 (可選)</label>
+        <input type="text" id="shortCode" placeholder="my-sub">
+        <div class="short-link-hint">設定後可생成長期有效的自訂連結，資料將儲存於雲端</div>
+      </div>
+      
+      <button class="generate-btn" onclick="generate()">⚡ 立即生成</button>
+    </div>
     
-    <div class="fav-section">
-      <h3 class="fav-title">⭐ 我的訂閱收藏 (雲端儲存)</h3>
-      <div class="fav-form">
-        <div class="fav-row">
-          <input type="text" id="favName" placeholder="自訂名稱 (例如: my-office)">
-          <button class="btn-add" onclick="saveProfile()">💾 儲存</button>
+    <div class="results" id="results">
+      <div class="results-title">🎉 生成的訂閱連結</div>
+      
+      <div class="result-item">
+        <div class="result-icon">📄</div>
+        <div class="result-info">
+          <div class="result-name">Sing-Box</div>
+          <div class="result-desc">JSON 格式 · 支援 Surge、v2rayN、Shadowrocket</div>
         </div>
-        <textarea id="favUrl" placeholder="在此輸入多個訂閱連結或節點 (一行一個)..."></textarea>
+        <div class="result-link"><input type="text" id="singboxUrl" readonly></div>
+        <button class="result-copy" onclick="copyResult('singboxUrl')">複製</button>
       </div>
-      <div id="favList" class="fav-list"><span style="color:#94a3b8; font-size:0.9rem;">暫無收藏...</span></div>
-    </div>
-
-    <div class="main-grid">
-      <div>
-        <label>📥 轉換來源 (點擊上方收藏可直接加入)</label>
-        <textarea id="url" style="min-height:200px;" placeholder="在此貼上機場訂閱連結或節點..."></textarea>
-        
-        <div style="margin-top: 1rem;">
-          <label>🔗 自訂短連結 (自動帶入收藏名稱)</label>
-          <input type="text" id="shortCode" placeholder="輸入短鏈名稱，留空則生成長連結" style="width: 100%;">
-          <div style="font-size: 0.8rem; color: #94a3b8; margin-top: 5px;">若輸入名稱，連結將變為 https://.../名稱，且資料會儲存於雲端。</div>
+      
+      <div class="result-item">
+        <div class="result-icon">📋</div>
+        <div class="result-info">
+          <div class="result-name">Clash Meta</div>
+          <div class="result-desc">YAML 格式 · 支援 Clash Verge、ClashX、Meta</div>
         </div>
+        <div class="result-link"><input type="text" id="clashUrl" readonly></div>
+        <button class="result-copy" onclick="copyResult('clashUrl')">複製</button>
       </div>
-
-      <div class="controls">
-        <div><label>🛠 轉換目標</label><select id="target"><option value="base64">Base64 (純節點)</option><option value="clash">Clash Meta (YAML 模板)</option><option value="singbox">Sing-Box (JSON 模板)</option></select></div>
-        <button onclick="generate()">⚡ 立即生成</button>
+      
+      <div class="result-item">
+        <div class="result-icon">🔗</div>
+        <div class="result-info">
+          <div class="result-name">Base64</div>
+          <div class="result-desc">原始連結 · 支援 V2RayNG、帆樯</div>
+        </div>
+        <div class="result-link"><input type="text" id="base64Url" readonly></div>
+        <button class="result-copy" onclick="copyResult('base64Url')">複製</button>
+      </div>
+      
+      <div class="qr-section">
+        <h4>📱 手機掃碼</h4>
+        <div id="qrcode"></div>
       </div>
     </div>
-
-    <div class="result-group" id="resultArea">
-      <label>🎉 您的專屬訂閱連結</label>
-      <div class="result-row"><input type="text" id="finalUrl" readonly onclick="this.select()"><button class="copy-btn" onclick="copyUrl()">複製</button></div>
-      <div id="qrcode"></div>
-    </div>
-
-    <div class="rules-section">
-      <div class="rules-header"><label style="margin:0">🛡️ 內建分流群組</label><a href="https://github.com/sammy0101/cf-sub-converter/tree/main" target="_blank" class="rules-link">查看 GitHub 原始碼 ↗</a></div>
-      <div class="rules-grid">
-        <div class="rule-card"><span class="rule-name">🚀 節點選擇</span><span class="rule-desc">手動切換節點</span></div>
-        <div class="rule-card"><span class="rule-name">⚡ 自動選擇</span><span class="rule-desc">自動測速切換</span></div>
-        <div class="rule-card"><span class="rule-name">💬 AI 服務</span><span class="rule-desc">ChatGPT / Gemini</span></div>
-        <div class="rule-card"><span class="rule-name">🌐 非中國</span><span class="rule-desc">Google / TG</span></div>
-        <div class="rule-card"><span class="rule-name">🔒 國內服務</span><span class="rule-desc">CN Direct</span></div>
-        <div class="rule-card"><span class="rule-name">🏠 私有網絡</span><span class="rule-desc">Local Direct</span></div>
-        <div class="rule-card"><span class="rule-name">🛑 廣告攔截</span><span class="rule-desc">AdBlock</span></div>
-        <div class="rule-card"><span class="rule-name">🐟 漏網之魚</span><span class="rule-desc">Final Match</span></div>
+    
+    <div class="card fav-section">
+      <div class="fav-header">
+        <div class="card-title" style="margin:0">⭐ 收藏的訂閱</div>
+        <button class="fav-add-btn" onclick="openModal()">+ 新��</button>
       </div>
-      <div class="file-info"><div class="file-row"><span class="dot"></span> SingBox: <b>Sing-Box_Rules.JSON</b></div><div class="file-row"><span class="dot"></span> Clash: <b>Clash_Rules.YAML</b></div></div>
+      <div class="fav-grid" id="favGrid">
+        <div style="color: var(--text-sub); font-size: 0.9rem;">暫無收藏...</div>
+      </div>
     </div>
   </div>
-  <div id="toast" class="toast">✅ 複製成功！</div>
+  
+  <div class="modal" id="modal">
+    <div class="modal-content">
+      <div class="modal-title">新增收藏</div>
+      <div class="input-section">
+        <label>名稱</label>
+        <textarea id="favName" style="min-height: 50px;"></textarea>
+      </div>
+      <div class="input-section" style="margin-top: 16px;">
+        <label>訂閱連結</label>
+        <textarea id="favUrl" style="min-height: 100px;"></textarea>
+      </div>
+      <div class="modal-actions">
+        <button class="modal-btn modal-btn-cancel" onclick="closeModal()">取消</button>
+        <button class="modal-btn modal-btn-save" onclick="saveFav()">儲存</button>
+      </div>
+    </div>
+  </div>
+  
+  <div class="toast" id="toast"></div>
+  
+  <div class="footer">
+    <a href="https://github.com/sammy0101/cf-sub-converter" target="_blank">GitHub</a> · 開源免費使用
+  </div>
   
   <script>
-    let profiles = [];
-    let editingIndex = null;
-
-    async function loadProfiles() {
+    let favs = [];
+    
+    async function loadFavs() {
       try {
         const resp = await fetch('/favs');
-        if (resp.ok) {
-          profiles = await resp.json();
-          renderProfiles();
-        }
-      } catch (e) {}
+        if (resp.ok) favs = await resp.json();
+        renderFavs();
+      } catch(e) {}
     }
-
-    async function renderProfiles() {
-      const container = document.getElementById('favList');
-      if (profiles.length === 0) { container.innerHTML = '<span style="color:#94a3b8; font-size:0.9rem;">暫無收藏...</span>'; return; }
-      container.innerHTML = profiles.map((p, index) => \`<div class="fav-item">
-        <span class="fav-name" onclick="insertProfile(\${index})" title="點擊加入">\${p.name}</span>
-        <span class="fav-action" onclick="editProfile(\${index})" title="編輯">✎</span>
-        <span class="fav-action fav-delete" onclick="deleteProfile(\${index})" title="刪除">✕</span>
+    
+    function renderFavs() {
+      const grid = document.getElementById('favGrid');
+      if (favs.length === 0) {
+        grid.innerHTML = '<div style="color: var(--text-sub); font-size: 0.9rem;">暫無收藏...</div>';
+        return;
+      }
+      grid.innerHTML = favs.map((f, i) => \`<div class="fav-card" onclick="useFav(\${i})">
+        <div class="fav-card-name">\${f.name}</div>
+        <div class="fav-card-url">\${f.url.substring(0, 40)}...</div>
+        <div class="fav-card-actions">
+          <span class="fav-card-btn" onclick="event.stopPropagation(); editFav(\${i})">編輯</span>
+          <span class="fav-card-btn fav-card-delete" onclick="event.stopPropagation(); deleteFav(\${i})">刪除</span>
+        </div>
       </div>\`).join('');
     }
-
-    async function saveProfile() {
+    
+    async function saveFav() {
       const name = document.getElementById('favName').value.trim();
       const url = document.getElementById('favUrl').value.trim();
-      if (!name || !url) { alert('請輸入名稱和連結內容'); return; }
-
+      if (!name || !url) return alert('請填寫名稱和連結');
+      
+      const editIndex = document.getElementById('modal').dataset.edit;
+      
       try {
-        const method = editingIndex !== null ? 'PUT' : 'POST';
-        const body = editingIndex !== null 
-          ? JSON.stringify({ index: editingIndex, name, url })
-          : JSON.stringify({ name, url });
-        
-        const resp = await fetch('/favs', { method, headers: { 'Content-Type': 'application/json' }, body });
-        if (!resp.ok) throw new Error('儲存失敗');
-        
-        editingIndex = null;
-        document.getElementById('favName').value = '';
-        document.getElementById('favUrl').value = '';
-        await loadProfiles();
+        if (editIndex !== '') {
+          await fetch('/favs', { 
+            method: 'PUT', 
+            headers: { 'Content-Type': 'application/json' }, 
+            body: JSON.stringify({ index: parseInt(editIndex), name, url }) 
+          });
+        } else {
+          await fetch('/favs', { 
+            method: 'POST', 
+            headers: { 'Content-Type': 'application/json' }, 
+            body: JSON.stringify({ name, url }) 
+          });
+        }
+        closeModal();
+        loadFavs();
         showToast('💾 已儲存');
-      } catch (e) { alert('儲存失敗: ' + e.message); }
+      } catch(e) { alert('儲存失敗'); }
     }
-
-    function editProfile(index) {
-      const profile = profiles[index];
-      if (!profile) return;
-      editingIndex = index;
-      document.getElementById('favName').value = profile.name;
-      document.getElementById('favUrl').value = profile.url;
-      showToast('✎ 編輯模式');
-    }
-
-    async function deleteProfile(index) {
-      if(!confirm('確定要刪除這個收藏嗎？')) return;
+    
+    async function deleteFav(index) {
+      if (!confirm('確定刪除？')) return;
       try {
-        const resp = await fetch('/favs', { 
+        await fetch('/favs', { 
           method: 'DELETE', 
           headers: { 'Content-Type': 'application/json' }, 
           body: JSON.stringify({ index }) 
         });
-        if (!resp.ok) throw new Error('刪除失敗');
-        await loadProfiles();
+        loadFavs();
         showToast('🗑️ 已刪除');
-      } catch (e) { alert('刪除失敗: ' + e.message); }
+      } catch(e) {}
     }
-
-    function insertProfile(index) {
-      const profile = profiles[index];
-      if (!profile) return;
-      const textarea = document.getElementById('url');
-      const currentVal = textarea.value.trim();
-      textarea.value = currentVal ? (currentVal + '\\n' + profile.url) : profile.url;
-      document.getElementById('shortCode').value = profile.name;
-      showToast('📥 已加入: ' + profile.name);
+    
+    function useFav(index) {
+      document.getElementById('urlInput').value = favs[index].url;
+      showToast('📥 已載入');
     }
-
-    loadProfiles();
-
+    
+    function editFav(index) {
+      document.getElementById('favName').value = favs[index].name;
+      document.getElementById('favUrl').value = favs[index].url;
+      document.getElementById('modal').dataset.edit = index;
+      document.getElementById('modal').classList.add('show');
+    }
+    
+    function openModal() {
+      document.getElementById('favName').value = '';
+      document.getElementById('favUrl').value = '';
+      document.getElementById('modal').dataset.edit = '';
+      document.getElementById('modal').classList.add('show');
+    }
+    
+    function closeModal() {
+      document.getElementById('modal').classList.remove('show');
+    }
+    
     async function generate() {
-      const rawInput = document.getElementById('url').value; const target = document.getElementById('target').value;
-      const shortCode = document.getElementById('shortCode').value.trim();
-      const urls = rawInput.split(/\\n/).map(u => u.trim()).filter(u => u.length > 0).join('|'); 
-      if (!urls) { alert('請至少輸入一個連結！'); return; }
+      const raw = document.getElementById('urlInput').value.trim();
+      if (!raw) return alert('請輸入訂閱連結');
+      
+      const btn = document.querySelector('.generate-btn');
+      btn.disabled = true;
+      btn.textContent = '⏳ 處理中...';
       
       const host = window.location.origin;
+      const shortCode = document.getElementById('shortCode').value.trim();
       let final = '';
-
-      if (shortCode) {
-        try {
-          const btn = document.querySelector('button[onclick="generate()"]');
-          btn.textContent = '⏳ 處理中...'; btn.disabled = true;
-          const resp = await fetch('/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: shortCode, content: urls }) });
-          if (!resp.ok) throw new Error('儲存失敗');
-          final = \`\${host}/\${shortCode}?target=\${target}\`; 
-          btn.textContent = '⚡ 立即生成'; btn.disabled = false;
-        } catch (e) { alert('儲存短連結失敗: ' + e.message); return; }
-      } else {
-        final = \`\${host}/?url=\${encodeURIComponent(urls)}&target=\${target}\`;
+      
+      try {
+        if (shortCode) {
+          await fetch('/save', { 
+            method: 'POST', 
+            headers: { 'Content-Type': 'application/json' }, 
+            body: JSON.stringify({ path: shortCode, content: raw }) 
+          });
+          final = \`\${host}/\${shortCode}\`;
+        } else {
+          final = \`\${host}/?url=\${encodeURIComponent(raw)}\`;
+        }
+        
+        document.getElementById('singboxUrl').value = final + '&target=singbox';
+        document.getElementById('clashUrl').value = final + '&target=clash';
+        document.getElementById('base64Url').value = final + '&target=base64';
+        
+        document.getElementById('results').classList.add('show');
+        
+        const qrContainer = document.getElementById('qrcode');
+        qrContainer.innerHTML = '';
+        new QRCode(qrContainer, { text: final + '&target=singbox', width: 160, height: 160 });
+        
+        showToast('⚡ 生成完成');
+      } catch(e) {
+        alert('生成失敗: ' + e.message);
       }
-
-      document.getElementById('finalUrl').value = final; document.getElementById('resultArea').classList.add('show');
-      const qrContainer = document.getElementById('qrcode'); qrContainer.innerHTML = ''; 
-      new QRCode(qrContainer, { text: final, width: 180, height: 180, colorDark : "#000000", colorLight : "#ffffff", correctLevel : QRCode.CorrectLevel.M });
+      
+      btn.disabled = false;
+      btn.textContent = '⚡ 立即生成';
     }
-    function copyUrl() { const copyText = document.getElementById("finalUrl"); copyText.select(); navigator.clipboard.writeText(copyText.value).then(() => showToast('✅ 複製成功！')); }
-    function showToast(msg) { const toast = document.getElementById('toast'); toast.textContent = msg; toast.classList.add('show'); setTimeout(() => toast.classList.remove('show'), 2000); }
+    
+    function copyResult(id) {
+      const input = document.getElementById(id);
+      navigator.clipboard.writeText(input.value).then(() => showToast('✅ 複製成功'));
+    }
+    
+    function showToast(msg) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.classList.add('show');
+      setTimeout(() => t.classList.remove('show'), 2500);
+    }
+    
+    loadFavs();
   </script>
 </body>
 </html>

@@ -92,84 +92,120 @@ if (path && path !== 'favicon.ico' && !urlParam) {
 // 3. 顯示前端頁面
 if (!urlParam) return new Response(HTML_PAGE, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
 
-const target = url.searchParams.get('target') || 'singbox';
+// 4. 解析並轉換為三種格式
+const inputs = urlParam.split('|'); 
+const allNodes: ProxyNode[] = [];
 
-try {
-  // 4. 解析訂閱來源 (支援多行)
-  const inputs = urlParam.split('|'); 
-  const allNodes: ProxyNode[] = [];
+await Promise.all(inputs.map(async (input) => { 
+  const trimmed = input.trim(); 
+  if (!trimmed) return;
   
-  await Promise.all(inputs.map(async (input) => { 
-    const trimmed = input.trim(); 
-    if (!trimmed) return;
-    
-    if (trimmed.startsWith('http')) { 
-      try { 
-        // 加入隨機參數防止 fetch 緩存，確保拿到最新節點
-        const separator = trimmed.includes('?') ? '&' : '?';
-        const resp = await fetch(`${trimmed}${separator}t=${Date.now()}`, { 
-          headers: { 'User-Agent': 'v2rayNG/1.8.5' } 
-        }); 
-        
-        if (resp.ok) { 
-          const text = await resp.text(); 
-          allNodes.push(...await parseContent(text)); 
-        } 
-      } catch (e) {} 
-    } else { 
-      // 處理直接貼上的節點連結
-      allNodes.push(...await parseContent(trimmed)); 
-    }
-  }));
-
-  if (allNodes.length === 0) return new Response('未解析到任何有效節點', { status: 400 });
-  
-  // 5. 節點去重
-  const uniqueNodes = deduplicateNodeNames(allNodes);
-
-  // 6. 生成配置
-  let result = ''; 
-  let contentType = 'text/plain; charset=utf-8';
-  let fileExt = '.txt';
-
-  if (target === 'clash') { 
-    result = await toClashWithTemplate(uniqueNodes); 
-    contentType = 'text/yaml; charset=utf-8'; 
-    fileExt = '.yaml';
-  } else if (target === 'base64') { 
-    result = toBase64(uniqueNodes); 
-    contentType = 'text/plain; charset=utf-8'; 
-    fileExt = '.txt';
-  } else { 
-    result = await toSingBoxWithTemplate(uniqueNodes); 
-    contentType = 'application/json; charset=utf-8'; 
-    fileExt = '.json';
-  }
-
-  // 7. 設定基本檔名
-  // 使用 URL 編碼確保標頭不報錯，客戶端能解就解，不能解就顯示亂碼或網域，手動改名即可
-  const filename = `subscription${fileExt}`;
-  const encodedName = encodeURIComponent(path || 'subscription');
-
-  // 8. 回傳結果
-  return new Response(result, { 
-    headers: { 
-      'Content-Type': contentType, 
-      'Access-Control-Allow-Origin': '*', 
+  if (trimmed.startsWith('http')) { 
+    try { 
+      const separator = trimmed.includes('?') ? '&' : '?';
+      const resp = await fetch(`${trimmed}${separator}t=${Date.now()}`, { 
+        headers: { 'User-Agent': 'v2rayNG/1.8.5' } 
+      }); 
       
-      // 強制不快取，確保每次更新都是最新的
-      'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
-      'Pragma': 'no-cache',
-      'Expires': '0',
+      if (resp.ok) { 
+        const text = await resp.text(); 
+        allNodes.push(...await parseContent(text)); 
+      } 
+    } catch (e) {} 
+  } else { 
+    allNodes.push(...await parseContent(trimmed)); 
+  }
+}));
 
-      // 標準標頭
-      'profile-title': encodedName, 
-      'subscription-title': encodedName,
-      'Content-Disposition': `inline; filename="${filename}"; filename*=UTF-8''${encodeURIComponent(filename)}`,
-      'Profile-Update-Interval': '3600',
-    } 
-  });
+if (allNodes.length === 0) return new Response('未解析到任何有效節點', { status: 400 });
 
-} catch (err: any) { return new Response(`轉換錯誤: ${err.message}`, { status: 500 }); }
-},
+const uniqueNodes = deduplicateNodeNames(allNodes);
+
+// 檢查 target 參數
+const target = url.searchParams.get('target');
+
+if (!target) {
+  // 沒有 target，顯示結果頁面
+  const host = `https://${url.host}`;
+  const encodedUrl = encodeURIComponent(urlParam);
+
+  const htmlInfo = `
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>訂閱轉換結果</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0f172a; color: #f8fafc; padding: 40px 20px; display: flex; justify-content: center; }
+    .container { background: #1e293b; padding: 2rem; border-radius: 16px; max-width: 600px; width: 100%; }
+    h1 { margin: 0 0 1.5rem 0; font-size: 1.5rem; text-align: center; }
+    .result { background: #0f172a; padding: 1rem; border-radius: 8px; margin-bottom: 1rem; }
+    .result-title { font-weight: 600; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 8px; }
+    .result-link { background: #334155; padding: 0.8rem; border-radius: 6px; word-break: break-all; font-family: monospace; font-size: 0.85rem; }
+    .btn { display: block; background: #22c55e; color: white; text-align: center; padding: 1rem; border-radius: 8px; text-decoration: none; font-weight: 600; margin-top: 1.5rem; }
+    .btn:hover { background: #16a34a; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>⚡ 轉換完成 (${uniqueNodes.length} 節點)</h1>
+    
+    <div class="result">
+      <div class="result-title">📄 Sing-Box (JSON)</div>
+      <div class="result-link">${host}/?url=${encodedUrl}&target=singbox</div>
+    </div>
+    
+    <div class="result">
+      <div class="result-title">📋 Clash Meta (YAML)</div>
+      <div class="result-link">${host}/?url=${encodedUrl}&target=clash</div>
+    </div>
+    
+    <div class="result">
+      <div class="result-title">🔗 Base64 (原始)</div>
+      <div class="result-link">${host}/?url=${encodedUrl}&target=base64</div>
+    </div>
+    
+    <a class="btn" href="${host}/?url=${encodedUrl}&target=singbox">📥 下載 Sing-Box 訂閱</a>
+  </div>
+</body>
+</html>
+`;
+
+  return new Response(htmlInfo, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+}
+
+// 有 target，生成對應格式
+let result = '';
+let contentType = 'text/plain';
+let fileExt = '.txt';
+
+if (target === 'clash') { 
+  result = await toClashWithTemplate(uniqueNodes); 
+  contentType = 'text/yaml'; 
+  fileExt = '.yaml';
+} else if (target === 'base64') { 
+  result = toBase64(uniqueNodes); 
+  contentType = 'text/plain'; 
+  fileExt = '.txt';
+} else { 
+  result = await toSingBoxWithTemplate(uniqueNodes); 
+  contentType = 'application/json'; 
+  fileExt = '.json';
+}
+
+const filename = `subscription${fileExt}`;
+
+return new Response(result, { 
+  headers: { 
+    'Content-Type': `${contentType}; charset=utf-8`, 
+    'Access-Control-Allow-Origin': '*', 
+    'Cache-Control': 'no-store, no-cache, must-revalidate',
+    'profile-title': filename, 
+    'subscription-title': filename,
+    'Content-Disposition': `inline; filename="${filename}"`,
+    'Profile-Update-Interval': '3600',
+  } 
+});
+}
 };
