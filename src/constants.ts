@@ -133,7 +133,7 @@ export const HTML_PAGE = `
         <div class="result-icon">🔗</div>
         <div class="result-info">
           <div class="result-name">Base64</div>
-          <div class="result-desc">原始連結 · 支援 V2RayNG、帆樯</div>
+          <div class="result-desc">原始連結 · 支援 V2RayNG、PassWall</div>
         </div>
         <div class="result-link"><input type="text" id="base64Url" readonly></div>
         <button class="result-copy" onclick="copyResult('base64Url')">複製</button>
