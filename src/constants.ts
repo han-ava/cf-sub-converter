@@ -138,6 +138,7 @@ export const HTML_PAGE = `
         </div>
         <div class="result-link"><input type="text" id="singboxUrl" readonly></div>
         <button class="result-copy" onclick="copyResult('singboxUrl')">複製</button>
+        <button class="result-copy" onclick="showQr('singboxUrl')" style="margin-left:4px;background:#3b82f6">📱</button>
       </div>
       
       <div class="result-item">
@@ -148,6 +149,7 @@ export const HTML_PAGE = `
         </div>
         <div class="result-link"><input type="text" id="clashUrl" readonly></div>
         <button class="result-copy" onclick="copyResult('clashUrl')">複製</button>
+        <button class="result-copy" onclick="showQr('clashUrl')" style="margin-left:4px;background:#3b82f6">📱</button>
       </div>
       
       <div class="result-item">
@@ -158,15 +160,7 @@ export const HTML_PAGE = `
         </div>
         <div class="result-link"><input type="text" id="base64Url" readonly></div>
         <button class="result-copy" onclick="copyResult('base64Url')">複製</button>
-      </div>
-      
-      <div class="qr-section">
-        <h4>📱 Sing-Box QR Code</h4>
-        <div id="qrcode-singbox"></div>
-        <h4 style="margin-top:16px">📱 Clash QR Code</h4>
-        <div id="qrcode-clash"></div>
-        <h4 style="margin-top:16px">📱 Base64 QR Code</h4>
-        <div id="qrcode-base64"></div>
+        <button class="result-copy" onclick="showQr('base64Url')" style="margin-left:4px;background:#3b82f6">📱</button>
       </div>
     </div>
     
@@ -329,11 +323,6 @@ export const HTML_PAGE = `
         
         document.getElementById('results').classList.add('show');
         
-        // 三個 QR Code
-        new QRCode(document.getElementById('qrcode-singbox'), { text: urlToFetch, width: 140, height: 140 });
-        new QRCode(document.getElementById('qrcode-clash'), { text: urlToFetch.replace('target=singbox', 'target=clash'), width: 140, height: 140 });
-        new QRCode(document.getElementById('qrcode-base64'), { text: urlToFetch.replace('target=singbox', 'target=base64'), width: 140, height: 140 });
-        
         showToast('⚡ 生成完成');
       } catch(e) {
         alert('生成失敗: ' + e.message);
@@ -346,6 +335,14 @@ export const HTML_PAGE = `
     function copyResult(id) {
       const input = document.getElementById(id);
       navigator.clipboard.writeText(input.value).then(() => showToast('✅ 複製成功'));
+    }
+    
+    function showQr(id) {
+      const url = document.getElementById(id).value;
+      const win = window.open('', '_blank', 'width=400,height=450');
+      if (!win) { alert('請允許彈出視窗'); return; }
+      win.document.write('<!DOCTYPE html><html><head><meta charset="utf-8"><title>QR Code</title></head><body style="margin:0;background:#18181b;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;color:#fafafa;font-family:-apple-system,BlinkMacSystemFont,sans-serif"><div id="qr" style="padding:20px;background:#fff;border-radius:12px"></div><div style="margin-top:20px;font-size:14px;color:#a1a1aa">掃碼添加訂閱</div></body></html>');
+      new QRCode(win.document.getElementById('qr'), { text: url, width: 280, height: 280 });
     }
     
     function showToast(msg) {
