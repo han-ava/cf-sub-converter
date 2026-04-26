@@ -127,14 +127,41 @@ export const HTML_PAGE = `
     </div>
     
     <div class="results" id="results">
-      <div class="results-title">🎉 生成的訂閱連結</div>
+<div class="results-title">🎉 生成的訂閱連結</div>
       
       <div class="result-item">
-        <div class="result-icon">📄</div>
+        <div class="result-icon">🔗</div>
+        <div class="result-info">
+          <div class="result-name">Base64</div>
+          <div class="result-desc">原始連結 · 支援 V2RayNG、帆樯</div>
+        </div>
+        <div class="result-link"><input type="text" id="base64Url" readonly></div>
+        <button class="result-copy" onclick="copyResult('base64Url')">複製</button>
+        <button class="result-copy" onclick="showQr('base64Url')" style="margin-left:4px;background:#3b82f6">📱</button>
+      </div>
+      
+      <div class="result-item">
+        <div class="result-icon">🐱</div>
+        <div class="result-info">
+          <div class="result-name">Clash Meta</div>
+          <div class="result-desc">YAML 格式 · 支援 Clash Verge、ClashX</div>
+        </div>
+        <div class="result-link"><input type="text" id="clashUrl" readonly></div>
+        <button class="result-copy" onclick="copyResult('clashUrl')">複製</button>
+        <button class="result-copy" onclick="showQr('clashUrl')" style="margin-left:4px;background:#3b82f6">📱</button>
+      </div>
+      
+      <div class="result-item">
+        <div class="result-icon">📱</div>
         <div class="result-info">
           <div class="result-name">Sing-Box</div>
-          <div class="result-desc">JSON 格式 · 支援 Surge、v2rayN、Shadowrocket</div>
+          <div class="result-desc">JSON 格式 · 支援 Surge、v2rayN</div>
         </div>
+        <div class="result-link"><input type="text" id="singboxUrl" readonly></div>
+        <button class="result-copy" onclick="copyResult('singboxUrl')">複製</button>
+        <button class="result-copy" onclick="showQr('singboxUrl')" style="margin-left:4px;background:#3b82f6">📱</button>
+      </div>
+    </div>
         <div class="result-link"><input type="text" id="singboxUrl" readonly></div>
         <button class="result-copy" onclick="copyResult('singboxUrl')">複製</button>
         <button class="result-copy" onclick="showQr('singboxUrl')" style="margin-left:4px;background:#3b82f6">📱</button>
