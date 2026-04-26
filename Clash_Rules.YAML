@@ -109,14 +109,14 @@ proxy-groups:
   - name: Ⓜ️ 微軟服務
     type: select
     proxies:
-      - 🚀 節點選擇
       - DIRECT
+      - 🚀 節點選擇
 
   - name: 🎮 遊戲平台
     type: select
     proxies:
-      - 🚀 節點選擇
       - DIRECT
+      - 🚀 節點選擇
 
   - name: 🌐 非中國
     type: select
