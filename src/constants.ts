@@ -270,7 +270,8 @@ export const HTML_PAGE = `
     
     function useFav(index) {
       document.getElementById('urlInput').value = favs[index].url;
-      showToast('📥 已載入');
+      document.getElementById('shortCode').value = favs[index].name;
+      showToast('📥 已載入: ' + favs[index].name);
     }
     
     function editFav(index) {
