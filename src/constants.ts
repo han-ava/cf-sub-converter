@@ -126,9 +126,9 @@ export const HTML_PAGE = `
       <button class="generate-btn" onclick="generate()">⚡ 立即生成</button>
     </div>
     
-    <div class="results" id="results">
-<div class="results-title">🎉 生成的訂閱連結</div>
-      
+<div class="results" id="results">
+      <div class="results-title">🎉 生成的訂閱連結</div>
+       
       <div class="result-item">
         <div class="result-icon">🔗</div>
         <div class="result-info">
@@ -139,7 +139,7 @@ export const HTML_PAGE = `
         <button class="result-copy" onclick="copyResult('base64Url')">複製</button>
         <button class="result-copy" onclick="showQr('base64Url')" style="margin-left:4px;background:#3b82f6">📱</button>
       </div>
-      
+       
       <div class="result-item">
         <div class="result-icon">🐱</div>
         <div class="result-info">
@@ -150,7 +150,7 @@ export const HTML_PAGE = `
         <button class="result-copy" onclick="copyResult('clashUrl')">複製</button>
         <button class="result-copy" onclick="showQr('clashUrl')" style="margin-left:4px;background:#3b82f6">📱</button>
       </div>
-      
+       
       <div class="result-item">
         <div class="result-icon">📱</div>
         <div class="result-info">
@@ -162,34 +162,7 @@ export const HTML_PAGE = `
         <button class="result-copy" onclick="showQr('singboxUrl')" style="margin-left:4px;background:#3b82f6">📱</button>
       </div>
     </div>
-        <div class="result-link"><input type="text" id="singboxUrl" readonly></div>
-        <button class="result-copy" onclick="copyResult('singboxUrl')">複製</button>
-        <button class="result-copy" onclick="showQr('singboxUrl')" style="margin-left:4px;background:#3b82f6">📱</button>
-      </div>
-      
-      <div class="result-item">
-        <div class="result-icon">📋</div>
-        <div class="result-info">
-          <div class="result-name">Clash Meta</div>
-          <div class="result-desc">YAML 格式 · 支援 Clash Verge、ClashX、Meta</div>
-        </div>
-        <div class="result-link"><input type="text" id="clashUrl" readonly></div>
-        <button class="result-copy" onclick="copyResult('clashUrl')">複製</button>
-        <button class="result-copy" onclick="showQr('clashUrl')" style="margin-left:4px;background:#3b82f6">📱</button>
-      </div>
-      
-      <div class="result-item">
-        <div class="result-icon">🔗</div>
-        <div class="result-info">
-          <div class="result-name">Base64</div>
-          <div class="result-desc">原始連結 · 支援 V2RayNG、帆樯</div>
-        </div>
-        <div class="result-link"><input type="text" id="base64Url" readonly></div>
-        <button class="result-copy" onclick="copyResult('base64Url')">複製</button>
-        <button class="result-copy" onclick="showQr('base64Url')" style="margin-left:4px;background:#3b82f6">📱</button>
-      </div>
-    </div>
-    
+   
     <div class="card fav-section">
       <div class="fav-header">
         <div class="card-title" style="margin:0">⭐ 收藏的訂閱</div>
@@ -325,9 +298,9 @@ export const HTML_PAGE = `
       btn.textContent = '⏳ 處理中...';
       
       const host = window.location.origin;
-const shortCode = document.getElementById('shortCode').value.trim();
-       
-       try {
+      const shortCode = document.getElementById('shortCode').value.trim();
+      
+      try {
         if (shortCode) {
           await fetch('/save', { 
             method: 'POST', 
