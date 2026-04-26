@@ -1,90 +1,24 @@
 # CF Sub Converter
 
-基於 Cloudflare Workers 的 Serverless 訂閱轉換工具。無需購買 VPS，依託 Cloudflare 全球邊緣網絡，提供高性能、隱私安全的訂閱轉換服務。
+基於 Cloudflare Workers 的 Serverless 訂閱轉換工具。一鍵生成 Sing-Box / Clash / Base64 三種格式，適用於所有主流客戶端。
 
 [![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/sammy0101/cf-sub-converter)
 
-## 🌟 核心特性
+## 🌟 特性
 
-*   ☁️ **Serverless 部署**：完全運行在 Cloudflare Workers 上，無需維護 VPS，零成本運維。
-*   🛡️ **隱私安全**：代碼開源，所有轉換邏輯在邊緣節點完成，不記錄任何用戶日誌。
-*   ⚡ **高性能**：利用 Cloudflare 全球網絡，極低延遲，響應速度快。
-*   🔄 **多協議支持**：完美支持 **Clash**, **V2Ray**, **Sing-box** 等主流客戶端格式轉換。
+- ⚡ **一鍵生成** - 自動產生 Sing-Box、Clash、Base64 三種格式
+- ☁️ **Serverless** - 運行在 Cloudflare Workers，零成本運維
+- 🛡️ **隱私安全** - 邊緣節點處理，不記錄用戶日誌
+- 📱 **QR Code** - 支援手機掃碼新增訂閱
+- ⭐ **雲端收藏** - 收藏常用訂閱，隨時取用
 
-## 🚦 智能分流策略 (Routing)
+## 🚀 部署
 
-本工具預設內置了精細化的分流規則，滿足大多數用戶的日常需求：
+### 方法一：一鍵部署
 
-| 圖標 | 規則組名稱 | 說明 |
-| :--- | :--- | :--- |
-| 💬 | **香港AI 服務** | 專為 ChatGPT, Claude 等 AI 服務優化，確保訪問穩定。 |
-| 🌐 | **非中國** | 國外通用流量，自動選擇最快節點。 |
-| 🔒 | **國內服務** | 中國大陸流量，自動直連，不消耗代理流量。 |
-| 🏠 | **私有網絡** | 局域網及私有 IP 地址訪問。 |
-| 🛑 | **廣告攔截** | 自動攔截常見廣告域名。 |
-| 🐟 | **漏網之魚** | 未匹配到上述規則的其他所有流量 (Final)。 |
+點擊上方 **Deploy to Cloudflare Workers** 按鈕。
 
-## 🚀 部署教程 (Deployment)
-
-建議按照以下順序操作，以確保功能完整：
-
-### 第一步：Fork 本項目
-點擊頁面右上角的 **[Fork]** 按鈕，將本倉庫複製到您自己的 GitHub 帳號下。
-> **重要**：必須 Fork，否則後續無法配置自動更新和自定義規則。
-
-### 第二步：準備必要參數
-在部署前，請先獲取以下 3 個 Cloudflare 參數：
-
-| 變量名 | 獲取方式 |
-| :--- | :--- |
-| `CF_ACCOUNT_ID` | Cloudflare 控制台首頁網址欄中的一串字符，或右側邊欄可見。 |
-| `CF_API_TOKEN` | 在 "My Profile" -> "API Tokens" 創建，需給予 **Edit Cloudflare Workers** 權限。 |
-| `CF_KV_ID` | 在 Workers 菜單下創建一個 KV Namespace (例如命名為 `sub_cache`) 並獲取其 ID。 |
-
-### 第三步：一鍵部署 (初次安裝)
-回到您 Fork 後的倉庫頁面，點擊上方的 **Deploy to Cloudflare Workers** 按鈕。
-1.  授權 Cloudflare 訪問您的 GitHub。
-2.  在 Cloudflare 部署頁面中，**填寫第二步獲取的參數**。
-3.  點擊 Deploy。
-
----
-
-## 🤖 配置自動更新 (GitHub Actions)
-
-如果您希望**每次修改代碼後自動更新**到 Cloudflare，您需要將上述參數添加到 GitHub Secrets 中：
-
-1.  進入 GitHub 倉庫的 **Settings** -> **Secrets and variables** -> **Actions**。
-2.  點擊 **New repository secret**。
-3.  依次添加以下變量：
-    *   `CF_ACCOUNT_ID`
-    *   `CF_API_TOKEN`
-    *   `CF_KV_ID` (可選，視 `wrangler.toml` 配置而定)
-
-這樣設置後，每次您 `git push` 代碼，GitHub Actions 就會自動幫您部署最新的 Worker。
-
-## 📖 使用方法
-
-部署成功後，您將獲得一個類似 `https://your-worker.your-name.workers.dev` 的地址。
-
-### 通用 URL 格式
-```
-https://<您的域名>/sub?target=<目標客戶端>&url=<原始訂閱鏈接>
-```
-
-### 參數說明
-*   `target`: 目標客戶端類型 (支持 `clash`, `v2ray`, `sing-box`, `surge`)
-*   `url`: 您的原始訂閱鏈接 (多個鏈接請用 `|` 分隔，建議進行 URL Encode)
-*   `config`: (可選) 自定義遠程規則配置文件 URL
-*   `list`: (可選) `true` 則僅輸出節點列表，不輸出規則
-
-### 示例 (Clash)
-```
-https://cf-sub-converter.sammy.workers.dev/sub?target=clash&url=https%3A%2F%2Fexample.com%2Fapi%2Fv1%2Fsub
-```
-
-## 🛠️ 本地開發
-
-如果您是開發者，希望在本地調試代碼：
+### 方法二：手動部署
 
 ```bash
 # 1. 克隆倉庫
@@ -94,12 +28,68 @@ cd cf-sub-converter
 # 2. 安裝依賴
 npm install
 
-# 3. 啟動本地服務
-npm run dev
+# 3. 創建 KV Namespace
+wrangler kv:namespace create sub_cache
+
+# 4. 部署
+wrangler deploy
+```
+
+## 📖 使用方法
+
+訪問你的 Workers 網址即可使用。
+
+### 功能
+
+- **輸入訂閱** - 貼上機場訂閱連結或節點
+- **自訂短連結** - 設定名稱生成永久連結
+- **一鍵生成** - 同時產生三種格式
+- **QR Code** - 點擊📱按鈕查看大碼
+- **雲端收藏** - 收藏常用訂閱
+
+### URL 格式
+
+```
+https://your-worker.workers.dev/?url=<訂閱連結>&target=singbox
+https://your-worker.workers.dev/?url=<訂閱連結>&target=clash
+https://your-worker.workers.dev/?url=<訂閱連結>&target=base64
+
+# 短連結
+https://your-worker.workers.dev/<名稱>?target=singbox
+```
+
+## 🛡️ 內建分流群組
+
+| 圖標 | 名稱 | 說明 |
+| :--- | :--- | :--- |
+| 🚀 | 節點選擇 | 手動切換節點 |
+| ⚡ | 自動選擇 | 自動測速切換 |
+| 💬 | AI 服務 | ChatGPT / Gemini / Claude |
+| Ⓜ️ | 微軟服務 | Microsoft 服務 |
+| 🎮 | 遊戲平台 | Steam / Epic / EA / Ubisoft |
+| 🌐 | 非中國 | Google / Telegram 等 |
+| 🍎 | 蘋果服務 | Apple 服務 |
+| 🇨🇳 | 國內服務 | 中國直連 |
+| 🏠 | 私有網絡 | 局域網 |
+| 🛑 | 廣告攔截 | AdBlock |
+| 🐟 | 漏網之魚 | Final Match |
+
+## 📁 文件結構
+
+```
+cf-sub-converter/
+├── src/
+│   ├── index.ts          # 主入口
+│   ├── constants.ts      # 常量 (HTML 頁面)
+│   ├── parser.ts        # 訂閱解析
+│   ├── generator.ts    # 格式生成
+│   ├── utils.ts       # 工具函數
+│   └── types.ts      # 類型定義
+├── Sing-Box_Rules.JSON  # Sing-Box 範本
+├── Clash_Rules.YAML    # Clash 範本
+└── wrangler.toml     # Cloudflare 配置
 ```
 
 ## ⚠️ 免責聲明
 
-*   本項目僅供互聯網技術學習和研究使用。
-*   請勿將本項目用於任何違反當地法律法規的用途。
-*   作者不對使用本項目產生的任何後果負責。
+本項目僅供技術學習和研究使用，請勿用於任何違法用途。
