@@ -161,8 +161,12 @@ export const HTML_PAGE = `
       </div>
       
       <div class="qr-section">
-        <h4>📱 手機掃碼</h4>
-        <div id="qrcode"></div>
+        <h4>📱 Sing-Box QR Code</h4>
+        <div id="qrcode-singbox"></div>
+        <h4 style="margin-top:16px">📱 Clash QR Code</h4>
+        <div id="qrcode-clash"></div>
+        <h4 style="margin-top:16px">📱 Base64 QR Code</h4>
+        <div id="qrcode-base64"></div>
       </div>
     </div>
     
@@ -325,9 +329,10 @@ export const HTML_PAGE = `
         
         document.getElementById('results').classList.add('show');
         
-        const qrContainer = document.getElementById('qrcode');
-        qrContainer.innerHTML = '';
-        new QRCode(qrContainer, { text: urlToFetch, width: 160, height: 160 });
+        // 三個 QR Code
+        new QRCode(document.getElementById('qrcode-singbox'), { text: urlToFetch, width: 140, height: 140 });
+        new QRCode(document.getElementById('qrcode-clash'), { text: urlToFetch.replace('target=singbox', 'target=clash'), width: 140, height: 140 });
+        new QRCode(document.getElementById('qrcode-base64'), { text: urlToFetch.replace('target=singbox', 'target=base64'), width: 140, height: 140 });
         
         showToast('⚡ 生成完成');
       } catch(e) {
