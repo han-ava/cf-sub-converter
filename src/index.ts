@@ -3,17 +3,24 @@ import { HTML_PAGE } from './constants';
 import { parseContent } from './parser';
 import { toSingBoxWithTemplate, toClashWithTemplate, toBase64 } from './generator';
 import { deduplicateNodeNames } from './utils';
+
 export default {
 async fetch(request: Request, env: Env, ctx: any): Promise<Response> {
 const url = new URL(request.url);
 
-// 1. POST /save (儲存短連結到 KV)
+// 1. POST /save (儲存短連結到 KV，儲存後自動顯示結果頁面)
 if (request.method === 'POST' && url.pathname === '/save') {
   try {
     const body: any = await request.json();
     if (!body.path || !body.content) return new Response('Missing path or content', { status: 400 });
     await env.SUB_CACHE.put(body.path, body.content);
-    return new Response('OK', { status: 200 });
+    
+    // 儲存成功後，自動重定向到結果頁面
+    const redirectUrl = `/?url=${encodeURIComponent(body.content)}&target=singbox`;
+    return new Response(null, { 
+      status: 302, 
+      headers: { 'Location': redirectUrl } 
+    });
   } catch (e) { return new Response('Error saving profile', { status: 500 }); }
 }
 
@@ -82,15 +89,18 @@ let urlParam = url.searchParams.get('url');
 // 解碼路徑 (例如 /myself)
 const path = decodeURIComponent(url.pathname.slice(1)); 
 
-if (path && path !== 'favicon.ico' && !urlParam) {
+// 如果有短連結路徑，先從 KV 讀取內容
+if (path && path !== 'favicon.ico' && path !== '' && !urlParam) {
   const storedContent = await env.SUB_CACHE.get(path);
   if (storedContent) { 
     urlParam = storedContent; 
   }
 }
 
-// 3. 顯示前端頁面
-if (!urlParam) return new Response(HTML_PAGE, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+// 顯示首頁 (沒有 url 參數也沒有短連結)
+if (!urlParam || urlParam.trim() === '') {
+  return new Response(HTML_PAGE, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+}
 
 // 4. 解析並轉換為三種格式
 const inputs = urlParam.split('|'); 

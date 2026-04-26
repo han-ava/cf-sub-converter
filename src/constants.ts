@@ -303,6 +303,7 @@ export const HTML_PAGE = `
       const host = window.location.origin;
       const shortCode = document.getElementById('shortCode').value.trim();
       let final = '';
+      let urlToFetch = '';
       
       try {
         if (shortCode) {
@@ -311,20 +312,21 @@ export const HTML_PAGE = `
             headers: { 'Content-Type': 'application/json' }, 
             body: JSON.stringify({ path: shortCode, content: raw }) 
           });
-          final = \`\${host}/\${shortCode}\`;
+          urlToFetch = \`\${host}/\${shortCode}\`;
         } else {
-          final = \`\${host}/?url=\${encodeURIComponent(raw)}\`;
+          const encodedUrl = encodeURIComponent(raw);
+          urlToFetch = \`\${host}/?url=\${encodedUrl}\`;
         }
         
-        document.getElementById('singboxUrl').value = final + '&target=singbox';
-        document.getElementById('clashUrl').value = final + '&target=clash';
-        document.getElementById('base64Url').value = final + '&target=base64';
+        document.getElementById('singboxUrl').value = urlToFetch + '&target=singbox';
+        document.getElementById('clashUrl').value = urlToFetch + '&target=clash';
+        document.getElementById('base64Url').value = urlToFetch + '&target=base64';
         
         document.getElementById('results').classList.add('show');
         
         const qrContainer = document.getElementById('qrcode');
         qrContainer.innerHTML = '';
-        new QRCode(qrContainer, { text: final + '&target=singbox', width: 160, height: 160 });
+        new QRCode(qrContainer, { text: urlToFetch + '&target=singbox', width: 160, height: 160 });
         
         showToast('⚡ 生成完成');
       } catch(e) {
