@@ -85,12 +85,12 @@ if (request.method === 'DELETE' && url.pathname === '/favs') {
 }
 
 // 2. GET /path (讀取短連結)
-let urlParam = url.searchParams.get('url');
+let urlParam = url.searchParams.get('url') || '';
 // 解碼路徑 (例如 /myself)
 const path = decodeURIComponent(url.pathname.slice(1)); 
 
-// 如果有短連結路徑，先從 KV 讀取內容
-if (path && path !== 'favicon.ico' && path !== '' && !urlParam) {
+// 優先從 KV 讀取短連結內容 (不受 urlParam 影響)
+if (path && path !== 'favicon.ico' && path !== '') {
   const storedContent = await env.SUB_CACHE.get(path);
   if (storedContent) { 
     urlParam = storedContent; 

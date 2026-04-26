@@ -312,21 +312,22 @@ export const HTML_PAGE = `
             headers: { 'Content-Type': 'application/json' }, 
             body: JSON.stringify({ path: shortCode, content: raw }) 
           });
-          urlToFetch = \`\${host}/\${shortCode}\`;
+          // 短連結需要加 ? 再加 target
+          urlToFetch = \`\${host}/\${shortCode}?target=singbox\`;
         } else {
           const encodedUrl = encodeURIComponent(raw);
-          urlToFetch = \`\${host}/?url=\${encodedUrl}\`;
+          urlToFetch = \`\${host}/?url=\${encodedUrl}&target=singbox\`;
         }
         
-        document.getElementById('singboxUrl').value = urlToFetch + '&target=singbox';
-        document.getElementById('clashUrl').value = urlToFetch + '&target=clash';
-        document.getElementById('base64Url').value = urlToFetch + '&target=base64';
+        document.getElementById('singboxUrl').value = urlToFetch;
+        document.getElementById('clashUrl').value = urlToFetch.replace('target=singbox', 'target=clash');
+        document.getElementById('base64Url').value = urlToFetch.replace('target=singbox', 'target=base64');
         
         document.getElementById('results').classList.add('show');
         
         const qrContainer = document.getElementById('qrcode');
         qrContainer.innerHTML = '';
-        new QRCode(qrContainer, { text: urlToFetch + '&target=singbox', width: 160, height: 160 });
+        new QRCode(qrContainer, { text: urlToFetch, width: 160, height: 160 });
         
         showToast('⚡ 生成完成');
       } catch(e) {
