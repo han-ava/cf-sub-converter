@@ -291,7 +291,7 @@ rules:
   - RULE-SET,meta-geolocation-!cn,🌐 非中國
 
   # 7. 中國國內網域與 IP：走直連
-  - RULE-SET,meta-cn,🇨🇳 國內服務
+  - RULE-SET,meta-cn,🇨🇳 國內服務,no-resolve
   - RULE-SET,meta-cn-ip,🇨🇳 國內服務,no-resolve
   - RULE-SET,meta-ip-private,🏠 私有網絡,no-resolve
 
