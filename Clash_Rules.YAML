@@ -269,7 +269,8 @@ rule-providers:
 rules:
   # 1. 廣告與內網
   - RULE-SET,meta-ads,🛑 廣告攔截
-  - RULE-SET,meta-private,🏠 私有網絡
+  - RULE-SET,meta-private,🏠 私有網絡,no-resolve
+  - RULE-SET,meta-ip-private,🏠 私有網絡,no-resolve
 
   # 2. 強制代理業務
   - RULE-SET,my-ai,💬 AI 服務
@@ -293,7 +294,6 @@ rules:
   # 7. 中國國內網域與 IP：走直連
   - RULE-SET,meta-cn,🇨🇳 國內服務,no-resolve
   - RULE-SET,meta-cn-ip,🇨🇳 國內服務,no-resolve
-  - RULE-SET,meta-ip-private,🏠 私有網絡,no-resolve
 
   # 7. 國外網站兜底：全走代理
   - MATCH,🐟 漏網之魚
