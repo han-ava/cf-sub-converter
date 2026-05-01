@@ -269,7 +269,7 @@ rule-providers:
 rules:
   # 1. 廣告與內網
   - RULE-SET,meta-ads,🛑 廣告攔截
-  - RULE-SET,meta-private,🏠 私有網絡,no-resolve
+  - RULE-SET,meta-private,🏠 私有網絡
   - RULE-SET,meta-ip-private,🏠 私有網絡,no-resolve
 
   # 2. 強制代理業務
@@ -292,7 +292,7 @@ rules:
   - RULE-SET,meta-geolocation-!cn,🌐 非中國
 
   # 7. 中國國內網域與 IP：走直連
-  - RULE-SET,meta-cn,🇨🇳 國內服務,no-resolve
+  - RULE-SET,meta-cn,🇨🇳 國內服務
   - RULE-SET,meta-cn-ip,🇨🇳 國內服務,no-resolve
 
   # 7. 國外網站兜底：全走代理
