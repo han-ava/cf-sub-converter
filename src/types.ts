@@ -25,4 +25,6 @@ export interface ProxyNode {
   skipCertVerify?: boolean;
   singboxObj?: any; 
   clashObj?: any;
+  congestion_control?: string;
+  udp_relay_mode?: string;
 }
