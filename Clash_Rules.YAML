@@ -60,9 +60,6 @@ dns:
     - 'time.*.gov'
     - 'time.*.edu.cn'
     - 'ntp.*.com'
-    - 'github.com'
-    - 'githubusercontent.com'
-    - 'raw.githubusercontent.com'
     # 讓國內網站與蘋果服務強制返回真實 IP
     - 'rule-set:meta-cn,meta-private,meta-apple' 
   
@@ -109,11 +106,11 @@ proxy-groups:
       - DIRECT
       - 🚀 節點選擇
 
-- name: Ⓜ️ 微軟服務
+  - name: Ⓜ️ 微軟服務
     type: select
     proxies:
-      - 🚀 節點選擇
       - DIRECT
+      - 🚀 節點選擇
 
   - name: 🎮 遊戲平台
     type: select
@@ -219,12 +216,6 @@ rule-providers:
     interval: 86400
 
   meta-geolocation-!cn:
-    format: mrs
-    url: "https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geosite/blizzard.mrs"
-    path: ./ruleset/blizzard.mrs
-    interval: 86400
-
-  meta-geolocation-!cn:
     type: http
     behavior: domain
     format: mrs
@@ -304,5 +295,5 @@ rules:
   - RULE-SET,meta-cn,🇨🇳 國內服務,no-resolve
   - RULE-SET,meta-cn-ip,🇨🇳 國內服務,no-resolve
 
-  # 8. 國外網站兜底：全走代理
+  # 7. 國外網站兜底：全走代理
   - MATCH,🐟 漏網之魚
