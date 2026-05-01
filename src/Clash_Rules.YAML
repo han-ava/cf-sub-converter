@@ -1,0 +1,308 @@
+port: 7890
+socks-port: 7891
+allow-lan: true
+mode: rule
+log-level: info
+external-controller: 127.0.0.1:9090
+
+# ---------------- 流量嗅探器 (借鑒 Aethersailor) ----------------
+sniffer:
+  enable: true
+  override-destination: true
+  sniff:
+    QUIC:
+      ports:
+        - 443
+    TLS:
+      ports:
+        - 443
+        - 8443
+    HTTP:
+      ports:
+        - 80
+        - 8080-8880
+      override-destination: true
+  # 強制嗅探以下流媒體與雲端服務，確保精準分流
+  force-domain:
+    - "+.netflix.com"
+    - "+.nflxvideo.net"
+    - "+.amazonaws.com"
+    - "+.media.dssott.com"
+  # 跳過蘋果與智慧家庭的嗅探，防止連線異常
+  skip-domain:
+    - "+.apple.com"
+    - "Mijia Cloud"
+    - "dlg.io.mi.com"
+    - "+.oray.com"
+    - "+.sunlogin.net"
+    - "+.push.apple.com"
+  parse-pure-ip: true
+  force-dns-mapping: true
+
+# ---------------- 進階 DNS (借鑒 Aethersailor + 極速直連優化) ----------------
+dns:
+  enable: true
+  ipv6: false
+  listen: 0.0.0.0:1053
+  enhanced-mode: fake-ip
+  fake-ip-range: 198.18.0.1/16
+  fake-ip-filter-mode: blacklist
+  respect-rules: false
+  fake-ip-filter:
+    - '*.lan'
+    - '*.local'
+    - '*.localhost'
+    - '*.home.arpa'
+    - 'captive.apple.com'
+    - 'time.apple.com'
+    - 'time.*.apple.com'
+    - 'time.*.com'
+    - 'time.*.gov'
+    - 'time.*.edu.cn'
+    - 'ntp.*.com'
+    - 'github.com'
+    - 'githubusercontent.com'
+    - 'raw.githubusercontent.com'
+    # 讓國內網站與蘋果服務強制返回真實 IP
+    - 'rule-set:meta-cn,meta-private,meta-apple' 
+  
+  # 國內直連公共 DNS (維持純 IP UDP，確保 0 延遲)
+  default-nameserver:
+    - 223.5.5.5
+    - 119.29.29.29
+  nameserver-policy:
+    "rule-set:meta-cn,meta-private,meta-apple":
+      - 223.5.5.5
+      - 119.29.29.29
+  # 國外兜底 (維持純 UDP)
+  nameserver:
+    - 8.8.8.8
+    - 1.1.1.1
+
+# ==================================================
+# 代理節點設定
+# ==================================================
+proxies:
+
+proxy-groups:
+  - name: 🚀 節點選擇
+    type: select
+    proxies:
+      - ⚡ 自動選擇
+      - DIRECT
+
+  - name: ⚡ 自動選擇
+    type: url-test
+    url: http://www.gstatic.com/generate_204
+    interval: 300
+    proxies:
+
+  - name: 💬 AI 服務
+    type: select
+    proxies:
+      - ⚡ 自動選擇
+      - 🚀 節點選擇
+
+  - name: 🍎 蘋果服務
+    type: select
+    proxies:
+      - DIRECT
+      - 🚀 節點選擇
+
+- name: Ⓜ️ 微軟服務
+    type: select
+    proxies:
+      - 🚀 節點選擇
+      - DIRECT
+
+  - name: 🎮 遊戲平台
+    type: select
+    proxies:
+      - DIRECT
+      - 🚀 節點選擇
+
+  - name: 🌐 非中國
+    type: select
+    proxies:
+      - 🚀 節點選擇
+      - DIRECT
+
+  - name: 🇨🇳 國內服務
+    type: select
+    proxies:
+      - DIRECT
+      - 🚀 節點選擇
+
+  - name: 🏠 私有網絡
+    type: select
+    proxies:
+      - DIRECT
+
+  - name: 🐟 漏網之魚
+    type: select
+    proxies:
+      - 🚀 節點選擇
+      - DIRECT
+
+  - name: 🛑 廣告攔截
+    type: select
+    proxies:
+      - REJECT
+      - DIRECT
+
+# ==================================================
+# 規則集
+# ==================================================
+rule-providers:
+  my-ai:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://github.com/sammy0101/myself/raw/refs/heads/main/geosite_ai_hk_proxy.mrs"
+    path: ./ruleset/my-ai.mrs
+    interval: 86400
+
+  meta-apple:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geosite/apple.mrs"
+    path: ./ruleset/apple.mrs
+    interval: 86400
+
+  meta-microsoft:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geosite/microsoft.mrs"
+    path: ./ruleset/microsoft.mrs
+    interval: 86400
+
+  meta-steam:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geosite/steam.mrs"
+    path: ./ruleset/steam.mrs
+    interval: 86400
+
+  meta-epicgames:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geosite/epicgames.mrs"
+    path: ./ruleset/epicgames.mrs
+    interval: 86400
+
+  meta-ea:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geosite/ea.mrs"
+    path: ./ruleset/ea.mrs
+    interval: 86400
+
+  meta-ubisoft:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geosite/ubisoft.mrs"
+    path: ./ruleset/ubisoft.mrs
+    interval: 86400
+
+  meta-blizzard:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geosite/blizzard.mrs"
+    path: ./ruleset/blizzard.mrs
+    interval: 86400
+
+  meta-geolocation-!cn:
+    format: mrs
+    url: "https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geosite/blizzard.mrs"
+    path: ./ruleset/blizzard.mrs
+    interval: 86400
+
+  meta-geolocation-!cn:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geosite/geolocation-!cn.mrs"
+    path: ./ruleset/geolocation-!cn.mrs
+    interval: 86400
+
+  meta-cn:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geosite/cn.mrs"
+    path: ./ruleset/cn.mrs
+    interval: 86400
+
+  meta-cn-ip:
+    type: http
+    behavior: ipcidr
+    format: mrs
+    url: "https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geoip/cn.mrs"
+    path: ./ruleset/cn-ip.mrs
+    interval: 86400
+
+  meta-ads:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geosite/category-ads-all.mrs"
+    path: ./ruleset/ads.mrs
+    interval: 86400
+
+  meta-private:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geosite/private.mrs"
+    path: ./ruleset/private.mrs
+    interval: 86400
+
+  meta-ip-private:
+    type: http
+    behavior: ipcidr
+    format: mrs
+    url: "https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geoip/private.mrs"
+    path: ./ruleset/ip-private.mrs
+    interval: 86400
+
+# ==================================================
+# 流量路由
+# ==================================================
+rules:
+  # 1. 廣告與內網
+  - RULE-SET,meta-ads,🛑 廣告攔截
+  - RULE-SET,meta-private,🏠 私有網絡,no-resolve
+  - RULE-SET,meta-ip-private,🏠 私有網絡,no-resolve
+
+  # 2. 強制代理業務
+  - RULE-SET,my-ai,💬 AI 服務
+
+  # 3. Microsoft 服務分流
+  - RULE-SET,meta-microsoft,Ⓜ️ 微軟服務
+
+  # 4. 遊戲平台分流
+  - RULE-SET,meta-steam,🎮 遊戲平台
+  - RULE-SET,meta-epicgames,🎮 遊戲平台
+  - RULE-SET,meta-ea,🎮 遊戲平台
+  - RULE-SET,meta-ubisoft,🎮 遊戲平台
+  - RULE-SET,meta-blizzard,🎮 遊戲平台
+
+  # 5. Apple 服務分流
+  - RULE-SET,meta-apple,🍎 蘋果服務
+
+  # 6. 非中國網站：走代理
+  - RULE-SET,meta-geolocation-!cn,🌐 非中國
+
+  # 7. 中國國內網域與 IP：走直連
+  - RULE-SET,meta-cn,🇨🇳 國內服務,no-resolve
+  - RULE-SET,meta-cn-ip,🇨🇳 國內服務,no-resolve
+
+  # 8. 國外網站兜底：全走代理
+  - MATCH,🐟 漏網之魚
