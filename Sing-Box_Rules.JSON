@@ -13,7 +13,10 @@
       { "clash_mode": "Direct", "server": "local-dns" },
       { "clash_mode": "Global", "server": "remote-dns" },
       { "rule_set": "rs-ads", "server": "block-dns" },
-      { "rule_set":["rs-cn", "rs-private", "rs-apple"], "server": "local-dns" }
+      { "rule_set":["rs-cn", "rs-private", "rs-apple"], "server": "local-dns" },
+      { "domain": "github.com", "server": "local-dns" },
+      { "domain": "raw.githubusercontent.com", "server": "local-dns" },
+      { "geosite": "geolocation-!cn", "server": "local-dns" }
     ],
     "final": "remote-dns",
     "strategy": "ipv4_only"
