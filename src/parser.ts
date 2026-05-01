@@ -129,7 +129,7 @@ function parseVless(urlStr: string): ProxyNode | null {
     if (params.get('security') === 'reality') { node.reality = { publicKey: params.get('pbk') || '', shortId: params.get('sid') || '' }; if (!node.sni) node.sni = node.server; }
     if (node.network === 'ws') { node.wsPath = wsPath; node.wsHeaders = { Host: params.get('host') || node.server }; }
     
-    const nodeType = isAnyTLS ? 'vless' : (isHy2 ? 'hysteria2' : 'vless');
+    const nodeType = isAnyTLS ? 'anytls' : (isHy2 ? 'hysteria2' : 'vless');
     const sb: any = { tag: name, type: nodeType, server: node.server, server_port: node.port, uuid: node.uuid };
     sb.tls = { enabled: node.tls, server_name: node.sni || node.server, insecure: node.skipCertVerify, utls: { enabled: true, fingerprint: node.fingerprint }};
     
@@ -139,9 +139,8 @@ function parseVless(urlStr: string): ProxyNode | null {
     if(node.network === 'ws') sb.transport = { type: 'ws', path: node.wsPath, headers: node.wsHeaders };
     node.singboxObj = sb;
     
-    // Clash 不支持 anytls，轉換為 vless
-    const clType = isAnyTLS ? 'vless' : nodeType;
-    const cl: any = { name, type: clType, server: node.server, port: node.port, uuid: node.uuid, udp: true, tls: node.tls, servername: node.sni || node.server, 'skip-cert-verify': node.skipCertVerify, 'client-fingerprint': node.fingerprint, 'idle-session-check-interval': 30, 'idle-session-timeout': 30 };
+    // 保持 anytls 类型
+    const cl: any = { name, type: nodeType, server: node.server, port: node.port, uuid: node.uuid, udp: true, tls: node.tls, servername: node.sni || node.server, 'skip-cert-verify': node.skipCertVerify, 'client-fingerprint': node.fingerprint, 'idle-session-check-interval': 30, 'idle-session-timeout': 30 };
     if(node.flow) cl.flow = node.flow; 
     if(node.reality) { cl.reality = true; cl['reality-opts'] = { 'public-key': node.reality.publicKey, 'short-id': node.reality.shortId }; }
     if(node.network === 'ws') { cl.network = 'ws'; cl['ws-opts'] = { path: node.wsPath, headers: node.wsHeaders }; }
