@@ -110,7 +110,7 @@ function parseShadowsocks(urlStr: string): ProxyNode | null {
   } catch (e) { return null; }
 }
 
-// --- 解析 VLESS & AnyTLS ---
+// --- 解析 VLESS ---
 function parseVless(urlStr: string): ProxyNode | null {
   try {
     if (urlStr.startsWith('anytls://')) {
@@ -145,6 +145,72 @@ function parseVless(urlStr: string): ProxyNode | null {
 
     return node;
   } catch (e) { return null; }
+}
+
+// --- 解析 AnyTLS ---
+function parseAnytls(urlStr: string): ProxyNode | null {
+  try {
+    const url = new URL(urlStr);
+    const params = url.searchParams;
+    const name = tryDecodeURIComponent(url.hash.slice(1)) || 'AnyTLS';
+    
+    // AnyTLS 使用 password，通常放在連結的 username 欄位
+    const password = url.username; 
+    const skipCertVerify = params.get('allowInsecure') === '1' || params.get('insecure') === '1';
+    const alpnStr = params.get('alpn');
+
+    const node: ProxyNode = {
+      type: 'anytls',
+      name,
+      server: url.hostname,
+      port: parseInt(url.port),
+      password: password,
+      tls: true, // AnyTLS 必備
+      sni: params.get('sni') || url.hostname,
+      fingerprint: params.get('fp') || 'chrome',
+      skipCertVerify: skipCertVerify,
+      alpn: alpnStr ? alpnStr.split(',') : undefined
+    };
+
+    // 轉換為 Sing-box 格式
+    const sb: any = {
+      tag: name,
+      type: 'anytls',
+      server: node.server,
+      server_port: node.port,
+      password: node.password,
+      tls: {
+        enabled: true,
+        server_name: node.sni,
+        insecure: node.skipCertVerify,
+        utls: {
+          enabled: true,
+          fingerprint: node.fingerprint
+        }
+      }
+    };
+    if (node.alpn) sb.tls.alpn = node.alpn;
+    node.singboxObj = sb;
+
+    // 轉換為 Clash Meta (mihomo) 格式
+    const cl: any = {
+      name,
+      type: 'anytls',
+      server: node.server,
+      port: node.port,
+      password: node.password,
+      sni: node.sni,
+      'skip-cert-verify': node.skipCertVerify,
+      'client-fingerprint': node.fingerprint,
+      udp: true
+    };
+    if (node.alpn) cl.alpn = node.alpn;
+    node.clashObj = cl;
+
+    return node;
+  } catch (e) {
+    return null;
+  }
 }
 
 // --- 解析 Hysteria2 ---
@@ -262,12 +328,13 @@ export async function parseContent(content: string): Promise<ProxyNode[]> {
     const l = line.trim(); if (!l) continue;
     
     if (l.startsWith('ss://')) { const n = parseShadowsocks(l); if (n) nodes.push(n); } 
-    // ▼ 這裡增加了 || l.startsWith('anytls://') 來攔截 anytls 連結
-    else if (l.startsWith('vless://') || l.startsWith('anytls://')) { const n = parseVless(l); if (n) nodes.push(n); } 
+    // ▼ 這裡改回原本的，不要攔截 anytls
+    else if (l.startsWith('vless://')) { const n = parseVless(l); if (n) nodes.push(n); } 
     else if (l.startsWith('hysteria2://') || l.startsWith('hy2://')) { const n = parseHysteria2(l); if (n) nodes.push(n); } 
     else if (l.startsWith('vmess://')) { const n = parseVmess(l); if (n) nodes.push(n); }
-    // ▼ 這裡增加了 TUIC 的解析判斷
     else if (l.startsWith('tuic://')) { const n = parseTuic(l); if (n) nodes.push(n); }
+    // ▼ 新增 AnyTLS 的專屬判斷
+    else if (l.startsWith('anytls://')) { const n = parseAnytls(l); if (n) nodes.push(n); }
   } 
   return nodes;
 }
