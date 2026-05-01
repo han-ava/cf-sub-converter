@@ -52,9 +52,25 @@ export function toBase64(nodes: ProxyNode[]) {
         const query = params.toString();
         return `ss://${method}:${pass}@${node.server}:${node.port}${query ? '/?' + query : ''}#${encodeURIComponent(node.name)}`;
       }
+      // === 新增：TUIC 的反向組合邏輯 ===
+      if (node.type === 'tuic') {
+        const params = new URLSearchParams();
+        if (node.sni) params.set('sni', node.sni);
+        if (node.congestion_control) params.set('congestion_control', node.congestion_control);
+        if (node.udp_relay_mode) params.set('udp_relay_mode', node.udp_relay_mode);
+        if (node.alpn && node.alpn.length > 0) params.set('alpn', node.alpn.join(','));
+        if (node.skipCertVerify) params.set('allow_insecure', '1');
+        
+        const uuid = node.uuid || '';
+        const password = node.password || '';
+        
+        return `tuic://${uuid}:${password}@${node.server}:${node.port}?${params.toString()}#${encodeURIComponent(node.name)}`;
+      }
+      
       return null;
     } catch { return null; }
   }).filter(l => l !== null);
+  
   return utf8ToBase64(links.join('\n'));
 }
 
