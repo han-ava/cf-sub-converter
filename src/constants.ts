@@ -10,7 +10,7 @@ export const HTML_PAGE = `
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SubConverter Pro | 專業訂閱轉換器</title>
+  <title>SubConverter | 訂閱轉換器</title>
   
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -219,7 +219,7 @@ export const HTML_PAGE = `
   <header class="header">
     <div class="brand">
       <svg viewBox="0 0 24 24"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"></path></svg>
-      SubConverter Pro
+      SubConverter
     </div>
     <span class="badge">v2.0.0</span>
   </header>
