@@ -6,7 +6,7 @@ import { utf8ToBase64 } from './utils';
 export function toBase64(nodes: ProxyNode[]) {
   const links = nodes.map(node => {
     try {
-      if (node.type === 'vless' || node.type === 'anytls') {
+      if (node.type === 'vless') {
         const params = new URLSearchParams();
         params.set('security', node.reality ? 'reality' : (node.tls ? 'tls' : 'none'));
         params.set('type', node.network || 'tcp');
@@ -15,23 +15,14 @@ export function toBase64(nodes: ProxyNode[]) {
         if (node.fingerprint) params.set('fp', node.fingerprint);
         if (node.reality) { params.set('pbk', node.reality.publicKey); params.set('sid', node.reality.shortId); }
         if (node.network === 'ws') { if (node.wsPath) params.set('path', node.wsPath); if (node.wsHeaders?.Host) params.set('host', node.wsHeaders.Host); }
-        const prefix = node.type === 'anytls' ? 'anytls' : 'vless';
-        return `${prefix}://${node.uuid}@${node.server}:${node.port}?${params.toString()}#${encodeURIComponent(node.name)}`;
+        return `vless://${node.uuid}@${node.server}:${node.port}?${params.toString()}#${encodeURIComponent(node.name)}`;
       }
-      if (node.type === 'hysteria2' || node.type === 'hy2') {
+      if (node.type === 'hysteria2') {
         const params = new URLSearchParams();
         if (node.sni) params.set('sni', node.sni);
         if (node.obfs) { params.set('obfs', node.obfs); if (node.obfsPassword) params.set('obfs-password', node.obfsPassword); }
         if (node.skipCertVerify) params.set('insecure', '1');
         return `hysteria2://${node.password}@${node.server}:${node.port}?${params.toString()}#${encodeURIComponent(node.name)}`;
-      }
-      if (node.type === 'tuic') {
-        const params = new URLSearchParams();
-        if (node.sni) params.set('sni', node.sni);
-        if (node.alpn) params.set('alpn', node.alpn.join(','));
-        if (node.fingerprint) params.set('fp', node.fingerprint);
-        if (node.skipCertVerify) params.set('allowInsecure', '1');
-        return `tuic://${node.uuid}:${node.password}@${node.server}:${node.port}?${params.toString()}#${encodeURIComponent(node.name)}`;
       }
       if (node.type === 'vmess') {
         const vmessObj = {
