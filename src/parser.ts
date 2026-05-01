@@ -113,22 +113,24 @@ function parseShadowsocks(urlStr: string): ProxyNode | null {
 // --- 解析 VLESS & AnyTLS ---
 function parseVless(urlStr: string): ProxyNode | null {
   try {
-    if (urlStr.startsWith('anytls://')) {
-        urlStr = urlStr.replace('anytls://', 'vless://');
+    const isAnyTLS = urlStr.startsWith('anytls://');
+    if (isAnyTLS) {
+      urlStr = urlStr.replace('anytls://', 'vless://');
     }
 
     const url = new URL(urlStr); 
     const params = url.searchParams; 
-    const name = tryDecodeURIComponent(url.hash.slice(1)) || 'VLESS';
+    const name = tryDecodeURIComponent(url.hash.slice(1)) || (isAnyTLS ? 'AnyTLS' : 'VLESS');
     
     let wsPath = params.get('path') || '/';
     if (!wsPath.startsWith('/')) wsPath = '/' + wsPath;
 
-    const node: ProxyNode = { type: 'vless', name, server: url.hostname, port: parseInt(url.port), uuid: url.username, tls: params.get('security') === 'tls' || params.get('security') === 'reality', flow: params.get('flow') || undefined, network: params.get('type') || 'tcp', sni: params.get('sni') || params.get('host') || undefined, fingerprint: params.get('fp') || 'chrome', skipCertVerify: params.get('allowInsecure') === '1' };
+    const node: ProxyNode = { type: isAnyTLS ? 'anytls' : 'vless', name, server: url.hostname, port: parseInt(url.port), uuid: url.username, tls: params.get('security') === 'tls' || params.get('security') === 'reality', flow: params.get('flow') || undefined, network: params.get('type') || 'tcp', sni: params.get('sni') || params.get('host') || undefined, fingerprint: params.get('fp') || 'chrome', skipCertVerify: params.get('allowInsecure') === '1' };
     if (params.get('security') === 'reality') { node.reality = { publicKey: params.get('pbk') || '', shortId: params.get('sid') || '' }; if (!node.sni) node.sni = node.server; }
     if (node.network === 'ws') { node.wsPath = wsPath; node.wsHeaders = { Host: params.get('host') || node.server }; }
     
-    const sb: any = { tag: name, type: 'vless', server: node.server, server_port: node.port, uuid: node.uuid };
+    const nodeType = isAnyTLS ? 'anytls' : 'vless';
+    const sb: any = { tag: name, type: nodeType, server: node.server, server_port: node.port, uuid: node.uuid };
     sb.tls = { enabled: node.tls, server_name: node.sni || node.server, insecure: node.skipCertVerify, utls: { enabled: true, fingerprint: node.fingerprint }};
     
     if(node.flow) sb.flow = node.flow;
@@ -137,7 +139,7 @@ function parseVless(urlStr: string): ProxyNode | null {
     if(node.network === 'ws') sb.transport = { type: 'ws', path: node.wsPath, headers: node.wsHeaders };
     node.singboxObj = sb;
     
-    const cl: any = { name, type: 'vless', server: node.server, port: node.port, uuid: node.uuid, udp: true, tls: node.tls, servername: node.sni || node.server, 'skip-cert-verify': node.skipCertVerify, 'client-fingerprint': node.fingerprint };
+    const cl: any = { name, type: nodeType, server: node.server, port: node.port, uuid: node.uuid, udp: true, tls: node.tls, servername: node.sni || node.server, 'skip-cert-verify': node.skipCertVerify, 'client-fingerprint': node.fingerprint };
     if(node.flow) cl.flow = node.flow; 
     if(node.reality) { cl.reality = true; cl['reality-opts'] = { 'public-key': node.reality.publicKey, 'short-id': node.reality.shortId }; }
     if(node.network === 'ws') { cl.network = 'ws'; cl['ws-opts'] = { path: node.wsPath, headers: node.wsHeaders }; }
@@ -150,12 +152,43 @@ function parseVless(urlStr: string): ProxyNode | null {
 // --- 解析 Hysteria2 ---
 function parseHysteria2(urlStr: string): ProxyNode | null {
   try {
+    const isHy2 = urlStr.startsWith('hy2://');
     const url = new URL(urlStr); const params = url.searchParams; const name = tryDecodeURIComponent(url.hash.slice(1)) || 'Hy2';
-    const node: ProxyNode = { type: 'hysteria2', name, server: url.hostname, port: parseInt(url.port), password: url.username, tls: true, sni: params.get('sni') || url.hostname, skipCertVerify: params.get('insecure') === '1', obfs: params.get('obfs') || undefined, obfsPassword: params.get('obfs-password') || undefined };
+    const node: ProxyNode = { type: isHy2 ? 'hy2' : 'hysteria2', name, server: url.hostname, port: parseInt(url.port), password: url.username, tls: true, sni: params.get('sni') || url.hostname, skipCertVerify: params.get('insecure') === '1', obfs: params.get('obfs') || undefined, obfsPassword: params.get('obfs-password') || undefined };
     const sb: any = { tag: name, type: 'hysteria2', server: node.server, server_port: node.port, password: node.password };
     sb.tls = { enabled: true, server_name: node.sni, insecure: node.skipCertVerify }; if(node.obfs) sb.obfs = { type: node.obfs, password: node.obfsPassword }; node.singboxObj = sb;
     const cl: any = { name, type: 'hysteria2', server: node.server, port: node.port, password: node.password, sni: node.sni, 'skip-cert-verify': node.skipCertVerify };
     if(node.obfs) { cl.obfs = node.obfs; cl['obfs-password'] = node.obfsPassword; } node.clashObj = cl;
+    return node;
+  } catch (e) { return null; }
+}
+
+// --- 解析 TUIC ---
+function parseTuic(urlStr: string): ProxyNode | null {
+  try {
+    const url = new URL(urlStr); const params = url.searchParams; const name = tryDecodeURIComponent(url.hash.slice(1)) || 'TUIC';
+    const node: ProxyNode = { 
+      type: 'tuic', 
+      name, 
+      server: url.hostname, 
+      port: parseInt(url.port), 
+      uuid: url.username, 
+      password: url.password,
+      sni: params.get('sni') || params.get('host') || url.hostname,
+      alpn: params.get('alpn') ? params.get('alpn')?.split(',') : undefined,
+      skipCertVerify: params.get('allowInsecure') === '1',
+      fingerprint: params.get('fp') || 'chrome'
+    };
+    
+    const sb: any = { tag: name, type: 'tuic', server: node.server, server_port: node.port, uuid: node.uuid, password: node.password };
+    sb.tls = { enabled: true, server_name: node.sni, insecure: node.skipCertVerify, utls: { enabled: true, fingerprint: node.fingerprint }};
+    if(node.alpn) sb.tls.alpn = node.alpn;
+    node.singboxObj = sb;
+    
+    const cl: any = { name, type: 'tuic', server: node.server, port: node.port, uuid: node.uuid, password: node.password, sni: node.sni, 'skip-cert-verify': node.skipCertVerify, 'client-fingerprint': node.fingerprint };
+    if(node.alpn) cl.alpn = node.alpn;
+    node.clashObj = cl;
+    
     return node;
   } catch (e) { return null; }
 }
@@ -191,8 +224,9 @@ export async function parseContent(content: string): Promise<ProxyNode[]> {
   for (const line of lines) { 
     const l = line.trim(); if (!l) continue;
     if (l.startsWith('ss://')) { const n = parseShadowsocks(l); if (n) nodes.push(n); } 
-    else if (l.startsWith('vless://')) { const n = parseVless(l); if (n) nodes.push(n); } 
+    else if (l.startsWith('vless://') || l.startsWith('anytls://')) { const n = parseVless(l); if (n) nodes.push(n); } 
     else if (l.startsWith('hysteria2://') || l.startsWith('hy2://')) { const n = parseHysteria2(l); if (n) nodes.push(n); } 
+    else if (l.startsWith('tuic://')) { const n = parseTuic(l); if (n) nodes.push(n); } 
     else if (l.startsWith('vmess://')) { const n = parseVmess(l); if (n) nodes.push(n); }
   } 
   return nodes;
