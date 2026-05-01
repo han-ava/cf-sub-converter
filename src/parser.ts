@@ -150,7 +150,13 @@ function parseVless(urlStr: string): ProxyNode | null {
 // --- 解析 Hysteria2 ---
 function parseHysteria2(urlStr: string): ProxyNode | null {
   try {
-    const url = new URL(urlStr); const params = url.searchParams; const name = tryDecodeURIComponent(url.hash.slice(1)) || 'Hy2';
+    // 預防部分 JS 引擎不認識 hy2:// 導致解析失敗
+    if (urlStr.startsWith('hy2://')) {
+        urlStr = urlStr.replace('hy2://', 'hysteria2://');
+    }
+    const url = new URL(urlStr); 
+    const params = url.searchParams; 
+    const name = tryDecodeURIComponent(url.hash.slice(1)) || 'Hy2';
     const node: ProxyNode = { type: 'hysteria2', name, server: url.hostname, port: parseInt(url.port), password: url.username, tls: true, sni: params.get('sni') || url.hostname, skipCertVerify: params.get('insecure') === '1', obfs: params.get('obfs') || undefined, obfsPassword: params.get('obfs-password') || undefined };
     const sb: any = { tag: name, type: 'hysteria2', server: node.server, server_port: node.port, password: node.password };
     sb.tls = { enabled: true, server_name: node.sni, insecure: node.skipCertVerify }; if(node.obfs) sb.obfs = { type: node.obfs, password: node.obfsPassword }; node.singboxObj = sb;
@@ -181,6 +187,70 @@ function parseVmess(vmessUrl: string): ProxyNode | null {
   } catch (e) { return null; }
 }
 
+// --- 解析 TUIC ---
+function parseTuic(urlStr: string): ProxyNode | null {
+  try {
+    const url = new URL(urlStr);
+    const params = url.searchParams;
+    const name = tryDecodeURIComponent(url.hash.slice(1)) || 'TUIC';
+
+    const congestion_control = params.get('congestion_control') || 'bbr';
+    const udp_relay_mode = params.get('udp_relay_mode') || 'native';
+    const alpnStr = params.get('alpn');
+    const skipCertVerify = params.get('allow_insecure') === '1' || params.get('insecure') === '1';
+
+    const node: ProxyNode = {
+      type: 'tuic',
+      name,
+      server: url.hostname,
+      port: parseInt(url.port),
+      uuid: url.username,
+      password: url.password,
+      tls: true,
+      sni: params.get('sni') || url.hostname,
+      alpn: alpnStr ? alpnStr.split(',') : ['h3'],
+      skipCertVerify,
+      congestion_control,
+      udp_relay_mode
+    };
+
+    const sb: any = {
+      tag: name,
+      type: 'tuic',
+      server: node.server,
+      server_port: node.port,
+      uuid: node.uuid,
+      password: node.password,
+      congestion_control: node.congestion_control,
+      udp_relay_mode: node.udp_relay_mode,
+      tls: {
+        enabled: true,
+        server_name: node.sni,
+        alpn: node.alpn,
+        insecure: node.skipCertVerify
+      }
+    };
+    node.singboxObj = sb;
+
+    const cl: any = {
+      name,
+      type: 'tuic',
+      server: node.server,
+      port: node.port,
+      uuid: node.uuid,
+      password: node.password,
+      sni: node.sni,
+      alpn: node.alpn,
+      'skip-cert-verify': node.skipCertVerify,
+      'congestion-controller': node.congestion_control,
+      'udp-relay-mode': node.udp_relay_mode
+    };
+    node.clashObj = cl;
+
+    return node;
+  } catch (e) { return null; }
+}
+
 // --- 主解析函數 ---
 export async function parseContent(content: string): Promise<ProxyNode[]> {
   let plainText = content; 
@@ -190,10 +260,14 @@ export async function parseContent(content: string): Promise<ProxyNode[]> {
   const lines = plainText.split(/\r?\n/); const nodes: ProxyNode[] =[];
   for (const line of lines) { 
     const l = line.trim(); if (!l) continue;
+    
     if (l.startsWith('ss://')) { const n = parseShadowsocks(l); if (n) nodes.push(n); } 
-    else if (l.startsWith('vless://')) { const n = parseVless(l); if (n) nodes.push(n); } 
+    // ▼ 這裡增加了 || l.startsWith('anytls://') 來攔截 anytls 連結
+    else if (l.startsWith('vless://') || l.startsWith('anytls://')) { const n = parseVless(l); if (n) nodes.push(n); } 
     else if (l.startsWith('hysteria2://') || l.startsWith('hy2://')) { const n = parseHysteria2(l); if (n) nodes.push(n); } 
     else if (l.startsWith('vmess://')) { const n = parseVmess(l); if (n) nodes.push(n); }
+    // ▼ 這裡增加了 TUIC 的解析判斷
+    else if (l.startsWith('tuic://')) { const n = parseTuic(l); if (n) nodes.push(n); }
   } 
   return nodes;
 }
