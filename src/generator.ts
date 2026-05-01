@@ -52,7 +52,8 @@ export function toBase64(nodes: ProxyNode[]) {
         const query = params.toString();
         return `ss://${method}:${pass}@${node.server}:${node.port}${query ? '/?' + query : ''}#${encodeURIComponent(node.name)}`;
       }
-      // === 新增：TUIC 的反向組合邏輯 ===
+      
+      // === TUIC 的反向組合邏輯 ===
       if (node.type === 'tuic') {
         const params = new URLSearchParams();
         if (node.sni) params.set('sni', node.sni);
@@ -66,7 +67,24 @@ export function toBase64(nodes: ProxyNode[]) {
         
         return `tuic://${uuid}:${password}@${node.server}:${node.port}?${params.toString()}#${encodeURIComponent(node.name)}`;
       }
-      
+
+      // === AnyTLS 的反向組合邏輯 ===
+      if (node.type === 'anytls') {
+        const params = new URLSearchParams();
+        params.set('security', 'tls');
+        if (node.sni) params.set('sni', node.sni);
+        
+        // 處理憑證驗證開關
+        params.set('insecure', node.skipCertVerify ? '1' : '0');
+        params.set('allowInsecure', node.skipCertVerify ? '1' : '0');
+        
+        if (node.fingerprint) params.set('fp', node.fingerprint);
+        if (node.alpn && node.alpn.length > 0) params.set('alpn', node.alpn.join(','));
+        params.set('type', 'tcp'); 
+
+        return `anytls://${node.password}@${node.server}:${node.port}?${params.toString()}#${encodeURIComponent(node.name)}`;
+      }
+
       return null;
     } catch { return null; }
   }).filter(l => l !== null);
