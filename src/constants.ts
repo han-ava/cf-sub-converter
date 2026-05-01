@@ -10,346 +10,550 @@ export const HTML_PAGE = `
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>訂閱轉換器 | Sub Converter</title>
+  <title>SubConverter Pro | 專業訂閱轉換器</title>
   
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚡</text></svg>">
-  
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  
   <style>
-    :root { --bg: #09090b; --card-bg: #18181b; --input-bg: #27272a; --text-main: #fafafa; --text-sub: #a1a1aa; --accent: #22d3ee; --accent-hover: #06b6d4; --border: #3f3f46; --success: #22c55e; --danger: #ef4444; }
+    :root {
+      --bg-app: #0f172a;
+      --bg-panel: #1e293b;
+      --bg-input: #0f172a;
+      --bg-hover: #334155;
+      
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      
+      --border: #334155;
+      --border-focus: #3b82f6;
+      
+      --primary: #3b82f6;
+      --primary-hover: #2563eb;
+      --success: #10b981;
+      --danger: #ef4444;
+      
+      --radius-sm: 6px;
+      --radius-md: 10px;
+      --radius-lg: 16px;
+      
+      --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    }
+
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: "SF Pro Display", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text-main); min-height: 100vh; padding: 0; }
     
-    .hero { background: linear-gradient(180deg, #18181b 0%, #09090b 100%); padding: 60px 20px 40px; text-align: center; border-bottom: 1px solid var(--border); }
-    .logo { font-size: 3.5rem; margin-bottom: 1rem; }
-    .hero h1 { font-size: 2.5rem; font-weight: 700; letter-spacing: -0.03em; margin-bottom: 0.5rem; background: linear-gradient(135deg, #fafafa 0%, #a1a1aa 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
-    .hero p { color: var(--text-sub); font-size: 1.1rem; max-width: 500px; margin: 0 auto; }
-    .tagline { display: inline-flex; align-items: center; gap: 8px; margin-top: 1.5rem; padding: 8px 16px; background: rgba(34, 211, 238, 0.1); border: 1px solid rgba(34, 211, 238, 0.2); border-radius: 100px; }
-    .tagline span { color: var(--accent); font-size: 0.9rem; font-weight: 500; }
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background-color: var(--bg-app);
+      color: var(--text-main);
+      line-height: 1.5;
+      min-height: 100vh;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* 圖示公用類別 */
+    svg { width: 1.25rem; height: 1.25rem; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
     
-    .container { max-width: 900px; margin: 0 auto; padding: 40px 20px; }
+    /* 導覽列 */
+    .header {
+      background-color: var(--bg-panel);
+      border-bottom: 1px solid var(--border);
+      padding: 1rem 2rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 50;
+    }
+    .brand { display: flex; align-items: center; gap: 12px; font-weight: 700; font-size: 1.25rem; letter-spacing: -0.025em; }
+    .brand svg { color: var(--primary); width: 1.75rem; height: 1.75rem; }
+    .badge { background: rgba(59, 130, 246, 0.1); color: var(--primary); font-size: 0.75rem; padding: 4px 8px; border-radius: 9999px; font-weight: 600; border: 1px solid rgba(59, 130, 246, 0.2); }
+
+    /* 主佈局 */
+    .container { max-width: 860px; margin: 2.5rem auto; padding: 0 1.5rem; display: flex; flex-direction: column; gap: 1.5rem; }
+
+    /* 卡片面板 */
+    .panel {
+      background-color: var(--bg-panel);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 1.75rem;
+      box-shadow: var(--shadow);
+    }
+    .panel-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.25rem; }
+    .panel-title { font-size: 1.1rem; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+    .panel-title svg { color: var(--text-muted); }
+
+    /* 表單輸入 */
+    .form-group { margin-bottom: 1.25rem; }
+    .form-group:last-child { margin-bottom: 0; }
+    label { display: block; font-size: 0.875rem; font-weight: 500; color: var(--text-muted); margin-bottom: 0.5rem; }
     
-    .card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 16px; padding: 24px; margin-bottom: 24px; }
-    .card-title { font-size: 1rem; font-weight: 600; color: var(--accent); margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+    textarea, input[type="text"] {
+      width: 100%;
+      background-color: var(--bg-input);
+      border: 1px solid var(--border);
+      color: var(--text-main);
+      border-radius: var(--radius-md);
+      padding: 0.875rem 1rem;
+      font-size: 0.95rem;
+      transition: all 0.2s ease;
+      outline: none;
+    }
+    textarea { font-family: 'JetBrains Mono', monospace; font-size: 0.875rem; min-height: 140px; resize: vertical; line-height: 1.6; }
+    textarea::placeholder, input::placeholder { color: #475569; }
+    textarea:focus, input[type="text"]:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15); }
     
-    .input-section label { display: block; font-size: 0.85rem; color: var(--text-sub); margin-bottom: 8px; font-weight: 500; }
-    textarea { width: 100%; background: var(--input-bg); border: 1px solid var(--border); color: var(--text-main); padding: 16px; border-radius: 12px; font-family: "SF Mono", Monaco, Consolas, monospace; font-size: 0.9rem; outline: none; resize: vertical; min-height: 120px; line-height: 1.6; transition: all 0.2s; }
-    textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(34, 211, 248, 0.1); }
+    .hint { font-size: 0.8rem; color: var(--text-muted); margin-top: 0.5rem; display: flex; align-items: center; gap: 4px; }
+
+    /* 按鈕 */
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+      padding: 0.75rem 1.25rem; border-radius: var(--radius-md); font-weight: 600; font-size: 0.95rem;
+      border: none; cursor: pointer; transition: all 0.2s ease; user-select: none;
+    }
+    .btn-primary { background-color: var(--primary); color: white; width: 100%; padding: 1rem; font-size: 1.05rem; }
+    .btn-primary:hover:not(:disabled) { background-color: var(--primary-hover); transform: translateY(-1px); }
+    .btn-primary:disabled { opacity: 0.7; cursor: not-allowed; }
     
-    .short-link { margin-top: 16px; }
-    .short-link input { width: 100%; background: var(--input-bg); border: 1px solid var(--border); color: var(--text-main); padding: 14px 16px; border-radius: 10px; outline: none; font-size: 0.95rem; }
-    .short-link input:focus { border-color: var(--accent); }
-    .short-link-hint { font-size: 0.8rem; color: var(--text-sub); margin-top: 8px; }
+    .btn-icon { background: var(--bg-input); color: var(--text-main); border: 1px solid var(--border); padding: 0.6rem; border-radius: var(--radius-sm); }
+    .btn-icon:hover { background: var(--bg-hover); color: var(--primary); border-color: var(--text-muted); }
     
-    .generate-btn { width: 100%; background: linear-gradient(135deg, var(--accent) 0%, var(--accent-hover) 100%); color: #09090b; border: none; padding: 18px; border-radius: 12px; font-size: 1.1rem; font-weight: 700; cursor: pointer; transition: all 0.2s; margin-top: 24px; display: flex; align-items: center; justify-content: center; gap: 10px; }
-    .generate-btn:hover { transform: translateY(-2px); box-shadow: 0 10px 30px rgba(34, 211, 238, 0.3); }
-    .generate-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+    .btn-ghost { background: transparent; color: var(--text-muted); padding: 0.5rem 0.75rem; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 0.85rem;}
+    .btn-ghost:hover { background: var(--bg-hover); color: var(--text-main); }
+    .btn-danger:hover { color: var(--danger); border-color: rgba(239, 68, 68, 0.3); background: rgba(239, 68, 68, 0.1); }
+
+    /* 結果區塊 */
+    .results-wrapper { display: none; animation: slideUp 0.4s ease forwards; }
+    .results-wrapper.show { display: block; }
     
-    .results { display: none; margin-top: 32px; }
-    .results.show { display: block; }
-    .results-title { font-size: 1.1rem; font-weight: 600; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+    .result-item {
+      display: flex; align-items: center; gap: 1rem;
+      background-color: var(--bg-input); border: 1px solid var(--border);
+      padding: 1rem; border-radius: var(--radius-md); margin-bottom: 1rem;
+      transition: border-color 0.2s;
+    }
+    .result-item:hover { border-color: var(--text-muted); }
+    .result-item:last-child { margin-bottom: 0; }
     
-    .result-item { background: var(--input-bg); border: 1px solid var(--border); border-radius: 12px; padding: 16px; margin-bottom: 12px; display: flex; align-items: center; gap: 16px; }
-    .result-icon { width: 48px; height: 48px; background: var(--card-bg); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; }
-    .result-info { flex: 1; }
-    .result-name { font-weight: 600; font-size: 1rem; margin-bottom: 4px; }
-    .result-desc { font-size: 0.8rem; color: var(--text-sub); }
-    .result-link { flex: 2; }
-    .result-link input { width: 100%; background: var(--card-bg); border: none; color: var(--text-main); padding: 10px 14px; border-radius: 8px; font-family: monospace; font-size: 0.85rem; }
-    .result-copy { background: var(--border); color: var(--text-main); border: none; padding: 10px 20px; border-radius: 8px; font-weight: 600; cursor: pointer; transition: all 0.2s; white-space: nowrap; }
-    .result-copy:hover { background: var(--accent); color: #09090b; }
+    .result-icon-box {
+      width: 44px; height: 44px; border-radius: var(--radius-sm);
+      background-color: var(--bg-panel); border: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: center; color: var(--primary);
+    }
+    .result-info { flex: 1; min-width: 0; }
+    .result-name { font-weight: 600; font-size: 0.95rem; margin-bottom: 2px; color: var(--text-main); }
+    .result-desc { font-size: 0.8rem; color: var(--text-muted); }
     
-    .qr-section { display: flex; flex-direction: column; align-items: center; margin-top: 24px; padding: 24px; background: var(--input-bg); border-radius: 12px; }
-    .qr-section h4 { color: var(--text-sub); margin-bottom: 16px; font-weight: 500; }
-    #qrcode { padding: 12px; background: #fff; border-radius: 12px; }
+    .result-input-wrapper { flex: 2; position: relative; }
+    .result-input-wrapper input { width: 100%; padding: 0.6rem 0.8rem; background: var(--bg-panel); font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text-muted); }
+    .result-actions { display: flex; gap: 6px; }
+
+    /* 收藏網格 */
+    .fav-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 1rem; margin-top: 1rem; }
+    .fav-card {
+      background: var(--bg-input); border: 1px solid var(--border); border-radius: var(--radius-md);
+      padding: 1.25rem; cursor: pointer; transition: all 0.2s ease; position: relative;
+    }
+    .fav-card:hover { border-color: var(--primary); transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
+    .fav-title { font-weight: 600; font-size: 0.95rem; margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
+    .fav-url { font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .fav-actions { display: flex; gap: 8px; margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border); justify-content: flex-end; }
     
-    .fav-section { margin-top: 24px; }
-    .fav-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
-    .fav-add-btn { background: var(--border); color: var(--text-main); border: none; padding: 10px 16px; border-radius: 8px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px; }
-    .fav-add-btn:hover { background: var(--accent); color: #09090b; }
-    .fav-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
-    .fav-card { background: var(--input-bg); border: 1px solid var(--border); border-radius: 10px; padding: 14px; cursor: pointer; transition: all 0.2s; }
-    .fav-card:hover { border-color: var(--accent); transform: translateY(-2px); }
-    .fav-card-name { font-weight: 600; margin-bottom: 4px; }
-    .fav-card-url { font-size: 0.8rem; color: var(--text-sub); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .fav-card-actions { display: flex; gap: 8px; margin-top: 10px; }
-    .fav-card-btn { font-size: 0.8rem; color: var(--text-sub); cursor: pointer; padding: 4px 8px; border-radius: 4px; }
-    .fav-card-btn:hover { background: rgba(255,255,255,0.1); color: var(--text-main); }
-    .fav-card-delete { color: var(--danger); }
-    .fav-card-delete:hover { background: rgba(239, 68, 68, 0.2); }
-    
-    .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 100; align-items: center; justify-content: center; }
-    .modal.show { display: flex; }
-    .modal-content { background: var(--card-bg); border: 1px solid var(--border); border-radius: 16px; padding: 24px; width: 90%; max-width: 500px; }
-    .modal-title { font-size: 1.2rem; font-weight: 700; margin-bottom: 20px; }
-    .modal-actions { display: flex; gap: 12px; margin-top: 20px; }
-    .modal-btn { flex: 1; padding: 12px; border-radius: 10px; font-weight: 600; cursor: pointer; border: none; }
-    .modal-btn-cancel { background: var(--input-bg); color: var(--text-main); }
-    .modal-btn-save { background: var(--accent); color: #09090b; }
-    
-    .footer { text-align: center; padding: 40px 20px; color: var(--text-sub); font-size: 0.9rem; }
-    .footer a { color: var(--accent); text-decoration: none; }
-    .footer a:hover { text-decoration: underline; }
-    
-    .toast { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%) translateY(100px); background: var(--success); color: white; padding: 14px 28px; border-radius: 12px; font-weight: 600; opacity: 0; transition: all 0.3s; z-index: 200; }
+    .empty-state { text-align: center; padding: 2rem; color: var(--text-muted); font-size: 0.9rem; border: 1px dashed var(--border); border-radius: var(--radius-md); }
+
+    /* 模態框 (Modal) */
+    .modal-overlay {
+      position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(15, 23, 42, 0.8); backdrop-filter: blur(4px);
+      z-index: 100; display: none; align-items: center; justify-content: center;
+      opacity: 0; transition: opacity 0.2s ease;
+    }
+    .modal-overlay.show { display: flex; opacity: 1; }
+    .modal-content {
+      background: var(--bg-panel); border: 1px solid var(--border);
+      border-radius: var(--radius-lg); width: 90%; max-width: 480px;
+      padding: 2rem; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+      transform: scale(0.95); transition: transform 0.2s ease;
+    }
+    .modal-overlay.show .modal-content { transform: scale(1); }
+    .modal-title { font-size: 1.25rem; font-weight: 600; margin-bottom: 1.5rem; }
+    .modal-footer { display: flex; gap: 12px; margin-top: 2rem; justify-content: flex-end; }
+    .modal-btn { padding: 0.6rem 1.25rem; border-radius: var(--radius-md); font-weight: 500; font-size: 0.9rem; cursor: pointer; border: none; }
+    .modal-btn-cancel { background: var(--bg-input); color: var(--text-main); border: 1px solid var(--border); }
+    .modal-btn-cancel:hover { background: var(--bg-hover); }
+    .modal-btn-save { background: var(--primary); color: white; }
+    .modal-btn-save:hover { background: var(--primary-hover); }
+
+    /* Toast 通知 */
+    .toast {
+      position: fixed; bottom: 2rem; left: 50%; transform: translateX(-50%) translateY(20px);
+      background: var(--bg-panel); color: var(--text-main); border: 1px solid var(--border);
+      padding: 0.8rem 1.5rem; border-radius: 999px; font-weight: 500; font-size: 0.9rem;
+      box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
+      opacity: 0; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); z-index: 200;
+      display: flex; align-items: center; gap: 8px;
+    }
     .toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
-    
+    .toast.success svg { color: var(--success); }
+
+    /* 動畫 */
+    @keyframes slideUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinner { animation: spin 1s linear infinite; }
+
+    /* 響應式 */
     @media (max-width: 640px) {
-      .hero h1 { font-size: 1.8rem; }
-      .result-item { flex-direction: column; align-items: flex-start; }
-      .result-link { width: 100%; }
-      .result-copy { width: 100%; }
+      .result-item { flex-direction: column; align-items: stretch; }
+      .result-icon-box { display: none; }
+      .result-info { margin-bottom: 0.5rem; }
     }
   </style>
 </head>
 <body>
-  <div class="hero">
-    <div class="logo">⚡</div>
-    <h1>Sub Converter</h1>
-    <p>一鍵生成 SingBox / Clash / Base64 三種訂閱格式，適用於所有主流客戶端</p>
-    <div class="tagline"><span>🌍 智能分流</span> · <span>☁️ 雲端儲存</span> · <span>🔒 隱私保護</span></div>
-  </div>
-  
+
+  <!-- 頂部導覽 -->
+  <header class="header">
+    <div class="brand">
+      <svg viewBox="0 0 24 24"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"></path></svg>
+      SubConverter Pro
+    </div>
+    <span class="badge">v2.0.0</span>
+  </header>
+
   <div class="container">
-    <div class="card">
-      <div class="input-section">
-        <label>📥 輸入訂閱連結或節點 (多個用換行分隔)</label>
-        <textarea id="urlInput" placeholder="vmess://xxxxxx|ss://xxxxxx|trojan://xxxxxx&#10;https://example.com/sub"></textarea>
-      </div>
-      
-      <div class="short-link">
-        <label>🔗 自訂短連結 (可選)</label>
-        <input type="text" id="shortCode" placeholder="my-sub">
-        <div class="short-link-hint">設定後可생成長期有效的自訂連結，資料將儲存於雲端</div>
-      </div>
-      
-      <button class="generate-btn" onclick="generate()">⚡ 立即生成</button>
-    </div>
     
-<div class="results" id="results">
-      <div class="results-title">🎉 生成的訂閱連結</div>
-       
-      <div class="result-item">
-        <div class="result-icon">🔗</div>
-        <div class="result-info">
-          <div class="result-name">Base64</div>
-          <div class="result-desc">原始連結 · 支援 V2RayNG、PassWall</div>
+    <!-- 核心轉換區塊 -->
+    <main class="panel">
+      <div class="panel-header">
+        <h2 class="panel-title">
+          <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+          資料來源設定
+        </h2>
+      </div>
+      
+      <div class="form-group">
+        <label for="urlInput">節點連結或訂閱地址 (支援多筆換行)</label>
+        <textarea id="urlInput" placeholder="vmess://...\nvless://...\ntuic://...\nanytls://...\nhttps://example.com/sub"></textarea>
+      </div>
+      
+      <div class="form-group" style="margin-top: 1.5rem;">
+        <label for="shortCode">自訂路徑短連結 (選填)</label>
+        <input type="text" id="shortCode" placeholder="例如: my-sub-2024">
+        <div class="hint">
+          <svg viewBox="0 0 24 24" style="width:14px;height:14px"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+          設定後將儲存於雲端，生成固定不變的訂閱連結
         </div>
-        <div class="result-link"><input type="text" id="base64Url" readonly></div>
-        <button class="result-copy" onclick="copyResult('base64Url')">複製</button>
-        <button class="result-copy" onclick="showQr('base64Url')" style="margin-left:4px;background:#3b82f6">📱</button>
       </div>
-       
-      <div class="result-item">
-        <div class="result-icon">🐱</div>
-        <div class="result-info">
-          <div class="result-name">Clash Meta</div>
-          <div class="result-desc">YAML 格式 · 支援 Clash Verge、ClashX</div>
+      
+      <button class="btn btn-primary" id="generateBtn" onclick="generate()" style="margin-top: 2rem;">
+        <svg viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+        <span>執行轉換</span>
+      </button>
+    </main>
+
+    <!-- 結果區塊 -->
+    <section class="results-wrapper" id="results">
+      <div class="panel">
+        <div class="panel-header">
+          <h2 class="panel-title">
+            <svg viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+            轉換結果
+          </h2>
         </div>
-        <div class="result-link"><input type="text" id="clashUrl" readonly></div>
-        <button class="result-copy" onclick="copyResult('clashUrl')">複製</button>
-        <button class="result-copy" onclick="showQr('clashUrl')" style="margin-left:4px;background:#3b82f6">📱</button>
-      </div>
-       
-      <div class="result-item">
-        <div class="result-icon">📱</div>
-        <div class="result-info">
-          <div class="result-name">Sing-Box</div>
-          <div class="result-desc">JSON 格式 · 支援 Surge、v2rayN</div>
+        
+        <!-- Sing-Box -->
+        <div class="result-item">
+          <div class="result-icon-box"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg></div>
+          <div class="result-info">
+            <div class="result-name">Sing-Box</div>
+            <div class="result-desc">JSON 格式 · 適用 Surge, v2rayN 等</div>
+          </div>
+          <div class="result-input-wrapper"><input type="text" id="singboxUrl" readonly></div>
+          <div class="result-actions">
+            <button class="btn-icon" onclick="copyResult('singboxUrl')" title="複製連結"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg></button>
+            <button class="btn-icon" onclick="showQr('singboxUrl')" title="顯示 QR Code"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg></button>
+          </div>
         </div>
-        <div class="result-link"><input type="text" id="singboxUrl" readonly></div>
-        <button class="result-copy" onclick="copyResult('singboxUrl')">複製</button>
-        <button class="result-copy" onclick="showQr('singboxUrl')" style="margin-left:4px;background:#3b82f6">📱</button>
+
+        <!-- Clash Meta -->
+        <div class="result-item">
+          <div class="result-icon-box"><svg viewBox="0 0 24 24"><path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z"></path><line x1="16" y1="8" x2="2" y2="22"></line><line x1="17.5" y1="15" x2="9" y2="6.5"></line></svg></div>
+          <div class="result-info">
+            <div class="result-name">Clash Meta (Mihomo)</div>
+            <div class="result-desc">YAML 格式 · 適用 Clash Verge, ClashX</div>
+          </div>
+          <div class="result-input-wrapper"><input type="text" id="clashUrl" readonly></div>
+          <div class="result-actions">
+            <button class="btn-icon" onclick="copyResult('clashUrl')" title="複製連結"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg></button>
+            <button class="btn-icon" onclick="showQr('clashUrl')" title="顯示 QR Code"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg></button>
+          </div>
+        </div>
+
+        <!-- Base64 -->
+        <div class="result-item">
+          <div class="result-icon-box"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg></div>
+          <div class="result-info">
+            <div class="result-name">Base64 (原始節點)</div>
+            <div class="result-desc">Base64 格式 · 適用 V2RayNG, PassWall</div>
+          </div>
+          <div class="result-input-wrapper"><input type="text" id="base64Url" readonly></div>
+          <div class="result-actions">
+            <button class="btn-icon" onclick="copyResult('base64Url')" title="複製連結"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg></button>
+            <button class="btn-icon" onclick="showQr('base64Url')" title="顯示 QR Code"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg></button>
+          </div>
+        </div>
+
       </div>
-    </div>
-   
-    <div class="card fav-section">
-      <div class="fav-header">
-        <div class="card-title" style="margin:0">⭐ 收藏的訂閱</div>
-        <button class="fav-add-btn" onclick="openModal()">+ 新增</button>
+    </section>
+
+    <!-- 收藏區塊 -->
+    <section class="panel">
+      <div class="panel-header" style="margin-bottom: 0;">
+        <h2 class="panel-title">
+          <svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+          已儲存的配置
+        </h2>
+        <button class="btn btn-ghost" onclick="openModal()">
+          <svg viewBox="0 0 24 24" style="width:16px;height:16px"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+          新增配置
+        </button>
       </div>
-      <div class="fav-grid" id="favGrid">
-        <div style="color: var(--text-sub); font-size: 0.9rem;">暫無收藏...</div>
+      
+      <div id="favGrid" class="fav-grid">
+        <!-- 收藏卡片由 JS 動態生成 -->
+        <div class="empty-state">目前尚未儲存任何配置</div>
       </div>
-    </div>
+    </section>
+    
   </div>
-  
-  <div class="modal" id="modal">
+
+  <!-- 新增/編輯 模態框 -->
+  <div class="modal-overlay" id="modal">
     <div class="modal-content">
-      <div class="modal-title">新增收藏</div>
-      <div class="input-section">
-        <label>名稱</label>
-        <textarea id="favName" style="min-height: 50px;"></textarea>
+      <h3 class="modal-title" id="modalTitle">新增配置</h3>
+      <div class="form-group">
+        <label>配置名稱</label>
+        <input type="text" id="favName" placeholder="例如: 公司專線">
       </div>
-      <div class="input-section" style="margin-top: 16px;">
-        <label>訂閱連結</label>
-        <textarea id="favUrl" style="min-height: 100px;"></textarea>
+      <div class="form-group">
+        <label>節點內容 / 訂閱連結</label>
+        <textarea id="favUrl" placeholder="貼上節點內容..."></textarea>
       </div>
-      <div class="modal-actions">
+      <div class="modal-footer">
         <button class="modal-btn modal-btn-cancel" onclick="closeModal()">取消</button>
-        <button class="modal-btn modal-btn-save" onclick="saveFav()">儲存</button>
+        <button class="modal-btn modal-btn-save" onclick="saveFav()">儲存配置</button>
       </div>
     </div>
   </div>
-  
-  <div class="toast" id="toast"></div>
-  
-  <div class="footer">
-    <a href="https://github.com/sammy0101/cf-sub-converter" target="_blank">GitHub</a> · 開源免費使用
+
+  <!-- Toast 提示 -->
+  <div class="toast" id="toast">
+    <svg viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+    <span id="toastMsg">提示訊息</span>
   </div>
-  
+
   <script>
-    let favs = [];
+    let favs =[];
     
+    // API: 載入收藏
     async function loadFavs() {
       try {
         const resp = await fetch('/favs');
         if (resp.ok) favs = await resp.json();
         renderFavs();
-      } catch(e) {}
+      } catch(e) { console.error('Failed to load favs'); }
     }
     
+    // UI: 渲染收藏清單
     function renderFavs() {
       const grid = document.getElementById('favGrid');
       if (favs.length === 0) {
-        grid.innerHTML = '<div style="color: var(--text-sub); font-size: 0.9rem;">暫無收藏...</div>';
+        grid.style.display = 'block';
+        grid.innerHTML = '<div class="empty-state">目前尚未儲存任何配置</div>';
         return;
       }
-      grid.innerHTML = favs.map((f, i) => \`<div class="fav-card" onclick="useFav(\${i})">
-        <div class="fav-card-name">\${f.name}</div>
-        <div class="fav-card-url">\${f.url.substring(0, 40)}...</div>
-        <div class="fav-card-actions">
-          <span class="fav-card-btn" onclick="event.stopPropagation(); editFav(\${i})">編輯</span>
-          <span class="fav-card-btn fav-card-delete" onclick="event.stopPropagation(); deleteFav(\${i})">刪除</span>
-        </div>
-      </div>\`).join('');
+      grid.style.display = 'grid';
+      grid.innerHTML = favs.map((f, i) => \`
+        <div class="fav-card" onclick="useFav(\${i})">
+          <div class="fav-title">
+            <svg viewBox="0 0 24 24" style="width:16px;height:16px;color:var(--primary)"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg>
+            \${f.name}
+          </div>
+          <div class="fav-url">\${f.url}</div>
+          <div class="fav-actions">
+            <button class="btn btn-ghost" onclick="event.stopPropagation(); editFav(\${i})">編輯</button>
+            <button class="btn btn-ghost btn-danger" onclick="event.stopPropagation(); deleteFav(\${i})">刪除</button>
+          </div>
+        </div>\`).join('');
     }
     
+    // API: 儲存收藏
     async function saveFav() {
       const name = document.getElementById('favName').value.trim();
       const url = document.getElementById('favUrl').value.trim();
-      if (!name || !url) return alert('請填寫名稱和連結');
+      if (!name || !url) return showToast('請完整填寫名稱與內容', false);
       
       const editIndex = document.getElementById('modal').dataset.edit;
+      const originalBtnText = document.querySelector('.modal-btn-save').textContent;
+      document.querySelector('.modal-btn-save').textContent = '儲存中...';
       
       try {
         if (editIndex !== '') {
-          await fetch('/favs', { 
-            method: 'PUT', 
-            headers: { 'Content-Type': 'application/json' }, 
-            body: JSON.stringify({ index: parseInt(editIndex), name, url }) 
-          });
+          await fetch('/favs', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ index: parseInt(editIndex), name, url }) });
         } else {
-          await fetch('/favs', { 
-            method: 'POST', 
-            headers: { 'Content-Type': 'application/json' }, 
-            body: JSON.stringify({ name, url }) 
-          });
+          await fetch('/favs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, url }) });
         }
         closeModal();
         loadFavs();
-        showToast('💾 已儲存');
-      } catch(e) { alert('儲存失敗'); }
+        showToast('配置儲存成功');
+      } catch(e) { 
+        showToast('儲存失敗，請重試', false); 
+      } finally {
+        document.querySelector('.modal-btn-save').textContent = originalBtnText;
+      }
     }
     
+    // API: 刪除收藏
     async function deleteFav(index) {
-      if (!confirm('確定刪除？')) return;
+      if (!confirm('確定要刪除這筆配置嗎？')) return;
       try {
-        await fetch('/favs', { 
-          method: 'DELETE', 
-          headers: { 'Content-Type': 'application/json' }, 
-          body: JSON.stringify({ index }) 
-        });
+        await fetch('/favs', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ index }) });
         loadFavs();
-        showToast('🗑️ 已刪除');
-      } catch(e) {}
+        showToast('已刪除配置');
+      } catch(e) { showToast('刪除失敗', false); }
     }
     
+    // Action: 載入至輸入框
     function useFav(index) {
       document.getElementById('urlInput').value = favs[index].url;
-      document.getElementById('shortCode').value = favs[index].name;
-      showToast('📥 已載入: ' + favs[index].name);
+      document.getElementById('shortCode').value = favs[index].name.replace(/\\s+/g, '-').toLowerCase();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      showToast('已載入配置：' + favs[index].name);
     }
     
+    // Modal: 編輯
     function editFav(index) {
+      document.getElementById('modalTitle').textContent = '編輯配置';
       document.getElementById('favName').value = favs[index].name;
       document.getElementById('favUrl').value = favs[index].url;
       document.getElementById('modal').dataset.edit = index;
       document.getElementById('modal').classList.add('show');
     }
     
+    // Modal: 新增
     function openModal() {
+      document.getElementById('modalTitle').textContent = '新增配置';
       document.getElementById('favName').value = '';
       document.getElementById('favUrl').value = '';
       document.getElementById('modal').dataset.edit = '';
       document.getElementById('modal').classList.add('show');
     }
     
+    // Modal: 關閉
     function closeModal() {
       document.getElementById('modal').classList.remove('show');
     }
     
+    // Action: 執行轉換
     async function generate() {
       const raw = document.getElementById('urlInput').value.trim();
-      if (!raw) return alert('請輸入訂閱連結');
+      if (!raw) return showToast('請先輸入節點連結或訂閱地址', false);
       
-      const btn = document.querySelector('.generate-btn');
+      const btn = document.getElementById('generateBtn');
+      const originalHTML = btn.innerHTML;
       btn.disabled = true;
-      btn.textContent = '⏳ 處理中...';
+      btn.innerHTML = '<svg class="spinner" viewBox="0 0 24 24"><line x1="12" y1="2" x2="12" y2="6"></line><line x1="12" y1="18" x2="12" y2="22"></line><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"></line><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"></line><line x1="2" y1="12" x2="6" y2="12"></line><line x1="18" y1="12" x2="22" y2="12"></line><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"></line><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"></line></svg><span>處理中...</span>';
       
       const host = window.location.origin;
       const shortCode = document.getElementById('shortCode').value.trim();
       
       try {
+        let baseUrl = '';
         if (shortCode) {
-          await fetch('/save', { 
-            method: 'POST', 
-            headers: { 'Content-Type': 'application/json' }, 
-            body: JSON.stringify({ path: shortCode, content: raw }) 
-          });
-          const baseUrl = host + '/' + shortCode + '?target=singbox';
-          document.getElementById('singboxUrl').value = baseUrl;
-          document.getElementById('clashUrl').value = baseUrl.replace('target=singbox', 'target=clash');
-          document.getElementById('base64Url').value = baseUrl.replace('target=singbox', 'target=base64');
+          await fetch('/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: shortCode, content: raw }) });
+          baseUrl = host + '/' + shortCode;
         } else {
-          const encodedUrl = encodeURIComponent(raw);
-          const baseUrl = host + '/?url=' + encodedUrl + '&target=singbox';
-          document.getElementById('singboxUrl').value = baseUrl;
-          document.getElementById('clashUrl').value = baseUrl.replace('target=singbox', 'target=clash');
-          document.getElementById('base64Url').value = baseUrl.replace('target=singbox', 'target=base64');
+          baseUrl = host + '/?url=' + encodeURIComponent(raw);
         }
         
-        document.getElementById('results').classList.add('show');
+        const sep = baseUrl.includes('?') ? '&' : '?';
+        document.getElementById('singboxUrl').value = baseUrl + sep + 'target=singbox';
+        document.getElementById('clashUrl').value = baseUrl + sep + 'target=clash';
+        document.getElementById('base64Url').value = baseUrl + sep + 'target=base64';
         
-        showToast('⚡ 生成完成');
+        document.getElementById('results').classList.add('show');
+        showToast('轉換成功！請複製對應的訂閱連結');
+        
       } catch(e) {
-        alert('生成失敗: ' + e.message);
+        showToast('生成失敗：' + e.message, false);
       }
       
       btn.disabled = false;
-      btn.textContent = '⚡ 立即生成';
+      btn.innerHTML = originalHTML;
     }
     
+    // Action: 複製
     function copyResult(id) {
       const input = document.getElementById(id);
-      navigator.clipboard.writeText(input.value).then(() => showToast('✅ 複製成功'));
+      input.select();
+      navigator.clipboard.writeText(input.value).then(() => showToast('已複製到剪貼簿'));
     }
     
+    // Action: 顯示 QR Code
     function showQr(id) {
       const url = document.getElementById(id).value;
-      const win = window.open('', '_blank', 'width=400,height=450');
-      if (!win) { alert('請允許彈出視窗'); return; }
-      win.document.write('<!DOCTYPE html><html><head><meta charset="utf-8"><title>QR Code</title></head><body style="margin:0;background:#18181b;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;color:#fafafa;font-family:-apple-system,BlinkMacSystemFont,sans-serif"><div id="qr" style="padding:20px;background:#fff;border-radius:12px"></div><div style="margin-top:20px;font-size:14px;color:#a1a1aa">掃碼添加訂閱</div></body></html>');
-      new QRCode(win.document.getElementById('qr'), { text: url, width: 280, height: 280 });
+      if(!url) return;
+      const win = window.open('', '_blank', 'width=420,height=480');
+      if (!win) return showToast('請允許瀏覽器開啟彈出視窗', false);
+      win.document.write(\`
+        <!DOCTYPE html><html><head><meta charset="utf-8"><title>掃碼訂閱</title>
+        <style>
+          body { margin:0; background:#0f172a; display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:100vh; font-family:sans-serif; }
+          .qr-container { padding:24px; background:#ffffff; border-radius:16px; box-shadow:0 10px 25px rgba(0,0,0,0.5); }
+          .title { margin-top:24px; font-size:16px; color:#f8fafc; font-weight:600; letter-spacing:0.5px; }
+          .subtitle { margin-top:8px; font-size:13px; color:#94a3b8; text-align:center; max-width:280px; word-break:break-all;}
+        </style>
+        </head><body>
+        <div class="qr-container"><div id="qr"></div></div>
+        <div class="title">使用客戶端掃描行動條碼</div>
+        <div class="subtitle">\${url}</div>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"><\\/script>
+        <script>
+          setTimeout(() => {
+            new QRCode(document.getElementById('qr'), { text: "\${url}", width: 260, height: 260, colorDark: "#0f172a", colorLight: "#ffffff", correctLevel: QRCode.CorrectLevel.L });
+          }, 100);
+        <\\/script>
+        </body></html>
+      \`);
     }
     
-    function showToast(msg) {
+    // Utility: 提示訊息
+    function showToast(msg, isSuccess = true) {
       const t = document.getElementById('toast');
-      t.textContent = msg;
+      const msgEl = document.getElementById('toastMsg');
+      
+      if(isSuccess) {
+        t.classList.add('success');
+        t.querySelector('svg').innerHTML = '<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline>';
+      } else {
+        t.classList.remove('success');
+        t.querySelector('svg').innerHTML = '<circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line>';
+        t.querySelector('svg').style.color = 'var(--danger)';
+      }
+      
+      msgEl.textContent = msg;
       t.classList.add('show');
-      setTimeout(() => t.classList.remove('show'), 2500);
+      setTimeout(() => {
+        t.classList.remove('show');
+        setTimeout(() => t.querySelector('svg').style.color = '', 300);
+      }, 3000);
     }
     
+    // 初始化
     loadFavs();
   </script>
 </body>
