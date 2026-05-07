@@ -1,4 +1,4 @@
-# ⚡ CF Sub Converter Pro
+# ⚡ CF Sub Converter
 
 基於 Cloudflare Workers 的 Serverless 訂閱轉換工具。擁有全新專業級的深色 UI，一鍵解析並生成 Sing-Box / Clash Meta (Mihomo) / Base64 格式，完美支援各種最新代理協議。
 
