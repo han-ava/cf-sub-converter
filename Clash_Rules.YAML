@@ -1,11 +1,25 @@
 port: 7890
 socks-port: 7891
+mixed-port: 7893
+redir-port: 7892
+tproxy-port: 7895
 allow-lan: true
+bind-address: "*"
 mode: rule
 log-level: info
-external-controller: 127.0.0.1:9090
+ipv6: false
+external-controller: 0.0.0.0:9090
+tcp-concurrent: true
+unified-delay: true
 
-# ---------------- 流量嗅探器 (借鑒 Aethersailor) ----------------
+# ==================== 設定檔快取 ====================
+profile:
+  store-selected: true
+  store-fake-ip: true
+
+# ==================== 流量嗅探器 Sniffer (軟路由必備) ====================
+# 軟路由下很多設備(如電視盒、智慧家電)會直接用 IP 連線不查 DNS
+# 嗅探器能拆開封包還原網址，保證精準分流
 sniffer:
   enable: true
   override-destination: true
@@ -22,13 +36,11 @@ sniffer:
         - 80
         - 8080-8880
       override-destination: true
-  # 強制嗅探以下流媒體與雲端服務，確保精準分流
   force-domain:
     - "+.netflix.com"
     - "+.nflxvideo.net"
     - "+.amazonaws.com"
     - "+.media.dssott.com"
-  # 跳過蘋果與智慧家庭的嗅探，防止連線異常
   skip-domain:
     - "+.apple.com"
     - "Mijia Cloud"
@@ -39,7 +51,7 @@ sniffer:
   parse-pure-ip: true
   force-dns-mapping: true
 
-# ---------------- 進階 DNS (借鑒 Aethersailor + 極速直連優化) ----------------
+# ==================== 進階 DNS 設定 ====================
 dns:
   enable: true
   ipv6: false
@@ -71,7 +83,7 @@ dns:
     "rule-set:meta-cn,meta-private,meta-apple":
       - 223.5.5.5
       - 119.29.29.29
-  # 國外兜底 (維持純 UDP)
+  # 國外兜底
   nameserver:
     - 8.8.8.8
     - 1.1.1.1
