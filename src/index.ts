@@ -102,14 +102,16 @@ if (!urlParam || urlParam.trim() === '') {
   return new Response(HTML_PAGE, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
 }
 
-// 4. 解析並轉換為三種格式 (含進階錯誤診斷)
+// 4. 解析並轉換為三種格式 (含進階錯誤診斷與【嚴格保持原始排序】)
 const inputs = urlParam.split(/[\n\r|]+/); 
-const allNodes: ProxyNode[] = [];
 const errors: string[] = []; // 用來收集錯誤訊息
 
-await Promise.all(inputs.map(async (input) => { 
+// 使用 Promise.all 併發極速請求，並將結果存入陣列保留原始順序
+const results = await Promise.all(inputs.map(async (input) => { 
   const trimmed = input.trim(); 
-  if (!trimmed) return;
+  if (!trimmed) return [];
+  
+  const currentNodes: ProxyNode[] = [];
   
   if (trimmed.startsWith('http')) { 
     try { 
@@ -126,34 +128,39 @@ await Promise.all(inputs.map(async (input) => {
       if (resp.ok) { 
         const text = await resp.text(); 
         
-        // 診斷 1: 檢查是否回傳了 HTML 網頁 (通常是被 WAF 擋住或要求登入)
         if (text.trim().startsWith('<')) {
-           errors.push(`❌ [${trimmed}]\n失敗原因: 伺服器回傳了 HTML 網頁而不是訂閱代碼。可能是被伺服器防火牆阻擋，或需要登入。`);
+           errors.push(`❌ [${trimmed}]\n失敗原因: 伺服器回傳了 HTML 網頁而不是訂閱代碼。`);
         } else {
-           const parsed = await parseContent(text);
-           // 診斷 2: 下載成功但解碼不出節點
-           if (parsed.length === 0) {
-               errors.push(`⚠️ [${trimmed}]\n失敗原因: 成功下載資料，但無法從中解析出任何有效節點。\n內容預覽: ${text.substring(0, 150)}...`);
+           try {
+             const parsed = await parseContent(text);
+             currentNodes.push(...parsed);
+           } catch(err: any) {
+             errors.push(`⚠️ [${trimmed}]\n失敗原因: ${err.message}\n內容預覽: ${text.substring(0, 100)}...`);
            }
-           allNodes.push(...parsed);
         }
       } else {
-        // 診斷 3: HTTP 狀態碼錯誤 (如 403, 404, 500)
-        errors.push(`❌ [${trimmed}]\n失敗原因: 伺服器拒絕存取，HTTP 狀態碼 ${resp.status} ${resp.statusText}`);
+        errors.push(`❌ [${trimmed}]\n失敗原因: HTTP 狀態碼 ${resp.status} ${resp.statusText}`);
       }
     } catch (e: any) {
-      // 診斷 4: 網路底層連線失敗 (SSL 問題、DNS 找不到等)
-      errors.push(`❌ [${trimmed}]\n連線錯誤: ${e.message}\n(通常是因為 SSL 憑證無效、未受信任，或是伺服器直接封鎖了 Cloudflare 節點的連線)`);
+      errors.push(`❌ [${trimmed}]\n連線錯誤: ${e.message}`);
     } 
   } else { 
-    // 手動輸入節點的解析
-    const parsed = await parseContent(trimmed);
-    if (parsed.length === 0) {
-        errors.push(`⚠️ [手動輸入內容]\n失敗原因: 無法解析出任何支援的節點。`);
+    try {
+      const parsed = await parseContent(trimmed);
+      currentNodes.push(...parsed); 
+    } catch(err: any) {
+      errors.push(`⚠️ [手動輸入內容]\n失敗原因: ${err.message}`);
     }
-    allNodes.push(...parsed); 
   }
+  
+  return currentNodes; // 回傳這條網址專屬的節點陣列
 }));
+
+// 將排好隊的結果依序合併到最終的 allNodes
+const allNodes: ProxyNode[] = [];
+for (const nodes of results) {
+  allNodes.push(...nodes);
+}
 
 // 如果完全沒有抓到節點，直接把收集到的死因印在畫面上
 if (allNodes.length === 0) {
