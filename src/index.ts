@@ -103,7 +103,8 @@ if (!urlParam || urlParam.trim() === '') {
 }
 
 // 4. 解析並轉換為三種格式
-const inputs = urlParam.split('|'); 
+// 🔑 關鍵修復：同時支援換行符號 (\n) 與 | 作為分隔符號
+const inputs = urlParam.split(/[\n\r|]+/); 
 const allNodes: ProxyNode[] = [];
 
 await Promise.all(inputs.map(async (input) => { 
@@ -120,8 +121,12 @@ await Promise.all(inputs.map(async (input) => {
       if (resp.ok) { 
         const text = await resp.text(); 
         allNodes.push(...await parseContent(text)); 
-      } 
-    } catch (e) {} 
+      } else {
+        console.error(`Fetch failed for ${trimmed}: ${resp.status}`);
+      }
+    } catch (e) {
+      console.error(`Fetch error for ${trimmed}:`, e);
+    } 
   } else { 
     allNodes.push(...await parseContent(trimmed)); 
   }
