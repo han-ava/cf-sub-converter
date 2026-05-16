@@ -317,24 +317,68 @@ function parseTuic(urlStr: string): ProxyNode | null {
   } catch (e) { return null; }
 }
 
-// --- 主解析函數 ---
+// --- 主解析函數 (無敵防彈版) ---
 export async function parseContent(content: string): Promise<ProxyNode[]> {
-  let plainText = content; 
-  if (!content.includes('://') || !content.match(/^[a-z0-9]+:\/\//i)) { 
-    const decoded = safeBase64Decode(content); if (decoded) plainText = decoded; 
+  // 1. 清除全域可能存在的 BOM 隱形字元
+  let plainText = content.replace(/^\uFEFF/, '').trim(); 
+  
+  const protocols = ['ss://', 'vmess://', 'vless://', 'trojan://', 'tuic://', 'hysteria2://', 'hy2://', 'anytls://'];
+  
+  // 2. 只檢查「第一行」是否以協議開頭，來判斷它是明文還是 Base64
+  const firstLine = plainText.split(/\r?\n/)[0].trim();
+  const isPlainText = protocols.some(p => firstLine.startsWith(p));
+  
+  // 3. 如果不是明文，強制執行最嚴格的 Base64 解碼
+  if (!isPlainText) { 
+    try {
+      // 暴力清除所有可能干擾解碼的空白與換行
+      let b64 = plainText.replace(/[\s\r\n]+/g, '').replace(/-/g, '+').replace(/_/g, '/');
+      
+      // 移除結尾可能殘留的等號，重新計算完美的 Padding
+      b64 = b64.replace(/=+$/, '');
+      while (b64.length % 4 > 0) b64 += '=';
+      
+      // 原生解碼
+      const binaryStr = atob(b64);
+      const bytes = new Uint8Array(binaryStr.length);
+      for (let i = 0; i < binaryStr.length; i++) {
+        bytes[i] = binaryStr.charCodeAt(i);
+      }
+      const decoded = new TextDecoder('utf-8').decode(bytes);
+      
+      // 確保解碼出來的內容真的是代理節點
+      if (decoded && protocols.some(p => decoded.includes(p))) {
+        plainText = decoded.replace(/^\uFEFF/, '').trim(); 
+      } else {
+        throw new Error("解碼出來的內容不包含任何支援的代理協議 (vless, vmess 等)");
+      }
+    } catch (err: any) {
+      // 如果解碼失敗，把詳細錯誤拋出給前端的診斷報告
+      throw new Error(`Base64 暴力解碼失敗: ${err.message}`);
+    }
   }
-  const lines = plainText.split(/\r?\n/); const nodes: ProxyNode[] =[];
-  for (const line of lines) { 
-    const l = line.trim(); if (!l) continue;
+  
+  // 4. 開始逐行解析節點
+  const lines = plainText.split(/\r?\n/); 
+  const nodes: ProxyNode[] = [];
+  
+  for (let line of lines) { 
+    // 暴力清除每一行前後的隱形控制字元與零寬空白
+    let l = line.replace(/^[\s\uFEFF\xA0\u200B\u200C\u200D\u200E\u200F]+|[\s\uFEFF\xA0\u200B\u200C\u200D\u200E\u200F]+$/g, ''); 
+    if (!l) continue;
     
     if (l.startsWith('ss://')) { const n = parseShadowsocks(l); if (n) nodes.push(n); } 
-    // ▼ 這裡改回原本的，不要攔截 anytls
     else if (l.startsWith('vless://')) { const n = parseVless(l); if (n) nodes.push(n); } 
     else if (l.startsWith('hysteria2://') || l.startsWith('hy2://')) { const n = parseHysteria2(l); if (n) nodes.push(n); } 
     else if (l.startsWith('vmess://')) { const n = parseVmess(l); if (n) nodes.push(n); }
     else if (l.startsWith('tuic://')) { const n = parseTuic(l); if (n) nodes.push(n); }
-    // ▼ 新增 AnyTLS 的專屬判斷
     else if (l.startsWith('anytls://')) { const n = parseAnytls(l); if (n) nodes.push(n); }
   } 
+  
+  // 5. 如果解碼成功但沒抓到節點，拋出錯誤
+  if (nodes.length === 0) {
+    throw new Error("資料獲取成功，但未能成功配對到任何支援的節點格式。");
+  }
+  
   return nodes;
 }
