@@ -17,9 +17,7 @@ profile:
   store-selected: true
   store-fake-ip: true
 
-# ==================== 流量嗅探器 Sniffer (軟路由必備) ====================
-# 軟路由下很多設備(如電視盒、智慧家電)會直接用 IP 連線不查 DNS
-# 嗅探器能拆開封包還原網址，保證精準分流
+# ==================== 流量嗅探器 Sniffer ====================
 sniffer:
   enable: true
   override-destination: true
@@ -51,7 +49,7 @@ sniffer:
   parse-pure-ip: true
   force-dns-mapping: true
 
-# ==================== 進階 DNS 設定 ====================
+# ==================== 進階 DNS 設定 (中港兩地智能切換版) ====================
 dns:
   enable: true
   ipv6: false
@@ -59,7 +57,7 @@ dns:
   enhanced-mode: fake-ip
   fake-ip-range: 198.18.0.1/16
   fake-ip-filter-mode: blacklist
-  respect-rules: false
+  respect-rules: true  # 開啟：讓兜底的 DoH 解析也能精準走分流規則，在大陸完美防污染
   fake-ip-filter:
     - '*.lan'
     - '*.local'
@@ -75,18 +73,32 @@ dns:
     # 讓國內網站與蘋果服務強制返回真實 IP
     - 'rule-set:meta-cn,meta-private,meta-apple' 
   
-  # 國內直連公共 DNS (維持純 IP UDP，確保 0 延遲)
+  # 基礎 DNS (解析 DoH 網域用，混合中外 DNS 確保兩地皆通)
   default-nameserver:
     - 223.5.5.5
     - 119.29.29.29
-  nameserver-policy:
-    "rule-set:meta-cn,meta-private,meta-apple":
-      - 223.5.5.5
-      - 119.29.29.29
-  # 國外兜底
-  nameserver:
     - 8.8.8.8
     - 1.1.1.1
+
+  # 節點專用 DNS (只用來找機場的 IP，防止在大陸找不到海外機場，或在香港被擋)
+  proxy-server-nameserver:
+    - 223.5.5.5
+    - 8.8.8.8
+
+  nameserver-policy:
+    # 國內網站強制使用國內公共 DNS (阿里、騰訊)
+    "rule-set:meta-cn":
+      - 223.5.5.5
+      - 119.29.29.29
+    # 蘋果服務：中外 DNS 並發競爭！香港 8.8.8.8 回應快得 HK CDN；大陸 223.5.5.5 回應快得 CN CDN
+    "rule-set:meta-apple":
+      - 223.5.5.5
+      - 8.8.8.8
+
+  # 國外網站兜底 DNS (使用加密 DoH。在大陸會自動走代理防污染，香港直連極速)
+  nameserver:
+    - https://dns.google/dns-query
+    - https://cloudflare-dns.com/dns-query
 
 # ==================================================
 # 代理節點設定
@@ -160,7 +172,7 @@ proxy-groups:
       - DIRECT
 
 # ==================================================
-# 規則集
+# 規則集 Rule Providers
 # ==================================================
 rule-providers:
   my-ai:
@@ -276,7 +288,7 @@ rule-providers:
     interval: 86400
 
 # ==================================================
-# 流量路由
+# 流量路由 Rules
 # ==================================================
 rules:
   # 1. 廣告與內網
@@ -307,5 +319,5 @@ rules:
   - RULE-SET,meta-cn,🇨🇳 國內服務
   - RULE-SET,meta-cn-ip,🇨🇳 國內服務,no-resolve
 
-  # 7. 國外網站兜底：全走代理
+  # 8. 國外網站兜底：全走代理
   - MATCH,🐟 漏網之魚
