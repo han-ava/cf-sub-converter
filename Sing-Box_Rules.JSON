@@ -8,6 +8,7 @@
       {
         "tag": "remote-dns",
         "address": "https://dns.google/dns-query",
+        "address_resolver": "local-dns",
         "detour": "🚀 節點選擇"
       },
       {
