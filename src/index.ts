@@ -8,14 +8,13 @@ export default {
 async fetch(request: Request, env: Env, ctx: any): Promise<Response> {
 const url = new URL(request.url);
 
-// 1. POST /save (儲存短連結到 KV，儲存後自動顯示結果頁面)
+// 1. POST /save (儲存短連結到 KV)
 if (request.method === 'POST' && url.pathname === '/save') {
   try {
     const body: any = await request.json();
     if (!body.path || !body.content) return new Response('Missing path or content', { status: 400 });
     await env.SUB_CACHE.put(body.path, body.content);
     
-    // 儲存成功後，自動重定向到結果頁面
     const redirectUrl = `/?url=${encodeURIComponent(body.content)}&target=singbox`;
     return new Response(null, { 
       status: 302, 
@@ -24,7 +23,7 @@ if (request.method === 'POST' && url.pathname === '/save') {
   } catch (e) { return new Response('Error saving profile', { status: 500 }); }
 }
 
-// 2. KV 收藏 API
+// 2. KV 收藏 API (支援 include 與 exclude 欄位)
 const FAVS_KEY = 'favorites';
 
 async function getFavs(): Promise<any[]> {
@@ -44,26 +43,36 @@ if (request.method === 'GET' && url.pathname === '/favs') {
   });
 }
 
-// POST /favs (新增收藏)
+// POST /favs (新增收藏 - 支援過濾關鍵字)
 if (request.method === 'POST' && url.pathname === '/favs') {
   try {
     const body: any = await request.json();
     if (!body.name || !body.url) return new Response('Missing name or url', { status: 400 });
     const favs = await getFavs();
-    favs.push({ name: body.name, url: body.url });
+    favs.push({ 
+      name: body.name, 
+      url: body.url, 
+      include: body.include || '', 
+      exclude: body.exclude || '' 
+    });
     await saveFavs(favs);
     return new Response('OK', { status: 200 });
   } catch (e) { return new Response('Error saving favorite', { status: 500 }); }
 }
 
-// PUT /favs (更新收藏)
+// PUT /favs (更新收藏 - 支援過濾關鍵字)
 if (request.method === 'PUT' && url.pathname === '/favs') {
   try {
     const body: any = await request.json();
     if (body.index === undefined || !body.name || !body.url) return new Response('Missing data', { status: 400 });
     const favs = await getFavs();
     if (body.index >= 0 && body.index < favs.length) {
-      favs[body.index] = { name: body.name, url: body.url };
+      favs[body.index] = { 
+        name: body.name, 
+        url: body.url, 
+        include: body.include || '', 
+        exclude: body.exclude || '' 
+      };
       await saveFavs(favs);
     }
     return new Response('OK', { status: 200 });
@@ -84,12 +93,10 @@ if (request.method === 'DELETE' && url.pathname === '/favs') {
   } catch (e) { return new Response('Error deleting favorite', { status: 500 }); }
 }
 
-// 2. GET /path (讀取短連結)
+// 3. GET /path (讀取短連結)
 let urlParam = url.searchParams.get('url') || '';
-// 解碼路徑 (例如 /myself)
 const path = decodeURIComponent(url.pathname.slice(1)); 
 
-// 優先從 KV 讀取短連結內容 (不受 urlParam 影響)
 if (path && path !== 'favicon.ico' && path !== '') {
   const storedContent = await env.SUB_CACHE.get(path);
   if (storedContent) { 
@@ -102,16 +109,14 @@ if (!urlParam || urlParam.trim() === '') {
   return new Response(HTML_PAGE, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
 }
 
-// 4. 解析並轉換為三種格式 (含進階錯誤診斷與【嚴格保持原始排序】)
+// 4. 解析並轉換為三種格式 (同時支援換行與 |)
 const inputs = urlParam.split(/[\n\r|]+/); 
-const errors: string[] = []; // 用來收集錯誤訊息
+const allNodes: ProxyNode[] = [];
+const errors: string[] = [];
 
-// 使用 Promise.all 併發極速請求，並將結果存入陣列保留原始順序
-const results = await Promise.all(inputs.map(async (input) => { 
+await Promise.all(inputs.map(async (input) => { 
   const trimmed = input.trim(); 
-  if (!trimmed) return [];
-  
-  const currentNodes: ProxyNode[] = [];
+  if (!trimmed) return;
   
   if (trimmed.startsWith('http')) { 
     try { 
@@ -133,7 +138,7 @@ const results = await Promise.all(inputs.map(async (input) => {
         } else {
            try {
              const parsed = await parseContent(text);
-             currentNodes.push(...parsed);
+             allNodes.push(...parsed);
            } catch(err: any) {
              errors.push(`⚠️ [${trimmed}]\n失敗原因: ${err.message}\n內容預覽: ${text.substring(0, 100)}...`);
            }
@@ -147,39 +152,67 @@ const results = await Promise.all(inputs.map(async (input) => {
   } else { 
     try {
       const parsed = await parseContent(trimmed);
-      currentNodes.push(...parsed); 
+      allNodes.push(...parsed); 
     } catch(err: any) {
       errors.push(`⚠️ [手動輸入內容]\n失敗原因: ${err.message}`);
     }
   }
-  
-  return currentNodes; // 回傳這條網址專屬的節點陣列
 }));
 
-// 將排好隊的結果依序合併到最終的 allNodes
-const allNodes: ProxyNode[] = [];
-for (const nodes of results) {
-  allNodes.push(...nodes);
-}
-
-// 如果完全沒有抓到節點，直接把收集到的死因印在畫面上
 if (allNodes.length === 0) {
-  const errorReport = `未解析到任何有效節點。\n\n🔍 詳細錯誤診斷報告：\n-------------------------\n${errors.join('\n\n-------------------------\n')}\n\n💡 提示：Cloudflare Workers 嚴格要求目標伺服器必須具備有效且受信任的 SSL 憑證。`;
+  const errorReport = `未解析到任何有效節點。\n\n🔍 詳細錯誤診斷報告：\n-------------------------\n${errors.join('\n\n-------------------------\n')}`;
   return new Response(errorReport, { 
     status: 400, 
     headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Access-Control-Allow-Origin': '*' } 
   });
 }
 
-const uniqueNodes = deduplicateNodeNames(allNodes);
+// 💥 【全新功能：智慧節點過濾】
+const includeParam = url.searchParams.get('include') || '';
+const excludeParam = url.searchParams.get('exclude') || '';
+
+let filteredNodes = allNodes;
+
+// 1. 僅保留關鍵字
+if (includeParam) {
+  try {
+    const includeRegex = new RegExp(includeParam, 'i');
+    filteredNodes = filteredNodes.filter(node => includeRegex.test(node.name));
+  } catch (e) {
+    console.error('Invalid include regex:', e);
+  }
+}
+
+// 2. 排除關鍵字
+if (excludeParam) {
+  try {
+    const excludeRegex = new RegExp(excludeParam, 'i');
+    filteredNodes = filteredNodes.filter(node => !excludeRegex.test(node.name));
+  } catch (e) {
+    console.error('Invalid exclude regex:', e);
+  }
+}
+
+// 如果過濾完之後一個節點都沒有剩下，報錯提示使用者
+if (filteredNodes.length === 0) {
+  return new Response('篩選失敗：經過關鍵字過濾後，未剩下任何有效節點。請檢查你的過濾規則。', { 
+    status: 400, 
+    headers: { 'Content-Type': 'text/plain; charset=utf-8' } 
+  });
+}
+
+// 對篩選過後的節點進行去重複命名與自動補國旗
+const uniqueNodes = deduplicateNodeNames(filteredNodes);
 
 // 檢查 target 參數
 const target = url.searchParams.get('target');
 
 if (!target) {
-  // 沒有 target，顯示結果頁面
   const host = `https://${url.host}`;
   const encodedUrl = encodeURIComponent(urlParam);
+  let filterQuery = '';
+  if (includeParam) filterQuery += `&include=${encodeURIComponent(includeParam)}`;
+  if (excludeParam) filterQuery += `&exclude=${encodeURIComponent(excludeParam)}`;
 
   const htmlInfo = `
 <!DOCTYPE html>
@@ -201,24 +234,24 @@ if (!target) {
 </head>
 <body>
   <div class="container">
-    <h1>⚡ 轉換完成 (${uniqueNodes.length} 節點)</h1>
+    <h1>⚡ 篩選並轉換完成 (${uniqueNodes.length} 節點)</h1>
     
     <div class="result">
       <div class="result-title">📄 Sing-Box (JSON)</div>
-      <div class="result-link">${host}/?url=${encodedUrl}&target=singbox</div>
+      <div class="result-link">${host}/?url=${encodedUrl}&target=singbox${filterQuery}</div>
     </div>
     
     <div class="result">
       <div class="result-title">📋 Clash Meta (YAML)</div>
-      <div class="result-link">${host}/?url=${encodedUrl}&target=clash</div>
+      <div class="result-link">${host}/?url=${encodedUrl}&target=clash${filterQuery}</div>
     </div>
     
     <div class="result">
       <div class="result-title">🔗 Base64 (原始)</div>
-      <div class="result-link">${host}/?url=${encodedUrl}&target=base64</div>
+      <div class="result-link">${host}/?url=${encodedUrl}&target=base64${filterQuery}</div>
     </div>
     
-    <a class="btn" href="${host}/?url=${encodedUrl}&target=singbox">📥 下載 Sing-Box 訂閱</a>
+    <a class="btn" href="${host}//?url=${encodedUrl}&target=singbox${filterQuery}">📥 下載 Sing-Box 訂閱</a>
   </div>
 </body>
 </html>
