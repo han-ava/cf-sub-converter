@@ -15,6 +15,8 @@
   - **Sing-Box**：Mixed TUN 堆疊優化、獨立 DNS 快取、蘋果/國內服務精準直連。
 - ☁️ **雲端 Serverless** - 運行在 Cloudflare 邊緣網絡，零成本運維。支援短連結生成與配置雲端收藏 (依賴 KV 儲存)。
 
+<img width="2559" height="958" alt="螢幕擷取畫面 2026-05-26 225544" src="https://github.com/user-attachments/assets/d3f839b5-6939-4ffd-a7d3-af9d0e8d0990" />
+
 ## 🚀 部署教學
 
 ### 方法一：一鍵部署 (推薦)
