@@ -7,15 +7,13 @@
 ## 🌟 特性
 
 - 🎨 **專業級 UI** - 全新深色主題設計 (Slate/Zinc)，無廣告、純淨排版，搭配流暢的互動動畫與一鍵掃碼功能。
-- 🔍 **智慧節點過濾** - 支援**「僅保留」**與**「排除」**雙向關鍵字過濾。支援使用 `|` 符號分隔（例如 `HK|TW` 或 `重置|官網`），後端自動利用高效能正則表達式 (RegExp) 進行過濾，杜絕垃圾廣告節點。
-- 🚩 **自動國旗標註** - 內建智慧辨識系統，自動為節點名稱補上對應的國家國旗 Emoji (如 🇹🇼、🇭🇰、🇯🇵)，讓節點列表更清晰，並與分流規則完美對應。
-- 🔌 **全協議支援** - 完美解析 `VLESS`, `VMess`, `Trojan`, `Shadowsocks`, `Hysteria2 (hy2)`, `TUIC`, `AnyTLS` 等主流與新興協議。
+- 🔍 **智慧節點過濾** - 支援**「僅保留」**與**「排除」**雙向關鍵字過濾。使用 `|` 符號分隔（例如 `HK|TW` 或 `重置|官網`）。後端自動利用高效率正則比對，且**內建字元智慧相容技術（自動將英文字母 x/X、全形 ｘ/Ｘ 與數學乘號 × 進行互通匹配，解決如 `5x` 與 `5×` 的過濾衝突）**。
+- 🚩 **自動國旗標註** - 內建全球國旗資料庫，自動為節點名稱補上對應的國家國旗 Emoji (如 🇹🇼、🇭🇰、🇯🇵、🇲🇴、🇰🇭、🇬🇷、🇵🇱 等 40+ 國家與常用機場機場縮寫)，讓節點列表更清晰，並與分流規則完美對應。
+- 🔌 **全協議支援** - 完美解析 `Trojan`, `VLESS`, `VMess`, `Shadowsocks`, `Hysteria2 (hy2)`, `TUIC`, `AnyTLS` 等主流與新興協議。
 - 🚀 **極速路由與 DNS** - 轉換出的配置檔內建頂級路由規則：
   - **Clash Meta**：流量嗅探 (Sniffer)、Fake-IP、TProxy 軟路由最佳化、中外 DNS 智慧解析。
   - **Sing-Box**：Mixed TUN 堆疊優化、獨立 DNS 快取、蘋果/國內服務精準直連。
-- ☁️ **雲端 Serverless** - 運行在 Cloudflare 邊緣網絡，零成本運維。支援短連結生成與配置雲端收藏 (依賴 KV 儲存)。
-
-<img width="2559" height="958" alt="螢幕擷取畫面 2026-05-26 225544" src="https://github.com/user-attachments/assets/d3f839b5-6939-4ffd-a7d3-af9d0e8d0990" />
+- ☁️ **雲端與配置同步** - 運行在 Cloudflare 邊緣網絡，零成本運維。生成短連結時，**系統會將「資料來源、保留規則、排除規則」打包存入 KV**，客戶端直接更新短連結即可自動套用過濾規則，不需在客戶端 URL 後手動拼接複雜參數。
 
 ## 🚀 部署教學
 
@@ -23,7 +21,7 @@
 
 點擊上方的 **Deploy to Cloudflare Workers** 按鈕，依照畫面指示登入 Cloudflare 帳號即可自動完成部署。
 
-*(⚠️ 注意：一鍵部署後，請務必至 Cloudflare 控制台為該 Worker 綁定一個名為 `SUB_CACHE` 的 KV 命名空間，否則「收藏配置」與「短連結」功能將無法使用)*
+*(⚠️ 注意：一鍵部署後，請務必至 Cloudflare 儀表板為該 Worker 綁定一個名為 `SUB_CACHE` 的 KV 命名空間，否則「收藏配置」與「短連結」功能將無法使用)*
 
 ### 方法二：手動部署 (Wrangler CLI)
 
@@ -57,18 +55,18 @@
 - **資料來源設定**：支援貼上機場訂閱連結、Base64 字串，或直接貼上多行節點 URI。支援多個訂閱地址換行輸入，系統將保持原始順序進行合併。
 - **過濾關鍵字**：
   - **僅保留關鍵字**：只留下符合關鍵字的節點。例如輸入 `HK|TW`。
-  - **排除關鍵字**：過濾掉垃圾節點。例如輸入 `官網|過期|流量`。
+  - **排除關鍵字**：過濾掉垃圾或高倍率節點。例如輸入 `官網|過期|5x`（系統會自動相容 `5×` 乘號）。
 - **配置收藏**：常用的節點與過濾規則可以儲存到「已儲存的配置」區塊。卡片上會直觀地以綠色 `保` 和紅色 `排` 標籤顯示你所設定的過濾規則，點擊卡片即可自動載入所有設定（含過濾字串）。
 
 ### API 調用格式
 若不使用圖形化介面，也可以直接透過 URL 參數進行轉換與過濾：
 
 ```http
-# 轉換原始連結 + 僅保留香港與台灣節點 + 排除官網與重置節點
-https://your-worker.workers.dev/?url=<URL編碼後的訂閱連結>&target=singbox&include=HK|TW&exclude=官網|重置
+# 轉換原始連結 + 僅保留香港與台灣節點 + 排除 5x 倍率節點
+https://your-worker.workers.dev/?url=<URL編碼後的訂閱連結>&target=singbox&include=HK|TW&exclude=5x
 
-# 轉換短連結 + 套用過濾規則
-https://your-worker.workers.dev/<自訂短連結名稱>?target=clash&include=HK|TW&exclude=官網|重置
+# 轉換短連結 + 自動套用在雲端 KV 中存好的過濾規則
+https://your-worker.workers.dev/<自訂短連結名稱>?target=clash
 ```
 
 ## 🛡️ 內建分流規則群組
@@ -94,11 +92,11 @@ https://your-worker.workers.dev/<自訂短連結名稱>?target=clash&include=HK|
 ```text
 cf-sub-converter/
 ├── src/
-│   ├── index.ts          # Worker 主入口路由、並發請求控制與智慧節點過濾
-│   ├── constants.ts      # 專業版 HTML 視圖模板與遠端規則常數 (含過濾 UI)
-│   ├── parser.ts         # 節點解析器 (支援 AnyTLS/TUIC/Hy2 等)
+│   ├── index.ts          # Worker 主入口路由、並發請求控制、智慧過濾與雲端配置同步
+│   ├── constants.ts      # 專業版 HTML 視圖模板與遠端規則常數 (含過濾與收藏 UI)
+│   ├── parser.ts         # 節點解析器 (支援 Trojan, AnyTLS, TUIC, Hy2 等)
 │   ├── generator.ts      # 格式生成器 (映射為 Sing-Box / Clash Meta / Base64)
-│   ├── utils.ts          # Base64 淨化與智慧國旗自動標註系統
+│   ├── utils.ts          # Base64 淨化與智慧國旗自動標註系統 (豪華全球版)
 │   └── types.ts          # TypeScript 類型定義
 ├── Sing-Box_Rules.JSON   # 遠端 Sing-Box 路由規則範本 (極速混合堆疊版)
 ├── Clash_Rules.YAML      # 遠端 Clash Meta 路由規則範本 (軟路由透明代理版)
