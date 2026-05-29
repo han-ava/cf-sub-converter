@@ -1,10 +1,5 @@
 import { ProxyNode } from "./types";
-import { safeBase64Decode } from "./utils";
-
-// 輔助：安全解碼，防止 % 符號報錯
-const tryDecodeURIComponent = (str: string) => {
-  try { return decodeURIComponent(str); } catch (e) { return str; }
-};
+import { safeBase64Decode, tryDecodeURIComponent } from "./utils";
 
 function parsePluginParams(str: string): Record<string, string> {
   const params: Record<string, string> = {};
@@ -113,26 +108,21 @@ function parseShadowsocks(urlStr: string): ProxyNode | null {
 // --- 解析 VLESS ---
 function parseVless(urlStr: string): ProxyNode | null {
   try {
-    if (urlStr.startsWith('anytls://')) {
-        urlStr = urlStr.replace('anytls://', 'vless://');
-    }
-
-    const url = new URL(urlStr); 
+    const fakeUrlStr = urlStr.replace(/^[^:]+:\/\//i, 'http://');
+    const url = new URL(fakeUrlStr); 
     const params = url.searchParams; 
     const name = tryDecodeURIComponent(url.hash.slice(1)) || 'VLESS';
     
     let wsPath = params.get('path') || '/';
     if (!wsPath.startsWith('/')) wsPath = '/' + wsPath;
 
-    const node: ProxyNode = { type: 'vless', name, server: url.hostname, port: parseInt(url.port), uuid: url.username, tls: params.get('security') === 'tls' || params.get('security') === 'reality', flow: params.get('flow') || undefined, network: params.get('type') || 'tcp', sni: params.get('sni') || params.get('host') || undefined, fingerprint: params.get('fp') || 'chrome', skipCertVerify: params.get('allowInsecure') === '1' };
+    const node: ProxyNode = { type: 'vless', name, server: url.hostname, port: parseInt(url.port) || 443, uuid: url.username, tls: params.get('security') === 'tls' || params.get('security') === 'reality', flow: params.get('flow') || undefined, network: params.get('type') || 'tcp', sni: params.get('sni') || params.get('host') || undefined, fingerprint: params.get('fp') || 'chrome', skipCertVerify: params.get('allowInsecure') === '1' };
     if (params.get('security') === 'reality') { node.reality = { publicKey: params.get('pbk') || '', shortId: params.get('sid') || '' }; if (!node.sni) node.sni = node.server; }
     if (node.network === 'ws') { node.wsPath = wsPath; node.wsHeaders = { Host: params.get('host') || node.server }; }
     
     const sb: any = { tag: name, type: 'vless', server: node.server, server_port: node.port, uuid: node.uuid };
     sb.tls = { enabled: node.tls, server_name: node.sni || node.server, insecure: node.skipCertVerify, utls: { enabled: true, fingerprint: node.fingerprint }};
-    
     if(node.flow) sb.flow = node.flow;
-    
     if(node.reality) sb.tls.reality = { enabled: true, public_key: node.reality.publicKey, short_id: node.reality.shortId };
     if(node.network === 'ws') sb.transport = { type: 'ws', path: node.wsPath, headers: node.wsHeaders };
     node.singboxObj = sb;
@@ -147,83 +137,15 @@ function parseVless(urlStr: string): ProxyNode | null {
   } catch (e) { return null; }
 }
 
-// --- 解析 AnyTLS ---
-function parseAnytls(urlStr: string): ProxyNode | null {
-  try {
-    const url = new URL(urlStr);
-    const params = url.searchParams;
-    const name = tryDecodeURIComponent(url.hash.slice(1)) || 'AnyTLS';
-    
-    // AnyTLS 使用 password，通常放在連結的 username 欄位
-    const password = url.username; 
-    const skipCertVerify = params.get('allowInsecure') === '1' || params.get('insecure') === '1';
-    const alpnStr = params.get('alpn');
-
-    const node: ProxyNode = {
-      type: 'anytls',
-      name,
-      server: url.hostname,
-      port: parseInt(url.port),
-      password: password,
-      tls: true, // AnyTLS 必備
-      sni: params.get('sni') || url.hostname,
-      fingerprint: params.get('fp') || 'chrome',
-      skipCertVerify: skipCertVerify,
-      alpn: alpnStr ? alpnStr.split(',') : undefined
-    };
-
-    // 轉換為 Sing-box 格式
-    const sb: any = {
-      tag: name,
-      type: 'anytls',
-      server: node.server,
-      server_port: node.port,
-      password: node.password,
-      tls: {
-        enabled: true,
-        server_name: node.sni,
-        insecure: node.skipCertVerify,
-        utls: {
-          enabled: true,
-          fingerprint: node.fingerprint
-        }
-      }
-    };
-    if (node.alpn) sb.tls.alpn = node.alpn;
-    node.singboxObj = sb;
-
-    // 轉換為 Clash Meta (mihomo) 格式
-    const cl: any = {
-      name,
-      type: 'anytls',
-      server: node.server,
-      port: node.port,
-      password: node.password,
-      sni: node.sni,
-      'skip-cert-verify': node.skipCertVerify,
-      'client-fingerprint': node.fingerprint,
-      udp: true
-    };
-    if (node.alpn) cl.alpn = node.alpn;
-    node.clashObj = cl;
-
-    return node;
-  } catch (e) {
-    return null;
-  }
-}
-
 // --- 解析 Hysteria2 ---
 function parseHysteria2(urlStr: string): ProxyNode | null {
   try {
-    // 預防部分 JS 引擎不認識 hy2:// 導致解析失敗
-    if (urlStr.startsWith('hy2://')) {
-        urlStr = urlStr.replace('hy2://', 'hysteria2://');
-    }
-    const url = new URL(urlStr); 
+    const fakeUrlStr = urlStr.replace(/^[^:]+:\/\//i, 'http://');
+    const url = new URL(fakeUrlStr); 
     const params = url.searchParams; 
     const name = tryDecodeURIComponent(url.hash.slice(1)) || 'Hy2';
-    const node: ProxyNode = { type: 'hysteria2', name, server: url.hostname, port: parseInt(url.port), password: url.username, tls: true, sni: params.get('sni') || url.hostname, skipCertVerify: params.get('insecure') === '1', obfs: params.get('obfs') || undefined, obfsPassword: params.get('obfs-password') || undefined };
+    
+    const node: ProxyNode = { type: 'hysteria2', name, server: url.hostname, port: parseInt(url.port) || 443, password: url.username, tls: true, sni: params.get('sni') || url.hostname, skipCertVerify: params.get('insecure') === '1', obfs: params.get('obfs') || undefined, obfsPassword: params.get('obfs-password') || undefined };
     const sb: any = { tag: name, type: 'hysteria2', server: node.server, server_port: node.port, password: node.password };
     sb.tls = { enabled: true, server_name: node.sni, insecure: node.skipCertVerify }; if(node.obfs) sb.obfs = { type: node.obfs, password: node.obfsPassword }; node.singboxObj = sb;
     const cl: any = { name, type: 'hysteria2', server: node.server, port: node.port, password: node.password, sni: node.sni, 'skip-cert-verify': node.skipCertVerify };
@@ -232,31 +154,11 @@ function parseHysteria2(urlStr: string): ProxyNode | null {
   } catch (e) { return null; }
 }
 
-// --- 解析 VMess ---
-function parseVmess(vmessUrl: string): ProxyNode | null {
-  try {
-    const b64 = vmessUrl.replace('vmess://', ''); const jsonStr = safeBase64Decode(b64); const config = JSON.parse(jsonStr); const name = config.ps || 'VMess';
-    
-    let wsPath = config.path || '/';
-    if (!wsPath.startsWith('/')) wsPath = '/' + wsPath;
-
-    const node: ProxyNode = { type: 'vmess', name, server: config.add, port: parseInt(config.port), uuid: config.id, cipher: 'auto', tls: config.tls === 'tls', sni: config.sni || config.host, network: config.net || 'tcp', wsPath: wsPath, wsHeaders: config.host ? { Host: config.host } : undefined, skipCertVerify: true };
-    
-    const sb: any = { tag: name, type: 'vmess', server: node.server, server_port: node.port, uuid: node.uuid, security: 'auto' };
-    sb.tls = { enabled: node.tls, server_name: node.sni || node.server, insecure: true }; if(node.network === 'ws') sb.transport = { type: 'ws', path: node.wsPath, headers: node.wsHeaders }; node.singboxObj = sb;
-    
-    const cl: any = { name, type: 'vmess', server: node.server, port: node.port, uuid: node.uuid, alterId: parseInt(config.aid) || 0, cipher: config.scy || 'auto', udp: true, tls: node.tls, servername: node.sni || config.host || node.server, network: node.network };
-    if(node.network === 'ws') cl['ws-opts'] = { path: wsPath, headers: node.wsHeaders }; 
-    node.clashObj = cl;
-
-    return node;
-  } catch (e) { return null; }
-}
-
 // --- 解析 TUIC ---
 function parseTuic(urlStr: string): ProxyNode | null {
   try {
-    const url = new URL(urlStr);
+    const fakeUrlStr = urlStr.replace(/^[^:]+:\/\//i, 'http://');
+    const url = new URL(fakeUrlStr);
     const params = url.searchParams;
     const name = tryDecodeURIComponent(url.hash.slice(1)) || 'TUIC';
 
@@ -269,7 +171,7 @@ function parseTuic(urlStr: string): ProxyNode | null {
       type: 'tuic',
       name,
       server: url.hostname,
-      port: parseInt(url.port),
+      port: parseInt(url.port) || 443,
       uuid: url.username,
       password: url.password,
       tls: true,
@@ -280,19 +182,102 @@ function parseTuic(urlStr: string): ProxyNode | null {
       udp_relay_mode
     };
 
+    const sb: any = { tag: name, type: 'tuic', server: node.server, server_port: node.port, uuid: node.uuid, password: node.password, congestion_control: node.congestion_control, udp_relay_mode: node.udp_relay_mode, tls: { enabled: true, server_name: node.sni, alpn: node.alpn, insecure: node.skipCertVerify } };
+    node.singboxObj = sb;
+
+    const cl: any = { name, type: 'tuic', server: node.server, port: node.port, uuid: node.uuid, password: node.password, sni: node.sni, alpn: node.alpn, 'skip-cert-verify': node.skipCertVerify, 'congestion-controller': node.congestion_control, 'udp-relay-mode': node.udp_relay_mode };
+    node.clashObj = cl;
+
+    return node;
+  } catch (e) { return null; }
+}
+
+// --- 解析 AnyTLS ---
+function parseAnytls(urlStr: string): ProxyNode | null {
+  try {
+    const fakeUrlStr = urlStr.replace(/^[^:]+:\/\//i, 'http://');
+    const url = new URL(fakeUrlStr);
+    const params = url.searchParams;
+    const name = tryDecodeURIComponent(url.hash.slice(1)) || 'AnyTLS';
+    
+    const uuid = url.username; 
+    const skipCertVerify = params.get('allowInsecure') === '1' || params.get('insecure') === '1';
+    const alpnStr = params.get('alpn');
+
+    const node: ProxyNode = {
+      type: 'anytls',
+      name,
+      server: url.hostname,
+      port: parseInt(url.port) || 443,
+      uuid: uuid,
+      password: uuid,
+      tls: true,
+      sni: params.get('sni') || url.hostname,
+      fingerprint: params.get('fp') || 'chrome',
+      skipCertVerify: skipCertVerify,
+      alpn: alpnStr ? alpnStr.split(',') : undefined
+    };
+
+    const sb: any = { tag: name, type: 'vless', server: node.server, server_port: node.port, uuid: node.uuid, tls: { enabled: true, server_name: node.sni, insecure: node.skipCertVerify, utls: { enabled: true, fingerprint: node.fingerprint } } };
+    if (node.alpn) sb.tls.alpn = node.alpn;
+    node.singboxObj = sb;
+
+    const cl: any = { name, type: 'anytls', server: node.server, port: node.port, password: node.password, sni: node.sni, 'skip-cert-verify': node.skipCertVerify, 'client-fingerprint': node.fingerprint, udp: true };
+    if (node.alpn) cl.alpn = node.alpn;
+    node.clashObj = cl;
+
+    return node;
+  } catch (e) { return null; }
+}
+
+// --- 解析 VMess ---
+function parseVmess(vmessUrl: string): ProxyNode | null {
+  try {
+    const b64 = vmessUrl.replace('vmess://', ''); const jsonStr = safeBase64Decode(b64); const config = JSON.parse(jsonStr); const name = config.ps || 'VMess';
+    let wsPath = config.path || '/';
+    if (!wsPath.startsWith('/')) wsPath = '/' + wsPath;
+
+    const node: ProxyNode = { type: 'vmess', name, server: config.add, port: parseInt(config.port) || 443, uuid: config.id, cipher: 'auto', tls: config.tls === 'tls', sni: config.sni || config.host, network: config.net || 'tcp', wsPath: wsPath, wsHeaders: config.host ? { Host: config.host } : undefined, skipCertVerify: true };
+    
+    const sb: any = { tag: name, type: 'vmess', server: node.server, server_port: node.port, uuid: node.uuid, security: 'auto' };
+    sb.tls = { enabled: node.tls, server_name: node.sni || node.server, insecure: true }; if(node.network === 'ws') sb.transport = { type: 'ws', path: node.wsPath, headers: node.wsHeaders }; node.singboxObj = sb;
+    
+    const cl: any = { name, type: 'vmess', server: node.server, port: node.port, uuid: node.uuid, alterId: parseInt(config.aid) || 0, cipher: config.scy || 'auto', udp: true, tls: node.tls, servername: node.sni || config.host || node.server, network: node.network };
+    if(node.network === 'ws') cl['ws-opts'] = { path: wsPath, headers: node.wsHeaders }; 
+    node.clashObj = cl;
+
+    return node;
+  } catch (e) { return null; }
+}
+
+// 💥 【全新：解析 Trojan】
+function parseTrojan(urlStr: string): ProxyNode | null {
+  try {
+    const fakeUrlStr = urlStr.replace(/^[^:]+:\/\//i, 'http://');
+    const url = new URL(fakeUrlStr); 
+    const params = url.searchParams; 
+    const name = tryDecodeURIComponent(url.hash.slice(1)) || 'Trojan';
+
+    const node: ProxyNode = {
+      type: 'trojan',
+      name,
+      server: url.hostname,
+      port: parseInt(url.port) || 443,
+      password: url.username,
+      tls: true, // Trojan 必定啟用 TLS
+      sni: params.get('sni') || params.get('peer') || url.hostname,
+      skipCertVerify: params.get('allowInsecure') === '1' || params.get('insecure') === '1'
+    };
+
     const sb: any = {
       tag: name,
-      type: 'tuic',
+      type: 'trojan',
       server: node.server,
       server_port: node.port,
-      uuid: node.uuid,
       password: node.password,
-      congestion_control: node.congestion_control,
-      udp_relay_mode: node.udp_relay_mode,
       tls: {
         enabled: true,
         server_name: node.sni,
-        alpn: node.alpn,
         insecure: node.skipCertVerify
       }
     };
@@ -300,16 +285,13 @@ function parseTuic(urlStr: string): ProxyNode | null {
 
     const cl: any = {
       name,
-      type: 'tuic',
+      type: 'trojan',
       server: node.server,
       port: node.port,
-      uuid: node.uuid,
       password: node.password,
       sni: node.sni,
-      alpn: node.alpn,
       'skip-cert-verify': node.skipCertVerify,
-      'congestion-controller': node.congestion_control,
-      'udp-relay-mode': node.udp_relay_mode
+      udp: true
     };
     node.clashObj = cl;
 
@@ -317,28 +299,20 @@ function parseTuic(urlStr: string): ProxyNode | null {
   } catch (e) { return null; }
 }
 
-// --- 主解析函數 (無敵防彈版) ---
+// --- 主解析函數 ---
 export async function parseContent(content: string): Promise<ProxyNode[]> {
-  // 1. 清除全域可能存在的 BOM 隱形字元
   let plainText = content.replace(/^\uFEFF/, '').trim(); 
   
   const protocols = ['ss://', 'vmess://', 'vless://', 'trojan://', 'tuic://', 'hysteria2://', 'hy2://', 'anytls://'];
-  
-  // 2. 只檢查「第一行」是否以協議開頭，來判斷它是明文還是 Base64
   const firstLine = plainText.split(/\r?\n/)[0].trim();
   const isPlainText = protocols.some(p => firstLine.startsWith(p));
   
-  // 3. 如果不是明文，強制執行最嚴格的 Base64 解碼
   if (!isPlainText) { 
     try {
-      // 暴力清除所有可能干擾解碼的空白與換行
       let b64 = plainText.replace(/[\s\r\n]+/g, '').replace(/-/g, '+').replace(/_/g, '/');
-      
-      // 移除結尾可能殘留的等號，重新計算完美的 Padding
       b64 = b64.replace(/=+$/, '');
       while (b64.length % 4 > 0) b64 += '=';
       
-      // 原生解碼
       const binaryStr = atob(b64);
       const bytes = new Uint8Array(binaryStr.length);
       for (let i = 0; i < binaryStr.length; i++) {
@@ -346,24 +320,20 @@ export async function parseContent(content: string): Promise<ProxyNode[]> {
       }
       const decoded = new TextDecoder('utf-8').decode(bytes);
       
-      // 確保解碼出來的內容真的是代理節點
       if (decoded && protocols.some(p => decoded.includes(p))) {
         plainText = decoded.replace(/^\uFEFF/, '').trim(); 
       } else {
-        throw new Error("解碼出來的內容不包含任何支援的代理協議 (vless, vmess 等)");
+        throw new Error("Base64 解碼成功，但內容並非有效的代理節點。");
       }
     } catch (err: any) {
-      // 如果解碼失敗，把詳細錯誤拋出給前端的診斷報告
       throw new Error(`Base64 暴力解碼失敗: ${err.message}`);
     }
   }
   
-  // 4. 開始逐行解析節點
   const lines = plainText.split(/\r?\n/); 
   const nodes: ProxyNode[] = [];
   
-  for (let line of lines) { 
-    // 暴力清除每一行前後的隱形控制字元與零寬空白
+  for (const line of lines) { 
     let l = line.replace(/^[\s\uFEFF\xA0\u200B\u200C\u200D\u200E\u200F]+|[\s\uFEFF\xA0\u200B\u200C\u200D\u200E\u200F]+$/g, ''); 
     if (!l) continue;
     
@@ -373,9 +343,10 @@ export async function parseContent(content: string): Promise<ProxyNode[]> {
     else if (l.startsWith('vmess://')) { const n = parseVmess(l); if (n) nodes.push(n); }
     else if (l.startsWith('tuic://')) { const n = parseTuic(l); if (n) nodes.push(n); }
     else if (l.startsWith('anytls://')) { const n = parseAnytls(l); if (n) nodes.push(n); }
+    // 💥 註冊 Trojan 路由
+    else if (l.startsWith('trojan://')) { const n = parseTrojan(l); if (n) nodes.push(n); }
   } 
   
-  // 5. 如果解碼成功但沒抓到節點，拋出錯誤
   if (nodes.length === 0) {
     throw new Error("資料獲取成功，但未能成功配對到任何支援的節點格式。");
   }
