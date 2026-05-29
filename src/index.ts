@@ -14,7 +14,6 @@ if (request.method === 'POST' && url.pathname === '/save') {
     const body: any = await request.json();
     if (!body.path || !body.content) return new Response('Missing path or content', { status: 400 });
     
-    // 💥 升級：將過濾規則一併打包存入 KV 中
     const saveData = {
       content: body.content,
       include: body.include || '',
@@ -22,7 +21,6 @@ if (request.method === 'POST' && url.pathname === '/save') {
     };
     await env.SUB_CACHE.put(body.path, JSON.stringify(saveData));
     
-    // 儲存成功後，自動重定向到結果頁面
     const redirectUrl = `/?url=${encodeURIComponent(body.content)}&target=singbox&include=${encodeURIComponent(body.include || '')}&exclude=${encodeURIComponent(body.exclude || '')}`;
     return new Response(null, { 
       status: 302, 
@@ -31,7 +29,7 @@ if (request.method === 'POST' && url.pathname === '/save') {
   } catch (e) { return new Response('Error saving profile', { status: 500 }); }
 }
 
-// 2. KV 收藏 API (支援 include 與 exclude 欄位)
+// 2. KV 收藏 API
 const FAVS_KEY = 'favorites';
 
 async function getFavs(): Promise<any[]> {
@@ -51,7 +49,7 @@ if (request.method === 'GET' && url.pathname === '/favs') {
   });
 }
 
-// POST /favs (新增收藏 - 支援過濾關鍵字)
+// POST /favs
 if (request.method === 'POST' && url.pathname === '/favs') {
   try {
     const body: any = await request.json();
@@ -68,7 +66,7 @@ if (request.method === 'POST' && url.pathname === '/favs') {
   } catch (e) { return new Response('Error saving favorite', { status: 500 }); }
 }
 
-// PUT /favs (更新收藏 - 支援過濾關鍵字)
+// PUT /favs
 if (request.method === 'PUT' && url.pathname === '/favs') {
   try {
     const body: any = await request.json();
@@ -87,7 +85,7 @@ if (request.method === 'PUT' && url.pathname === '/favs') {
   } catch (e) { return new Response('Error updating favorite', { status: 500 }); }
 }
 
-// DELETE /favs (刪除收藏)
+// DELETE /favs
 if (request.method === 'DELETE' && url.pathname === '/favs') {
   try {
     const body: any = await request.json();
@@ -108,7 +106,6 @@ let excludeParam = url.searchParams.get('exclude') || '';
 
 const path = decodeURIComponent(url.pathname.slice(1)); 
 
-// 優先從 KV 讀取短連結內容 (智慧相容舊版純文字與新版 JSON 格式)
 if (path && path !== 'favicon.ico' && path !== '') {
   const stored = await env.SUB_CACHE.get(path);
   if (stored) { 
@@ -116,23 +113,21 @@ if (path && path !== 'favicon.ico' && path !== '') {
       const parsed = JSON.parse(stored);
       if (parsed && parsed.content) {
         urlParam = parsed.content;
-        // 💥 智慧繼承：如果客戶端 URL 沒有手動代入參數，就自動採用短連結在雲端存好的規則
         if (!includeParam) includeParam = parsed.include || '';
         if (!excludeParam) excludeParam = parsed.exclude || '';
       }
     } catch (e) {
-      // 相容舊版純文字短連結
       urlParam = stored; 
     }
   }
 }
 
-// 顯示首頁 (沒有 url 參數也沒有短連結)
+// 顯示首頁
 if (!urlParam || urlParam.trim() === '') {
   return new Response(HTML_PAGE, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
 }
 
-// 4. 解析並轉換為三種格式 (同時支援換行與 |)
+// 4. 解析並下載
 const inputs = urlParam.split(/[\n\r|]+/); 
 const allNodes: ProxyNode[] = [];
 const errors: string[] = [];
@@ -190,52 +185,37 @@ if (allNodes.length === 0) {
   });
 }
 
-// 💥 【全新功能：智慧節點過濾 (已修復 x 與乘號 × 衝突問題)】
-const includeParam = url.searchParams.get('include') || '';
-const excludeParam = url.searchParams.get('exclude') || '';
-
+// 智慧節點過濾
 let filteredNodes = allNodes;
 
-// 🔑 關鍵改良：自動將英文字母 x/X、全形 ｘ/Ｘ 與數學乘號 × 互通，解決過濾 5x 失敗的問題
 const buildFilterRegex = (param: string): RegExp => {
-  const safePattern = param
-    .replace(/[xXｘＸ]/g, '[xXｘＸ×]')
-    .replace(/×/g, '[xXｘＸ×]');
+  const safePattern = param.replace(/[xXｘＸ]/g, '[xXｘＸ×]').replace(/×/g, '[xXｘＸ×]');
   return new RegExp(safePattern, 'i');
 };
 
-// 1. 僅保留關鍵字
 if (includeParam) {
   try {
     const includeRegex = buildFilterRegex(includeParam);
     filteredNodes = filteredNodes.filter(node => includeRegex.test(node.name));
-  } catch (e) {
-    console.error('Invalid include regex:', e);
-  }
+  } catch (e) {}
 }
 
-// 2. 排除關鍵字
 if (excludeParam) {
   try {
     const excludeRegex = buildFilterRegex(excludeParam);
     filteredNodes = filteredNodes.filter(node => !excludeRegex.test(node.name));
-  } catch (e) {
-    console.error('Invalid exclude regex:', e);
-  }
+  } catch (e) {}
 }
 
-// 如果過濾完之後一個節點都沒有剩下，報錯提示使用者
 if (filteredNodes.length === 0) {
-  return new Response('篩選失敗：經過關鍵字過濾後，未剩下任何有效節點。請檢查你的過濾規則。', { 
+  return new Response('篩選失敗：經過關鍵字過濾後，未剩下任何有效節點。', { 
     status: 400, 
     headers: { 'Content-Type': 'text/plain; charset=utf-8' } 
   });
 }
 
-// 對篩選過後的節點進行去重複命名與自動補國旗
 const uniqueNodes = deduplicateNodeNames(filteredNodes);
 
-// 檢查 target 參數
 const target = url.searchParams.get('target');
 
 if (!target) {
@@ -266,32 +246,26 @@ if (!target) {
 <body>
   <div class="container">
     <h1>⚡ 篩選並轉換完成 (${uniqueNodes.length} 節點)</h1>
-    
     <div class="result">
       <div class="result-title">📄 Sing-Box (JSON)</div>
       <div class="result-link">${host}/?url=${encodedUrl}&target=singbox${filterQuery}</div>
     </div>
-    
     <div class="result">
       <div class="result-title">📋 Clash Meta (YAML)</div>
       <div class="result-link">${host}/?url=${encodedUrl}&target=clash${filterQuery}</div>
     </div>
-    
     <div class="result">
       <div class="result-title">🔗 Base64 (原始)</div>
       <div class="result-link">${host}/?url=${encodedUrl}&target=base64${filterQuery}</div>
     </div>
-    
-    <a class="btn" href="${host}//?url=${encodedUrl}&target=singbox${filterQuery}">📥 下載 Sing-Box 訂閱</a>
+    <a class="btn" href="${host}/?url=${encodedUrl}&target=singbox${filterQuery}">📥 下載 Sing-Box 訂閱</a>
   </div>
 </body>
 </html>
 `;
-
   return new Response(htmlInfo, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
 }
 
-// 有 target，生成對應格式
 let result = '';
 let contentType = 'text/plain';
 let fileExt = '.txt';
