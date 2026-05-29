@@ -188,8 +188,9 @@ if (allNodes.length === 0) {
 // 智慧節點過濾
 let filteredNodes = allNodes;
 
+// 🔑 修正版：使用單一正則一步到位替換，防止重複替換導致 RegExp 崩潰
 const buildFilterRegex = (param: string): RegExp => {
-  const safePattern = param.replace(/[xXｘＸ]/g, '[xXｘＸ×]').replace(/×/g, '[xXｘＸ×]');
+  const safePattern = param.replace(/[xXｘＸ×]/g, '[xXｘＸ×]');
   return new RegExp(safePattern, 'i');
 };
 
