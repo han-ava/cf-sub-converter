@@ -1,8 +1,10 @@
 import { ProxyNode } from "./types";
 
+// --- 完美 Base64 解碼 (暴力過濾所有隱形與非法字元) ---
 export function safeBase64Decode(str: string): string {
   try {
     let b64 = str.replace(/-/g, '+').replace(/_/g, '/').replace(/[^A-Za-z0-9+/=]/g, '');
+    
     while (b64.length % 4) b64 += '=';
     
     const binaryStr = atob(b64);
@@ -35,19 +37,23 @@ export function tryDecodeURIComponent(str: string): string {
   }
 }
 
+// --- 自動加入國旗 Emoji 的智慧辨識系統 ---
 export function addFlag(name: string): string {
+  // 1. 智慧防重複：如果名稱中已經包含任何國旗 Emoji (包含 🇺🇳 聯合國國旗)，則跳過不處理
   if (/[\uD83C][\uDDE6-\uDDFF][\uD83C][\uDDE6-\uDDFF]/.test(name)) {
     return name;
   }
 
   const upper = name.toUpperCase();
 
+  // 2. 輔助函數：精準匹配代碼
   const isMatch = (codes: string, keywords: string) => {
     const codeRegex = new RegExp(`(?:^|[^A-Z])(${codes})(?![A-Z])`);
     const keywordRegex = new RegExp(`(${keywords})`);
     return codeRegex.test(upper) || keywordRegex.test(upper);
   };
 
+  // 3. 執行全球國家比對
   if (isMatch('HK|HKG', '香港|深港|HONGKONG|HONG KONG')) return "🇭🇰 " + name;
   if (isMatch('TW|TWN|TPE', '台灣|台湾|台北|新北|彰化')) return "🇹🇼 " + name;
   if (isMatch('JP|JPN|TYO|OSA|NRT|HND|KIX', '日本|东京|大阪|埼玉|沪日|川日|JAPAN')) return "🇯🇵 " + name;
@@ -60,7 +66,6 @@ export function addFlag(name: string): string {
   if (isMatch('EG|EGY|CAI', '埃及|开罗|開羅|EGYPT')) return "🇪🇬 " + name;
   if (isMatch('VN|VNM|HAN|SGN', '越南|河内|河內|西贡|VIETNAM')) return "🇻🇳 " + name;
   
-  // 澳門、柬埔寨、希臘、波蘭國旗補完
   if (isMatch('MO|MAC|MFM', '澳門|澳门')) return "🇲🇴 " + name;
   if (isMatch('KH|KHM|PNH', '柬埔寨|金边|金邊|CAMBODIA')) return "🇰🇭 " + name;
   if (isMatch('GR|GRC|ATH', '希腊|希臘|雅典|GREECE')) return "🇬🇷 " + name;
@@ -78,6 +83,7 @@ export function addFlag(name: string): string {
   if (isMatch('DK|DNK|CPH', '丹麦|丹麥|哥本哈根|DENMARK')) return "🇩🇰 " + name;
   if (isMatch('IE|IRL|DUB', '爱尔兰|愛爾蘭|都柏林|IRELAND')) return "🇮🇪 " + name;
   if (isMatch('PT|PRT|LIS', '葡萄牙|里斯本|PORTUGAL')) return "🇵🇹 " + name;
+  
   if (isMatch('TH|THA|BKK', '泰国|泰國|曼谷|THAILAND')) return "🇹🇭 " + name;
   if (isMatch('MY|MYS|KUL', '马来西亚|馬來西亞|吉隆坡|MALAYSIA')) return "🇲🇾 " + name;
   if (isMatch('PH|PHL|MNL', '物理宾|菲律賓|马尼拉|PHILIPPINES')) return "🇵🇭 " + name;
@@ -85,7 +91,7 @@ export function addFlag(name: string): string {
   if (isMatch('TR|TUR|IST', '土耳其|伊斯坦堡|TURKEY')) return "🇹🇷 " + name;
   if (isMatch('IN|IND|BOM', '印度|孟买|INDIA')) return "🇮🇳 " + name;
   if (isMatch('CA|CAN|YVR|YYZ', '加拿大|多伦多|温哥华|CANADA')) return "🇨🇦 " + name;
-  if (isMatch('AU|AUS|SYD|MEL', '澳大利亚|澳洲|悉尼|墨尔本|AUSTRALIA')) return "🇦🇺 " + name;
+  if (isMatch('AU|AUS|SYD|MEL', '澳大利亚|澳洲|悉尼|墨合本|AUSTRALIA')) return "🇦🇺 " + name;
   if (isMatch('CN|CHN', '中国|回国|国内|北京|上海|廣州|深圳|CHINA')) return "🇨🇳 " + name;
   if (isMatch('NZ|NZL|AKL', '新西兰|紐西蘭|奥克兰|NEW ZEALAND')) return "🇳🇿 " + name;
   if (isMatch('AE|ARE|DXB', '阿联酋|迪拜|杜拜|UAE')) return "🇦🇪 " + name;
@@ -95,9 +101,11 @@ export function addFlag(name: string): string {
   if (isMatch('PK|PAK', '巴基斯坦|PAKISTAN')) return "🇵🇰 " + name;
   if (isMatch('ZA|ZAF|CPT', '南非|开普敦|SOUTH AFRICA')) return "🇿🇦 " + name;
 
-  return name;
+  // 🔑 關鍵改良：若找不到任何對應國家，預設加上 🇺🇳 聯合國國旗以保持排版完美統一！
+  return "🇺🇳 " + name;
 }
 
+// --- 去重複命名與自動整理 ---
 export function deduplicateNodeNames(nodes: ProxyNode[]): ProxyNode[] {
   const seenKey = new Set<string>();
   const nameCount = new Map<string, number>();
