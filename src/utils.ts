@@ -37,9 +37,9 @@ export function tryDecodeURIComponent(str: string): string {
   }
 }
 
-// --- 自動加入國旗 Emoji 的智慧辨識系統 (修復底線與數字問題) ---
+// --- 自動加入國旗 Emoji 的智慧辨識系統 (豪華全球版，支援 40+ 國家與常用機場機場縮寫) ---
 export function addFlag(name: string): string {
-  // 1. 如果名稱中已經包含國旗 Emoji (區域指示符號)，則跳過不處理
+  // 1. 如果名稱中已經包含國旗 Emoji，則跳過不處理
   if (/[\uD83C][\uDDE6-\uDDFF][\uD83C][\uDDE6-\uDDFF]/.test(name)) {
     return name;
   }
@@ -48,27 +48,48 @@ export function addFlag(name: string): string {
 
   // 2. 輔助函數：精準匹配代碼 (允許代碼前後是數字、底線、減號，但不能是英文字母)
   const isMatch = (codes: string, keywords: string) => {
-    // 例如：找 TW，前面不能是字母，後面也不能是字母 (但可以是 _, -, 或數字)
     const codeRegex = new RegExp(`(?:^|[^A-Z])(${codes})(?![A-Z])`);
     const keywordRegex = new RegExp(`(${keywords})`);
     return codeRegex.test(upper) || keywordRegex.test(upper);
   };
 
-  // 3. 執行比對並加上對應國旗
   if (isMatch('HK|HKG', '香港|深港|HONGKONG|HONG KONG')) return "🇭🇰 " + name;
   if (isMatch('TW|TWN|TPE', '台灣|台湾|台北|新北|彰化')) return "🇹🇼 " + name;
-  if (isMatch('JP|JPN|TYO|OSA', '日本|东京|大阪|埼玉|沪日|川日|JAPAN')) return "🇯🇵 " + name;
+  if (isMatch('JP|JPN|TYO|OSA|NRT|HND|KIX', '日本|东京|大阪|埼玉|沪日|川日|JAPAN')) return "🇯🇵 " + name;
   if (isMatch('SG|SGP|SIN', '新加坡|狮城|SINGAPORE')) return "🇸🇬 " + name;
-  if (isMatch('US|USA|LAX|SFO|SJC|SEA|NYC', '美国|美利堅|洛杉矶|圣何塞|硅谷|波特兰|西雅图|AMERICA|UNITED STATES')) return "🇺🇸 " + name;
+  if (isMatch('US|USA|LAX|SFO|SJC|SEA|NYC|JFK|EWR', '美国|美利堅|洛杉矶|圣何塞|硅谷|波特兰|西雅图|AMERICA|UNITED STATES')) return "🇺🇸 " + name;
   if (isMatch('KR|KOR|ICN|SEL', '韩国|首尔|KOREA')) return "🇰🇷 " + name;
-  if (isMatch('UK|GB|GBR|LHR', '英国|伦敦|BRITAIN|ENGLAND')) return "🇬🇧 " + name;
-  if (isMatch('DE|DEU|FRA', '德国|法兰克福|GERMANY')) return "🇩🇪 " + name;
-  if (isMatch('FR|FRA|CDG', '法国|巴黎|FRANCE')) return "🇫🇷 " + name;
-  if (isMatch('RU|RUS', '俄罗斯|莫斯科|RUSSIA')) return "🇷🇺 " + name;
-  if (isMatch('IN|IND', '印度|孟买|INDIA')) return "🇮🇳 " + name;
-  if (isMatch('CA|CAN', '加拿大|多伦多|温哥华|CANADA')) return "🇨🇦 " + name;
-  if (isMatch('AU|AUS', '澳大利亚|澳洲|悉尼|墨尔本|AUSTRALIA')) return "🇦🇺 " + name;
+  if (isMatch('UK|GB|GBR|LHR|LON', '英国|英國|伦敦|BRITAIN|ENGLAND')) return "🇬🇧 " + name;
+  if (isMatch('NL|NLD|AMS', '荷兰|荷蘭|阿姆斯特丹|NETHERLANDS')) return "🇳🇱 " + name;
+  if (isMatch('BR|BRA|SAO', '巴西|圣保罗|聖保羅|BRAZIL')) return "🇧🇷 " + name;
+  if (isMatch('EG|EGY|CAI', '埃及|开罗|開羅|EGYPT')) return "🇪🇬 " + name;
+  if (isMatch('VN|VNM|HAN|SGN', '越南|河内|河內|西贡|VIETNAM')) return "🇻🇳 " + name;
+  if (isMatch('TH|THA|BKK', '泰国|泰國|曼谷|THAILAND')) return "🇹🇭 " + name;
+  if (isMatch('MY|MYS|KUL', '马来西亚|馬來西亞|吉隆坡|MALAYSIA')) return "🇲🇾 " + name;
+  if (isMatch('PH|PHL|MNL', '菲律宾|菲律賓|马尼拉|馬尼拉|PHILIPPINES')) return "🇵🇭 " + name;
+  if (isMatch('ID|IDN|CGK', '印度尼西亚|印尼|雅加达|INDONESIA')) return "🇮🇩 " + name;
+  if (isMatch('TR|TUR|IST', '土耳其|伊斯坦堡|伊斯坦布尔|TURKEY')) return "🇹🇷 " + name;
+  if (isMatch('DE|DEU|FRA', '德国|德國|法兰克福|GERMANY')) return "🇩🇪 " + name;
+  if (isMatch('FR|FRA|CDG', '法国|法國|巴黎|FRANCE')) return "🇫🇷 " + name;
+  if (isMatch('RU|RUS', '俄罗斯|俄羅斯|莫斯科|RUSSIA')) return "🇷🇺 " + name;
+  if (isMatch('IN|IND|BOM', '印度|孟买|INDIA')) return "🇮🇳 " + name;
+  if (isMatch('CA|CAN|YVR|YYZ', '加拿大|多伦多|温哥华|CANADA')) return "🇨🇦 " + name;
+  if (isMatch('AU|AUS|SYD|MEL', '澳大利亚|澳洲|悉尼|墨尔本|AUSTRALIA')) return "🇦🇺 " + name;
   if (isMatch('CN|CHN', '中国|回国|国内|北京|上海|广州|深圳|CHINA')) return "🇨🇳 " + name;
+  if (isMatch('CH|CHE|ZRH', '瑞士|苏黎世|蘇黎世|日内瓦|SWITZERLAND')) return "🇨🇭 " + name;
+  if (isMatch('SE|SWE|ARN', '瑞典|斯德哥尔摩|SWEDEN')) return "🇸🇪 " + name;
+  if (isMatch('NO|NOR|OSL', '挪威|奥斯陆|NORWAY')) return "🇳🇴 " + name;
+  if (isMatch('FI|FIN|HEL', '芬兰|芬蘭|赫尔辛基|FINLAND')) return "🇫🇮 " + name;
+  if (isMatch('DK|DNK|CPH', '丹麦|丹麥|哥本哈根|DENMARK')) return "🇩🇰 " + name;
+  if (isMatch('IE|IRL|DUB', '爱尔兰|愛爾蘭|都柏林|IRELAND')) return "🇮🇪 " + name;
+  if (isMatch('PT|PRT|LIS', '葡萄牙|里斯本|PORTUGAL')) return "🇵🇹 " + name;
+  if (isMatch('NZ|NZL|AKL', '新西兰|紐西蘭|奥克兰|NEW ZEALAND')) return "🇳🇿 " + name;
+  if (isMatch('AE|ARE|DXB', '阿联酋|迪拜|杜拜|UAE')) return "🇦🇪 " + name;
+  if (isMatch('SA|SAU|RUH', '沙特|沙烏地阿拉伯|利雅德|SAUDI')) return "🇸🇦 " + name;
+  if (isMatch('IL|ISR|TLV', '以色列|特拉维夫|ISRAEL')) return "🇮🇱 " + name;
+  if (isMatch('KZ|KAZ', '哈萨克斯坦|哈薩克|KAZAKHSTAN')) return "🇰🇿 " + name;
+  if (isMatch('PK|PAK', '巴基斯坦|PAKISTAN')) return "🇵🇰 " + name;
+  if (isMatch('ZA|ZAF|CPT', '南非|开普敦|SOUTH AFRICA')) return "🇿🇦 " + name;
 
   // 如果找不到國家，直接回傳原名
   return name;
