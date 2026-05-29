@@ -52,8 +52,6 @@ export function toBase64(nodes: ProxyNode[]) {
         const query = params.toString();
         return `ss://${method}:${pass}@${node.server}:${node.port}${query ? '/?' + query : ''}#${encodeURIComponent(node.name)}`;
       }
-      
-      // === TUIC 的反向組合邏輯 ===
       if (node.type === 'tuic') {
         const params = new URLSearchParams();
         if (node.sni) params.set('sni', node.sni);
@@ -64,31 +62,29 @@ export function toBase64(nodes: ProxyNode[]) {
         
         const uuid = node.uuid || '';
         const password = node.password || '';
-        
         return `tuic://${uuid}:${password}@${node.server}:${node.port}?${params.toString()}#${encodeURIComponent(node.name)}`;
       }
-
-      // === AnyTLS 的反向組合邏輯 ===
       if (node.type === 'anytls') {
         const params = new URLSearchParams();
         params.set('security', 'tls');
         if (node.sni) params.set('sni', node.sni);
-        
-        // 處理憑證驗證開關
         params.set('insecure', node.skipCertVerify ? '1' : '0');
         params.set('allowInsecure', node.skipCertVerify ? '1' : '0');
-        
         if (node.fingerprint) params.set('fp', node.fingerprint);
         if (node.alpn && node.alpn.length > 0) params.set('alpn', node.alpn.join(','));
         params.set('type', 'tcp'); 
-
         return `anytls://${node.password}@${node.server}:${node.port}?${params.toString()}#${encodeURIComponent(node.name)}`;
       }
-
+      // 💥 【全新：Trojan 鏈接拼接邏輯】
+      if (node.type === 'trojan') {
+        const params = new URLSearchParams();
+        if (node.sni) params.set('sni', node.sni);
+        if (node.skipCertVerify) params.set('allowInsecure', '1');
+        return `trojan://${node.password}@${node.server}:${node.port}?${params.toString()}#${encodeURIComponent(node.name)}`;
+      }
       return null;
     } catch { return null; }
   }).filter(l => l !== null);
-  
   return utf8ToBase64(links.join('\n'));
 }
 
@@ -137,7 +133,5 @@ export async function toClashWithTemplate(nodes: ProxyNode[]) {
       proxyNames.forEach(name => { if (!group.proxies.includes(name)) group.proxies.push(name); });
     });
   }
-  
-  // 關鍵：noRefs: true 禁止錨點引用，這是 OpenClash 不會報錯的關鍵
   return yaml.dump(config, { indent: 2, noRefs: true });
 }
