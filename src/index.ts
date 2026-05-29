@@ -167,16 +167,24 @@ if (allNodes.length === 0) {
   });
 }
 
-// 💥 【全新功能：智慧節點過濾】
+// 💥 【全新功能：智慧節點過濾 (已修復 x 與乘號 × 衝突問題)】
 const includeParam = url.searchParams.get('include') || '';
 const excludeParam = url.searchParams.get('exclude') || '';
 
 let filteredNodes = allNodes;
 
+// 🔑 關鍵改良：自動將英文字母 x/X、全形 ｘ/Ｘ 與數學乘號 × 互通，解決過濾 5x 失敗的問題
+const buildFilterRegex = (param: string): RegExp => {
+  const safePattern = param
+    .replace(/[xXｘＸ]/g, '[xXｘＸ×]')
+    .replace(/×/g, '[xXｘＸ×]');
+  return new RegExp(safePattern, 'i');
+};
+
 // 1. 僅保留關鍵字
 if (includeParam) {
   try {
-    const includeRegex = new RegExp(includeParam, 'i');
+    const includeRegex = buildFilterRegex(includeParam);
     filteredNodes = filteredNodes.filter(node => includeRegex.test(node.name));
   } catch (e) {
     console.error('Invalid include regex:', e);
@@ -186,7 +194,7 @@ if (includeParam) {
 // 2. 排除關鍵字
 if (excludeParam) {
   try {
-    const excludeRegex = new RegExp(excludeParam, 'i');
+    const excludeRegex = buildFilterRegex(excludeParam);
     filteredNodes = filteredNodes.filter(node => !excludeRegex.test(node.name));
   } catch (e) {
     console.error('Invalid exclude regex:', e);
