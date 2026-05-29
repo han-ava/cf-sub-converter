@@ -419,20 +419,23 @@ export const HTML_PAGE = `
       
       const host = window.location.origin;
       const shortCode = document.getElementById('shortCode').value.trim();
-      // ✨ 取得使用者輸入的過濾關鍵字
       const include = document.getElementById('includeKeywords').value.trim();
       const exclude = document.getElementById('excludeKeywords').value.trim();
       
       try {
         let baseUrl = '';
         if (shortCode) {
-          await fetch('/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: shortCode, content: raw }) });
+          // 🔑 關鍵：生成短連結時，將保留/排除規則一併送去雲端 KV 保存
+          await fetch('/save', { 
+            method: 'POST', 
+            headers: { 'Content-Type': 'application/json' }, 
+            body: JSON.stringify({ path: shortCode, content: raw, include, exclude }) 
+          });
           baseUrl = host + '/' + shortCode;
         } else {
           baseUrl = host + '/?url=' + encodeURIComponent(raw);
         }
         
-        // 將過濾參數編碼後拼接到生成的訂閱網址中
         let queryParams = '';
         if (include) queryParams += '&include=' + encodeURIComponent(include);
         if (exclude) queryParams += '&exclude=' + encodeURIComponent(exclude);
