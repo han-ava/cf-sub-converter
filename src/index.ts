@@ -8,14 +8,22 @@ export default {
 async fetch(request: Request, env: Env, ctx: any): Promise<Response> {
 const url = new URL(request.url);
 
-// 1. POST /save (儲存短連結到 KV)
+// 1. POST /save (儲存短連結到 KV，智慧儲存過濾規則)
 if (request.method === 'POST' && url.pathname === '/save') {
   try {
     const body: any = await request.json();
     if (!body.path || !body.content) return new Response('Missing path or content', { status: 400 });
-    await env.SUB_CACHE.put(body.path, body.content);
     
-    const redirectUrl = `/?url=${encodeURIComponent(body.content)}&target=singbox`;
+    // 💥 升級：將過濾規則一併打包存入 KV 中
+    const saveData = {
+      content: body.content,
+      include: body.include || '',
+      exclude: body.exclude || ''
+    };
+    await env.SUB_CACHE.put(body.path, JSON.stringify(saveData));
+    
+    // 儲存成功後，自動重定向到結果頁面
+    const redirectUrl = `/?url=${encodeURIComponent(body.content)}&target=singbox&include=${encodeURIComponent(body.include || '')}&exclude=${encodeURIComponent(body.exclude || '')}`;
     return new Response(null, { 
       status: 302, 
       headers: { 'Location': redirectUrl } 
@@ -95,12 +103,27 @@ if (request.method === 'DELETE' && url.pathname === '/favs') {
 
 // 3. GET /path (讀取短連結)
 let urlParam = url.searchParams.get('url') || '';
+let includeParam = url.searchParams.get('include') || '';
+let excludeParam = url.searchParams.get('exclude') || '';
+
 const path = decodeURIComponent(url.pathname.slice(1)); 
 
+// 優先從 KV 讀取短連結內容 (智慧相容舊版純文字與新版 JSON 格式)
 if (path && path !== 'favicon.ico' && path !== '') {
-  const storedContent = await env.SUB_CACHE.get(path);
-  if (storedContent) { 
-    urlParam = storedContent; 
+  const stored = await env.SUB_CACHE.get(path);
+  if (stored) { 
+    try {
+      const parsed = JSON.parse(stored);
+      if (parsed && parsed.content) {
+        urlParam = parsed.content;
+        // 💥 智慧繼承：如果客戶端 URL 沒有手動代入參數，就自動採用短連結在雲端存好的規則
+        if (!includeParam) includeParam = parsed.include || '';
+        if (!excludeParam) excludeParam = parsed.exclude || '';
+      }
+    } catch (e) {
+      // 相容舊版純文字短連結
+      urlParam = stored; 
+    }
   }
 }
 
