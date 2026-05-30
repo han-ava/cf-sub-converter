@@ -1,530 +1,395 @@
-export const REMOTE_CONFIG = {
-  singbox: 'https://raw.githubusercontent.com/sammy0101/cf-sub-converter/refs/heads/main/Sing-Box_Rules.JSON',
-  clash: 'https://raw.githubusercontent.com/sammy0101/cf-sub-converter/refs/heads/main/Clash_Rules.YAML'
+import { Env, ProxyNode } from './types';
+import { HTML_PAGE } from './constants';
+import { parseContent } from './parser';
+import { toSingBoxWithTemplate, toClashWithTemplate, toBase64 } from './generator';
+import { deduplicateNodeNames } from './utils';
+
+export default {
+async fetch(request: Request, env: Env, ctx: any): Promise<Response> {
+const url = new URL(request.url);
+
+// 1. POST /save (儲存短連結到 KV，智慧儲存過濾與重命名規則)
+if (request.method === 'POST' && url.pathname === '/save') {
+  try {
+    const body: any = await request.json();
+    if (!body.path || !body.content) return new Response('Missing path or content', { status: 400 });
+    
+    // 儲存完整配置 (資料來源 + 保留 + 排除 + 重命名)
+    const saveData = {
+      content: body.content,
+      include: body.include || '',
+      exclude: body.exclude || '',
+      rename: body.rename || ''
+    };
+    await env.SUB_CACHE.put(body.path, JSON.stringify(saveData));
+    
+    // 儲存成功後，自動重定向到結果頁面
+    const redirectUrl = `/?url=${encodeURIComponent(body.content)}&target=singbox&include=${encodeURIComponent(body.include || '')}&exclude=${encodeURIComponent(body.exclude || '')}&rename=${encodeURIComponent(body.rename || '')}`;
+    return new Response(null, { 
+      status: 302, 
+      headers: { 'Location': redirectUrl } 
+    });
+  } catch (e) { return new Response('Error saving profile', { status: 500 }); }
+}
+
+// 2. KV 收藏 API (支援 include、exclude 與 rename 欄位)
+const FAVS_KEY = 'favorites';
+
+async function getFavs(): Promise<any[]> {
+  const data = await env.SUB_CACHE.get(FAVS_KEY);
+  return data ? JSON.parse(data) : [];
+}
+
+async function saveFavs(favs: any[]): Promise<void> {
+  await env.SUB_CACHE.put(FAVS_KEY, JSON.stringify(favs));
+}
+
+// GET /favs (讀取收藏)
+if (request.method === 'GET' && url.pathname === '/favs') {
+  const favs = await getFavs();
+  return new Response(JSON.stringify(favs), { 
+    headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } 
+  });
+}
+
+// POST /favs (新增收藏 - 支援過濾與重命名)
+if (request.method === 'POST' && url.pathname === '/favs') {
+  try {
+    const body: any = await request.json();
+    if (!body.name || !body.url) return new Response('Missing name or url', { status: 400 });
+    const favs = await getFavs();
+    favs.push({ 
+      name: body.name, 
+      url: body.url, 
+      include: body.include || '', 
+      exclude: body.exclude || '',
+      rename: body.rename || ''
+    });
+    await saveFavs(favs);
+    return new Response('OK', { status: 200 });
+  } catch (e) { return new Response('Error saving favorite', { status: 500 }); }
+}
+
+// PUT /favs (更新收藏 - 支援過濾與重命名)
+if (request.method === 'PUT' && url.pathname === '/favs') {
+  try {
+    const body: any = await request.json();
+    if (body.index === undefined || !body.name || !body.url) return new Response('Missing data', { status: 400 });
+    const favs = await getFavs();
+    if (body.index >= 0 && body.index < favs.length) {
+      favs[body.index] = { 
+        name: body.name, 
+        url: body.url, 
+        include: body.include || '', 
+        exclude: body.exclude || '',
+        rename: body.rename || ''
+      };
+      await saveFavs(favs);
+    }
+    return new Response('OK', { status: 200 });
+  } catch (e) { return new Response('Error updating favorite', { status: 500 }); }
+}
+
+// DELETE /favs (刪除收藏)
+if (request.method === 'DELETE' && url.pathname === '/favs') {
+  try {
+    const body: any = await request.json();
+    if (body.index === undefined) return new Response('Missing index', { status: 400 });
+    const favs = await getFavs();
+    if (body.index >= 0 && body.index < favs.length) {
+      favs.splice(body.index, 1);
+      await saveFavs(favs);
+    }
+    return new Response('OK', { status: 200 });
+  } catch (e) { return new Response('Error deleting favorite', { status: 500 }); }
+}
+
+// 3. GET /path (讀取短連結，同時取得對應規則)
+let urlParam = url.searchParams.get('url') || '';
+let includeParam = url.searchParams.get('include') || '';
+let excludeParam = url.searchParams.get('exclude') || '';
+let renameParam = url.searchParams.get('rename') || '';
+
+const path = decodeURIComponent(url.pathname.slice(1)); 
+
+if (path && path !== 'favicon.ico' && path !== '') {
+  const stored = await env.SUB_CACHE.get(path);
+  if (stored) { 
+    try {
+      const parsed = JSON.parse(stored);
+      if (parsed && parsed.content) {
+        urlParam = parsed.content;
+        if (!includeParam) includeParam = parsed.include || '';
+        if (!excludeParam) excludeParam = parsed.exclude || '';
+        if (!renameParam) renameParam = parsed.rename || '';
+      }
+    } catch (e) {
+      // 相容舊版純文字短連結
+      urlParam = stored; 
+    }
+  }
+}
+
+// 顯示首頁 (沒有 url 參數也沒有短連結)
+if (!urlParam || urlParam.trim() === '') {
+  return new Response(HTML_PAGE, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+}
+
+// 4. 解析並下載 (支援流量資訊透傳與合併)
+const inputs = urlParam.split(/[\n\r|]+/); 
+const allNodes: ProxyNode[] = [];
+const errors: string[] = [];
+
+// 流量資訊累加變數
+let totalUpload = 0;
+let totalDownload = 0;
+let totalTotal = 0;
+let minExpire = 0;
+let hasTrafficInfo = false;
+
+await Promise.all(inputs.map(async (input) => { 
+  const trimmed = input.trim(); 
+  if (!trimmed) return;
+  
+  if (trimmed.startsWith('http')) { 
+    try { 
+      const separator = trimmed.includes('?') ? '&' : '?';
+      const fetchUrl = `${trimmed}${separator}t=${Date.now()}`;
+      
+      const resp = await fetch(fetchUrl, { 
+        headers: { 
+          'User-Agent': 'v2rayNG/1.8.5',
+          'Accept': '*/*'
+        } 
+      }); 
+      
+      if (resp.ok) { 
+        const text = await resp.text(); 
+        
+        // 機場流量資訊 (subscription-userinfo) 解析與累加 [1]
+        const userInfo = resp.headers.get('subscription-userinfo');
+        if (userInfo) {
+          hasTrafficInfo = true;
+          const uploadMatch = userInfo.match(/upload=(\d+)/i);
+          const downloadMatch = userInfo.match(/download=(\d+)/i);
+          const totalMatch = userInfo.match(/total=(\d+)/i);
+          const expireMatch = userInfo.match(/expire=(\d+)/i);
+
+          totalUpload += uploadMatch ? parseInt(uploadMatch[1]) : 0;
+          totalDownload += downloadMatch ? parseInt(downloadMatch[1]) : 0;
+          totalTotal += totalMatch ? parseInt(totalMatch[1]) : 0;
+          
+          const expireVal = expireMatch ? parseInt(expireMatch[1]) : 0;
+          if (expireVal > 0) {
+            if (minExpire === 0 || expireVal < minExpire) {
+              minExpire = expireVal; // 取多個訂閱中最先到期的時間
+            }
+          }
+        }
+
+        if (text.trim().startsWith('<')) {
+           errors.push(`❌ [${trimmed}]\n失敗原因: 伺服器回傳了 HTML 網頁而不是訂閱代碼。`);
+        } else {
+           try {
+             const parsed = await parseContent(text);
+             allNodes.push(...parsed);
+           } catch(err: any) {
+             errors.push(`⚠️ [${trimmed}]\n失敗原因: ${err.message}\n內容預覽: ${text.substring(0, 100)}...`);
+           }
+        }
+      } else {
+        errors.push(`❌ [${trimmed}]\n失敗原因: HTTP 狀態碼 ${resp.status} ${resp.statusText}`);
+      }
+    } catch (e: any) {
+      errors.push(`❌ [${trimmed}]\n連線錯誤: ${e.message}`);
+    } 
+  } else { 
+    try {
+      const parsed = await parseContent(trimmed);
+      allNodes.push(...parsed); 
+    } catch(err: any) {
+      errors.push(`⚠️ [手動輸入內容]\n失敗原因: ${err.message}`);
+    }
+  }
+}));
+
+if (allNodes.length === 0) {
+  const errorReport = `未解析到任何有效節點。\n\n🔍 詳細錯誤診斷報告：\n-------------------------\n${errors.join('\n\n-------------------------\n')}`;
+  return new Response(errorReport, { 
+    status: 400, 
+    headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Access-Control-Allow-Origin': '*' } 
+  });
+}
+
+// 智慧節點與過濾
+let filteredNodes = allNodes;
+
+// 💥【全新功能：1. 節點名稱智慧替換 (支援 DEL- 與 - 分隔)】
+// 順序最優先，必須在篩選前執行，才能讓直連對準乾淨的名字
+if (renameParam) {
+  try {
+    const rules = renameParam.split('|');
+    for (const rule of rules) {
+      const trimmedRule = rule.trim();
+      if (!trimmedRule) continue;
+
+      if (trimmedRule.startsWith('DEL-')) {
+        // 刪除模式：例如 DEL-[69云] -> 直接將 "[69云]" 刪除
+        const search = trimmedRule.substring(4); // 取得 "DEL-" 後面的關鍵字
+        if (search) {
+          filteredNodes.forEach(node => {
+            if (node.name) {
+              node.name = node.name.split(search).join('');
+            }
+          });
+        }
+      } else if (trimmedRule.includes('-')) {
+        // 替換模式：例如 移动优化-專線 -> 將 "移动优化" 替換為 "專線"
+        // 🔑 改良：尋找第一個 '-' 作為分隔符號，完美相容
+        const index = trimmedRule.indexOf('-');
+        const search = trimmedRule.substring(0, index).trim();
+        const replace = trimmedRule.substring(index + 1).trim();
+        if (search && replace !== undefined) {
+          filteredNodes.forEach(node => {
+            if (node.name) {
+              node.name = node.name.split(search).join(replace);
+            }
+          });
+        }
+      }
+    }
+  } catch (e) {
+    console.error('Rename replacement failed:', e);
+  }
+}
+
+// 💥【2. 智慧保留與排除過濾】
+const buildFilterRegex = (param: string): RegExp => {
+  const safePattern = param.replace(/[xXｘＸ]/g, '[xXｘＸ×]').replace(/×/g, '[xXｘＸ×]');
+  return new RegExp(safePattern, 'i');
 };
 
-export const HTML_PAGE = `
+// 僅保留關鍵字
+if (includeParam) {
+  try {
+    const includeRegex = buildFilterRegex(includeParam);
+    filteredNodes = filteredNodes.filter(node => includeRegex.test(node.name));
+  } catch (e) {
+    console.error('Invalid include regex:', e);
+  }
+}
+
+// 排除關鍵字
+if (excludeParam) {
+  try {
+    const excludeRegex = buildFilterRegex(excludeParam);
+    filteredNodes = filteredNodes.filter(node => !excludeRegex.test(node.name));
+  } catch (e) {
+    console.error('Invalid exclude regex:', e);
+  }
+}
+
+if (filteredNodes.length === 0) {
+  return new Response('篩選與替換後，未剩下任何有效節點。', { 
+    status: 400, 
+    headers: { 'Content-Type': 'text/plain; charset=utf-8' } 
+  });
+}
+
+// 對篩選過後的節點進行 智慧排序、去重複命名、自動補國旗 (聯合國國旗)
+const uniqueNodes = deduplicateNodeNames(filteredNodes);
+
+const target = url.searchParams.get('target');
+
+if (!target) {
+  const host = `https://${url.host}`;
+  const encodedUrl = encodeURIComponent(urlParam);
+  let filterQuery = '';
+  if (includeParam) filterQuery += `&include=${encodeURIComponent(includeParam)}`;
+  if (excludeParam) filterQuery += `&exclude=${encodeURIComponent(excludeParam)}`;
+  if (renameParam) filterQuery += `&rename=${encodeURIComponent(renameParam)}`;
+
+  const htmlInfo = `
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SubConverter Pro | 專業訂閱轉換器</title>
-  
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-  
+  <title>訂閱轉換結果</title>
   <style>
-    :root {
-      --bg-app: #0f172a;
-      --bg-panel: #1e293b;
-      --bg-input: #0f172a;
-      --bg-hover: #334155;
-      --text-main: #f8fafc;
-      --text-muted: #94a3b8;
-      --border: #334155;
-      --border-focus: #3b82f6;
-      --primary: #3b82f6;
-      --primary-hover: #2563eb;
-      --success: #10b981;
-      --danger: #ef4444;
-      --radius-sm: 6px;
-      --radius-md: 10px;
-      --radius-lg: 16px;
-      --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-    }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      background-color: var(--bg-app); color: var(--text-main); line-height: 1.5; min-height: 100vh; -webkit-font-smoothing: antialiased;
-    }
-    svg { width: 1.25rem; height: 1.25rem; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-    .header {
-      background-color: var(--bg-panel); border-bottom: 1px solid var(--border); padding: 1rem 2rem; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 50;
-    }
-    .brand { display: flex; align-items: center; gap: 12px; font-weight: 700; font-size: 1.25rem; letter-spacing: -0.025em; }
-    .brand svg { color: var(--primary); width: 1.75rem; height: 1.75rem; }
-    .badge { background: rgba(59, 130, 246, 0.1); color: var(--primary); font-size: 0.75rem; padding: 4px 8px; border-radius: 9999px; font-weight: 600; border: 1px solid rgba(59, 130, 246, 0.2); }
-    .container { max-width: 860px; margin: 2.5rem auto; padding: 0 1.5rem; display: flex; flex-direction: column; gap: 1.5rem; }
-    .panel { background-color: var(--bg-panel); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 1.75rem; box-shadow: var(--shadow); }
-    .panel-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.25rem; }
-    .panel-title { font-size: 1.1rem; font-weight: 600; display: flex; align-items: center; gap: 8px; }
-    .panel-title svg { color: var(--text-muted); }
-    .form-group { margin-bottom: 1.25rem; }
-    .form-group:last-child { margin-bottom: 0; }
-    label { display: block; font-size: 0.875rem; font-weight: 500; color: var(--text-muted); margin-bottom: 0.5rem; }
-    textarea, input[type="text"] {
-      width: 100%; background-color: var(--bg-input); border: 1px solid var(--border); color: var(--text-main); border-radius: var(--radius-md); padding: 0.875rem 1rem; font-size: 0.95rem; transition: all 0.2s ease; outline: none;
-    }
-    textarea { font-family: 'JetBrains Mono', monospace; font-size: 0.875rem; min-height: 140px; resize: vertical; line-height: 1.6; }
-    textarea::placeholder, input::placeholder { color: #475569; }
-    textarea:focus, input[type="text"]:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15); }
-    .hint { font-size: 0.8rem; color: var(--text-muted); margin-top: 0.4rem; display: flex; align-items: center; gap: 4px; }
-    .btn {
-      display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 0.75rem 1.25rem; border-radius: var(--radius-md); font-weight: 600; font-size: 0.95rem; border: none; cursor: pointer; transition: all 0.2s ease; user-select: none;
-    }
-    .btn-primary { background-color: var(--primary); color: white; width: 100%; padding: 1rem; font-size: 1.05rem; }
-    .btn-primary:hover:not(:disabled) { background-color: var(--primary-hover); transform: translateY(-1px); }
-    .btn-primary:disabled { opacity: 0.7; cursor: not-allowed; }
-    .btn-icon { background: var(--bg-input); color: var(--text-main); border: 1px solid var(--border); padding: 0.6rem; border-radius: var(--radius-sm); }
-    .btn-icon:hover { background: var(--bg-hover); color: var(--primary); border-color: var(--text-muted); }
-    .btn-ghost { background: transparent; color: var(--text-muted); padding: 0.5rem 0.75rem; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 0.85rem;}
-    .btn-ghost:hover { background: var(--bg-hover); color: var(--text-main); }
-    .btn-danger:hover { color: var(--danger); border-color: rgba(239, 68, 68, 0.3); background: rgba(239, 68, 68, 0.1); }
-    .results-wrapper { display: none; animation: slideUp 0.4s ease forwards; }
-    .results-wrapper.show { display: block; }
-    .result-item {
-      display: flex; align-items: center; gap: 1rem; background-color: var(--bg-input); border: 1px solid var(--border); padding: 1rem; border-radius: var(--radius-md); margin-bottom: 1rem; transition: border-color 0.2s;
-    }
-    .result-item:hover { border-color: var(--text-muted); }
-    .result-icon-box {
-      width: 44px; height: 44px; border-radius: var(--radius-sm); background-color: var(--bg-panel); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; color: var(--primary);
-    }
-    .result-info { flex: 1; min-width: 0; }
-    .result-name { font-weight: 600; font-size: 0.95rem; margin-bottom: 2px; color: var(--text-main); }
-    .result-desc { font-size: 0.8rem; color: var(--text-muted); }
-    .result-input-wrapper { flex: 2; position: relative; }
-    .result-input-wrapper input { width: 100%; padding: 0.6rem 0.8rem; background: var(--bg-panel); font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text-muted); }
-    .result-actions { display: flex; gap: 6px; }
-    .fav-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 1rem; margin-top: 1rem; }
-    .fav-card {
-      background: var(--bg-input); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 1.25rem; cursor: pointer; transition: all 0.2s ease; position: relative;
-    }
-    .fav-card:hover { border-color: var(--primary); transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
-    .fav-title { font-weight: 600; font-size: 0.95rem; margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
-    .fav-url { font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .fav-actions { display: flex; gap: 8px; margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border); justify-content: flex-end; }
-    .empty-state { text-align: center; padding: 2rem; color: var(--text-muted); font-size: 0.9rem; border: 1px dashed var(--border); border-radius: var(--radius-md); }
-    .modal-overlay {
-      position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(15, 23, 42, 0.8); backdrop-filter: blur(4px); z-index: 100; display: none; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.2s ease;
-    }
-    .modal-overlay.show { display: flex; opacity: 1; }
-    .modal-content {
-      background: var(--bg-panel); border: 1px solid var(--border); border-radius: var(--radius-lg); width: 90%; max-width: 480px; padding: 2rem; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5); transform: scale(0.95); transition: transform 0.2s ease;
-    }
-    .modal-overlay.show .modal-content { transform: scale(1); }
-    .modal-title { font-size: 1.25rem; font-weight: 600; margin-bottom: 1.5rem; }
-    .modal-footer { display: flex; gap: 12px; margin-top: 2rem; justify-content: flex-end; }
-    .modal-btn { padding: 0.6rem 1.25rem; border-radius: var(--radius-md); font-weight: 500; font-size: 0.9rem; cursor: pointer; border: none; }
-    .modal-btn-cancel { background: var(--bg-input); color: var(--text-main); border: 1px solid var(--border); }
-    .modal-btn-cancel:hover { background: var(--bg-hover); }
-    .modal-btn-save { background: var(--primary); color: white; }
-    .modal-btn-save:hover { background: var(--primary-hover); }
-    .toast {
-      position: fixed; bottom: 2rem; left: 50%; transform: translateX(-50%) translateY(20px); background: var(--bg-panel); color: var(--text-main); border: 1px solid var(--border); padding: 0.8rem 1.5rem; border-radius: 999px; font-weight: 500; font-size: 0.9rem; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3); opacity: 0; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); z-index: 200; display: flex; align-items: center; gap: 8px;
-    }
-    .toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
-    .toast.success svg { color: var(--success); }
-    @keyframes slideUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-    @keyframes spin { to { transform: rotate(360deg); } }
-    .spinner { animation: spin 1s linear infinite; }
-    @media (max-width: 640px) { .result-item { flex-direction: column; align-items: stretch; } .result-icon-box { display: none; } .result-info { margin-bottom: 0.5rem; } }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0f172a; color: #f8fafc; padding: 40px 20px; display: flex; justify-content: center; }
+    .container { background: #1e293b; padding: 2rem; border-radius: 16px; max-width: 600px; width: 100%; }
+    h1 { margin: 0 0 1.5rem 0; font-size: 1.5rem; text-align: center; }
+    .result { background: #0f172a; padding: 1rem; border-radius: 8px; margin-bottom: 1rem; }
+    .result-title { font-weight: 600; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 8px; }
+    .result-link { background: #334155; padding: 0.8rem; border-radius: 6px; word-break: break-all; font-family: monospace; font-size: 0.85rem; }
+    .btn { display: block; background: #22c55e; color: white; text-align: center; padding: 1rem; border-radius: 8px; text-decoration: none; font-weight: 600; margin-top: 1.5rem; }
+    .btn:hover { background: #16a34a; }
   </style>
 </head>
 <body>
-
-  <header class="header">
-    <div class="brand">
-      <svg viewBox="0 0 24 24"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"></path></svg>
-      SubConverter Pro
-    </div>
-    <span class="badge">v2.5.0</span>
-  </header>
-
   <div class="container">
-    <main class="panel">
-      <div class="panel-header">
-        <h2 class="panel-title">
-          <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
-          資料來源設定
-        </h2>
-      </div>
-      
-      <div class="form-group">
-        <label for="urlInput">節點連結或訂閱地址 (支援多筆換行)</label>
-        <textarea id="urlInput" placeholder="vmess://...\nvless://...\ntuic://...\nanytls://...\nhttps://example.com/sub"></textarea>
-      </div>
-
-      <div class="form-group" style="margin-top: 1.5rem;">
-        <label for="includeKeywords">僅保留關鍵字節點 (選填，多個用 | 分隔)</label>
-        <input type="text" id="includeKeywords" placeholder="例如: 🇭🇰|台灣|TW">
-        <div class="hint">
-          <svg viewBox="0 0 24 24" style="width:14px;height:14px"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
-          只保留名稱符合關鍵字的節點。例如輸入 <code>HK|TW</code>。
-        </div>
-      </div>
-
-      <div class="form-group" style="margin-top: 1.5rem;">
-        <label for="excludeKeywords">排除關鍵字節點 (選填，多個用 | 分隔)</label>
-        <input type="text" id="excludeKeywords" placeholder="例如: 流量|官網|重置|5x">
-        <div class="hint">
-          <svg viewBox="0 0 24 24" style="width:14px;height:14px"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
-          排除名稱符合關鍵字的節點（過濾垃圾廣告）。例如輸入 <code>5x</code>。
-        </div>
-      </div>
-
-      <!-- 💥 新增：節點名稱替換 -->
-      <div class="form-group" style="margin-top: 1.5rem;">
-        <label for="renameKeywords">節點名稱替換 (選填，格式: 尋找,替換;尋找,替換)</label>
-        <input type="text" id="renameKeywords" placeholder="例如: [69云],;移动优化,專線">
-        <div class="hint">
-          <svg viewBox="0 0 24 24" style="width:14px;height:14px"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
-          用來清除名稱中的機場廣告。多組替換請用分號 <code>;</code> 隔開。
-        </div>
-      </div>
-      
-      <div class="form-group" style="margin-top: 1.5rem;">
-        <label for="shortCode">自訂路徑短連結 (選填)</label>
-        <input type="text" id="shortCode" placeholder="例如: my-sub-2026">
-        <div class="hint">
-          <svg viewBox="0 0 24 24" style="width:14px;height:14px"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
-          設定後將儲存於雲端，生成固定不變的短連結
-        </div>
-      </div>
-      
-      <button class="btn btn-primary" id="generateBtn" onclick="generate()" style="margin-top: 2rem;">
-        <svg viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
-        <span>執行轉換</span>
-      </button>
-    </main>
-
-    <section class="results-wrapper" id="results">
-      <div class="panel">
-        <div class="panel-header">
-          <h2 class="panel-title">
-            <svg viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
-            轉換結果
-          </h2>
-        </div>
-        
-        <div class="result-item">
-          <div class="result-icon-box"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg></div>
-          <div class="result-info">
-            <div class="result-name">Sing-Box</div>
-            <div class="result-desc">JSON 格式 · 適用 Surge, v2rayN 等</div>
-          </div>
-          <div class="result-input-wrapper"><input type="text" id="singboxUrl" readonly></div>
-          <div class="result-actions">
-            <button class="btn-icon" onclick="copyResult('singboxUrl')" title="複製連結"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg></button>
-            <button class="btn-icon" onclick="showQr('singboxUrl')" title="顯示 QR Code"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg></button>
-          </div>
-        </div>
-
-        <div class="result-item">
-          <div class="result-icon-box"><svg viewBox="0 0 24 24"><path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z"></path><line x1="16" y1="8" x2="2" y2="22"></line><line x1="17.5" y1="15" x2="9" y2="6.5"></line></svg></div>
-          <div class="result-info">
-            <div class="result-name">Clash Meta</div>
-            <div class="result-desc">YAML 格式 · 適用 Clash Verge, ClashX</div>
-          </div>
-          <div class="result-input-wrapper"><input type="text" id="clashUrl" readonly></div>
-          <div class="result-actions">
-            <button class="btn-icon" onclick="copyResult('clashUrl')" title="複製連結"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg></button>
-            <button class="btn-icon" onclick="showQr('clashUrl')" title="顯示 QR Code"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg></button>
-          </div>
-        </div>
-
-        <div class="result-item">
-          <div class="result-icon-box"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg></div>
-          <div class="result-info">
-            <div class="result-name">Base64 (原始節點)</div>
-            <div class="result-desc">Base64 格式 · 適用 V2RayNG, PassWall</div>
-          </div>
-          <div class="result-input-wrapper"><input type="text" id="base64Url" readonly></div>
-          <div class="result-actions">
-            <button class="btn-icon" onclick="copyResult('base64Url')" title="複製連結"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg></button>
-            <button class="btn-icon" onclick="showQr('base64Url')" title="顯示 QR Code"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg></button>
-          </div>
-        </div>
-
-      </div>
-    </section>
-
-    <section class="panel">
-      <div class="panel-header" style="margin-bottom: 0;">
-        <h2 class="panel-title">
-          <svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
-          已儲存的配置
-        </h2>
-        <button class="btn btn-ghost" onclick="openModal()">
-          <svg viewBox="0 0 24 24" style="width:16px;height:16px"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-          新增配置
-        </button>
-      </div>
-      
-      <div id="favGrid" class="fav-grid">
-        <div class="empty-state">目前尚未儲存任何配置</div>
-      </div>
-    </section>
-  </div>
-
-  <div class="modal-overlay" id="modal">
-    <div class="modal-content">
-      <h3 class="modal-title" id="modalTitle">新增配置</h3>
-      <div class="form-group">
-        <label>配置名稱</label>
-        <input type="text" id="favName" placeholder="例如: 公司專線">
-      </div>
-      <div class="form-group">
-        <label>節點內容 / 訂閱連結</label>
-        <textarea id="favUrl" placeholder="貼上節點內容..."></textarea>
-      </div>
-      <div class="form-group">
-        <label>保留關鍵字 (選填)</label>
-        <input type="text" id="favInclude" placeholder="例如: HK|TW">
-      </div>
-      <div class="form-group">
-        <label>排除關鍵字 (選填)</label>
-        <input type="text" id="favExclude" placeholder="例如: 流量|重置|官網">
-      </div>
-      <!-- 💥 新增：自訂重命名 -->
-      <div class="form-group">
-        <label>節點名稱替換 (選填)</label>
-        <input type="text" id="favRename" placeholder="例如: [69云],;移动优化,專線">
-      </div>
-      <div class="modal-footer">
-        <button class="modal-btn modal-btn-cancel" onclick="closeModal()">取消</button>
-        <button class="modal-btn modal-btn-save" onclick="saveFav()">儲存配置</button>
-      </div>
+    <h1>⚡ 篩選並轉換完成 (${uniqueNodes.length} 節點)</h1>
+    <div class="result">
+      <div class="result-title">📄 Sing-Box (JSON)</div>
+      <div class="result-link">${host}/?url=${encodedUrl}&target=singbox${filterQuery}</div>
     </div>
+    <div class="result">
+      <div class="result-title">📋 Clash Meta (YAML)</div>
+      <div class="result-link">${host}/?url=${encodedUrl}&target=clash${filterQuery}</div>
+    </div>
+    <div class="result">
+      <div class="result-title">🔗 Base64 (原始)</div>
+      <div class="result-link">${host}/?url=${encodedUrl}&target=base64${filterQuery}</div>
+    </div>
+    <a class="btn" href="${host}/?url=${encodedUrl}&target=singbox${filterQuery}">📥 下載 Sing-Box 訂閱</a>
   </div>
-
-  <div class="toast" id="toast">
-    <svg viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
-    <span id="toastMsg">提示訊息</span>
-  </div>
-
-  <script>
-    let favs = [];
-    
-    async function loadFavs() {
-      try {
-        const resp = await fetch('/favs');
-        if (resp.ok) favs = await resp.json();
-        renderFavs();
-      } catch(e) { console.error('Failed to load favs'); }
-    }
-    
-    function renderFavs() {
-      const grid = document.getElementById('favGrid');
-      if (favs.length === 0) {
-        grid.style.display = 'block';
-        grid.innerHTML = '<div class="empty-state">目前尚未儲存任何配置</div>';
-        return;
-      }
-      grid.style.display = 'grid';
-      grid.innerHTML = favs.map((f, i) => {
-        const includeBadge = f.include ? \`<span class="badge" style="background: rgba(16, 185, 129, 0.1); color: var(--success); border-color: rgba(16, 185, 129, 0.2); margin-right: 4px;">保: \${f.include}</span>\` : '';
-        const excludeBadge = f.exclude ? \`<span class="badge" style="background: rgba(239, 68, 68, 0.1); color: var(--danger); border-color: rgba(239, 68, 68, 0.2); margin-right: 4px;">排: \${f.exclude}</span>\` : '';
-        const renameBadge = f.rename ? \`<span class="badge" style="background: rgba(59, 130, 246, 0.1); color: var(--primary); border-color: rgba(59, 130, 246, 0.2)">替: \${f.rename}</span>\` : '';
-        
-        return \`
-          <div class="fav-card" onclick="useFav(\${i})">
-            <div class="fav-title">
-              <svg viewBox="0 0 24 24" style="width:16px;height:16px;color:var(--primary)"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg>
-              \${f.name}
-            </div>
-            <div class="fav-url" style="margin-bottom: 8px;">\${f.url}</div>
-            <div style="display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px;">
-              \${includeBadge}
-              \${excludeBadge}
-              \${renameBadge}
-            </div>
-            <div class="fav-actions">
-              <button class="btn btn-ghost" onclick="event.stopPropagation(); editFav(\${i})">編輯</button>
-              <button class="btn btn-ghost btn-danger" onclick="event.stopPropagation(); deleteFav(\${i})">刪除</button>
-            </div>
-          </div>\`;
-      }).join('');
-    }
-    
-    async function saveFav() {
-      const name = document.getElementById('favName').value.trim();
-      const url = document.getElementById('favUrl').value.trim();
-      const include = document.getElementById('favInclude').value.trim();
-      const exclude = document.getElementById('favExclude').value.trim();
-      const rename = document.getElementById('favRename').value.trim();
-      if (!name || !url) return showToast('請完整填寫名稱與內容', false);
-      
-      const editIndex = document.getElementById('modal').dataset.edit;
-      const originalBtnText = document.querySelector('.modal-btn-save').textContent;
-      document.querySelector('.modal-btn-save').textContent = '儲存中...';
-      
-      try {
-        if (editIndex !== '') {
-          await fetch('/favs', { 
-            method: 'PUT', 
-            headers: { 'Content-Type': 'application/json' }, 
-            body: JSON.stringify({ index: parseInt(editIndex), name, url, include, exclude, rename }) 
-          });
-        } else {
-          await fetch('/favs', { 
-            method: 'POST', 
-            headers: { 'Content-Type': 'application/json' }, 
-            body: JSON.stringify({ name, url, include, exclude, rename }) 
-          });
-        }
-        closeModal();
-        loadFavs();
-        showToast('配置儲存成功');
-      } catch(e) { 
-        showToast('儲存失敗，請重試', false); 
-      } finally {
-        document.querySelector('.modal-btn-save').textContent = originalBtnText;
-      }
-    }
-    
-    async function deleteFav(index) {
-      if (!confirm('確定要刪除這筆配置嗎？')) return;
-      try {
-        await fetch('/favs', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ index }) });
-        loadFavs();
-        showToast('已刪除配置');
-      } catch(e) { showToast('刪除失敗', false); }
-    }
-    
-    function useFav(index) {
-      document.getElementById('urlInput').value = favs[index].url;
-      document.getElementById('shortCode').value = favs[index].name.replace(/\\s+/g, '-').toLowerCase();
-      document.getElementById('includeKeywords').value = favs[index].include || '';
-      document.getElementById('excludeKeywords').value = favs[index].exclude || '';
-      document.getElementById('renameKeywords').value = favs[index].rename || '';
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-      showToast('已載入配置：' + favs[index].name);
-    }
-    
-    function editFav(index) {
-      document.getElementById('modalTitle').textContent = '編輯配置';
-      document.getElementById('favName').value = favs[index].name;
-      document.getElementById('favUrl').value = favs[index].url;
-      document.getElementById('favInclude').value = favs[index].include || '';
-      document.getElementById('favExclude').value = favs[index].exclude || '';
-      document.getElementById('favRename').value = favs[index].rename || '';
-      document.getElementById('modal').dataset.edit = index;
-      document.getElementById('modal').classList.add('show');
-    }
-    
-    function openModal() {
-      document.getElementById('modalTitle').textContent = '新增配置';
-      document.getElementById('favName').value = '';
-      document.getElementById('favUrl').value = '';
-      document.getElementById('favInclude').value = '';
-      document.getElementById('favExclude').value = '';
-      document.getElementById('favRename').value = '';
-      document.getElementById('modal').dataset.edit = '';
-      document.getElementById('modal').classList.add('show');
-    }
-    
-    function closeModal() {
-      document.getElementById('modal').classList.remove('show');
-    }
-    
-    async function generate() {
-      const raw = document.getElementById('urlInput').value.trim();
-      if (!raw) return showToast('請先輸入節點連結或訂閱地址', false);
-      
-      const btn = document.getElementById('generateBtn');
-      const originalHTML = btn.innerHTML;
-      btn.disabled = true;
-      btn.innerHTML = '<svg class="spinner" viewBox="0 0 24 24"><line x1="12" y1="2" x2="12" y2="6"></line><line x1="12" y1="18" x2="12" y2="22"></line><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"></line><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"></line><line x1="2" y1="12" x2="6" y2="12"></line><line x1="18" y1="12" x2="22" y2="12"></line><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"></line><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"></line></svg><span>處理中...</span>';
-      
-      const host = window.location.origin;
-      const shortCode = document.getElementById('shortCode').value.trim();
-      const include = document.getElementById('includeKeywords').value.trim();
-      const exclude = document.getElementById('excludeKeywords').value.trim();
-      const rename = document.getElementById('renameKeywords').value.trim();
-      
-      try {
-        let baseUrl = '';
-        if (shortCode) {
-          await fetch('/save', { 
-            method: 'POST', 
-            headers: { 'Content-Type': 'application/json' }, 
-            body: JSON.stringify({ path: shortCode, content: raw, include, exclude, rename }) 
-          });
-          baseUrl = host + '/' + shortCode;
-        } else {
-          baseUrl = host + '/?url=' + encodeURIComponent(raw);
-        }
-        
-        let queryParams = '';
-        if (include) queryParams += '&include=' + encodeURIComponent(include);
-        if (exclude) queryParams += '&exclude=' + encodeURIComponent(exclude);
-        if (rename) queryParams += '&rename=' + encodeURIComponent(rename);
-        
-        const sep = baseUrl.includes('?') ? '&' : '?';
-        document.getElementById('singboxUrl').value = baseUrl + sep + 'target=singbox' + queryParams;
-        document.getElementById('clashUrl').value = baseUrl + sep + 'target=clash' + queryParams;
-        document.getElementById('base64Url').value = baseUrl + sep + 'target=base64' + queryParams;
-        
-        document.getElementById('results').classList.add('show');
-        showToast('轉換成功！請複製對應的訂閱連結');
-        
-      } catch(e) {
-        showToast('生成失敗：' + e.message, false);
-      }
-      
-      btn.disabled = false;
-      btn.innerHTML = originalHTML;
-    }
-    
-    function copyResult(id) {
-      const input = document.getElementById(id);
-      input.select();
-      navigator.clipboard.writeText(input.value).then(() => showToast('已複製到剪貼簿'));
-    }
-    
-    function showQr(id) {
-      const url = document.getElementById(id).value;
-      if(!url) return;
-      const win = window.open('', '_blank', 'width=420,height=480');
-      if (!win) return showToast('請允許瀏覽器開啟彈出視窗', false);
-      win.document.write(\`
-        <!DOCTYPE html><html><head><meta charset="utf-8"><title>掃碼訂閱</title>
-        <style>
-          body { margin:0; background:#0f172a; display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:100vh; font-family:sans-serif; }
-          .qr-container { padding:24px; background:#ffffff; border-radius:16px; box-shadow:0 10px 25px rgba(0,0,0,0.5); }
-          .title { margin-top:24px; font-size:16px; color:#f8fafc; font-weight:600; letter-spacing:0.5px; }
-          .subtitle { margin-top:8px; font-size:13px; color:#94a3b8; text-align:center; max-width:280px; word-break:break-all;}
-        </style>
-        </head><body>
-        <div class="qr-container"><div id="qr"></div></div>
-        <div class="title">使用客戶端掃描行動條碼</div>
-        <div class="subtitle\">\${url}</div>
-        <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"><\\/script>
-        <script>
-          setTimeout(() => {
-            new QRCode(document.getElementById('qr'), { text: "\${url}", width: 260, height: 260, colorDark: "#0f172a", colorLight: "#ffffff", correctLevel: QRCode.CorrectLevel.L });
-          }, 100);
-        <\\/script>
-        </body></html>
-      \`);
-    }
-    
-    function showToast(msg, isSuccess = true) {
-      const t = document.getElementById('toast');
-      const msgEl = document.getElementById('toastMsg');
-      
-      if(isSuccess) {
-        t.classList.add('success');
-        t.querySelector('svg').innerHTML = '<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline>';
-      } else {
-        t.classList.remove('success');
-        t.querySelector('svg').innerHTML = '<circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line>';
-        t.querySelector('svg').style.color = 'var(--danger)';
-      }
-      
-      msgEl.textContent = msg;
-      t.classList.add('show');
-      setTimeout(() => {
-        t.classList.remove('show');
-        setTimeout(() => t.querySelector('svg').style.color = '', 300);
-      }, 3000);
-    }
-    
-    loadFavs();
-  </script>
 </body>
 </html>
 `;
+  return new Response(htmlInfo, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+}
+
+let result = '';
+let contentType = 'text/plain';
+let fileExt = '.txt';
+
+if (target === 'clash') { 
+  result = await toClashWithTemplate(uniqueNodes); 
+  contentType = 'text/yaml'; 
+  fileExt = '.yaml';
+} else if (target === 'base64') { 
+  result = toBase64(uniqueNodes); 
+  contentType = 'text/plain'; 
+  fileExt = '.txt';
+} else { 
+  result = await toSingBoxWithTemplate(uniqueNodes); 
+  contentType = 'application/json'; 
+  fileExt = '.json';
+}
+
+const filename = `subscription${fileExt}`;
+
+// 組裝最終的 Header 物件 (包含流量透傳) [2]
+const responseHeaders: Record<string, string> = {
+  'Content-Type': `${contentType}; charset=utf-8`, 
+  'Access-Control-Allow-Origin': '*', 
+  'Cache-Control': 'no-store, no-cache, must-revalidate',
+  'profile-title': filename, 
+  'subscription-title': filename,
+  'Content-Disposition': `inline; filename="${filename}"`,
+  'Profile-Update-Interval': '3600',
+};
+
+// 如果有機場回傳流量資訊，進行透傳，點亮客戶端流量面板 [2]
+if (hasTrafficInfo) {
+  let userInfoHeader = `upload=${totalUpload}; download=${totalDownload}; total=${totalTotal}`;
+  if (minExpire > 0) {
+    userInfoHeader += `; expire=${minExpire}`;
+  }
+  responseHeaders['subscription-userinfo'] = userInfoHeader; // [2]
+}
+
+return new Response(result, { headers: responseHeaders });
+}
+};
