@@ -447,15 +447,11 @@ export const HTML_PAGE = `
           baseUrl = host + '/?url=' + encodeURIComponent(raw);
         }
         
-        let queryParams = '';
-        if (include) queryParams += '&include=' + encodeURIComponent(include);
-        if (exclude) queryParams += '&exclude=' + encodeURIComponent(exclude);
-        if (rename) queryParams += '&rename=' + encodeURIComponent(rename);
-        
+        // 💥 修正：前台結果網址也不再強制拼接過濾與替換參數
         const sep = baseUrl.includes('?') ? '&' : '?';
-        document.getElementById('singboxUrl').value = baseUrl + sep + 'target=singbox' + queryParams;
-        document.getElementById('clashUrl').value = baseUrl + sep + 'target=clash' + queryParams;
-        document.getElementById('base64Url').value = baseUrl + sep + 'target=base64' + queryParams;
+        document.getElementById('singboxUrl').value = baseUrl + sep + 'target=singbox';
+        document.getElementById('clashUrl').value = baseUrl + sep + 'target=clash';
+        document.getElementById('base64Url').value = baseUrl + sep + 'target=base64';
         
         document.getElementById('results').classList.add('show');
         showToast('轉換成功！請複製對應的訂閱連結');
