@@ -166,7 +166,7 @@ await Promise.all(inputs.map(async (input) => {
       if (resp.ok) { 
         const text = await resp.text(); 
         
-        // 💥 機場流量資訊 (subscription-userinfo) 解析與累加
+        // 機場流量資訊 (subscription-userinfo) 解析與累加 [1]
         const userInfo = resp.headers.get('subscription-userinfo');
         if (userInfo) {
           hasTrafficInfo = true;
@@ -224,19 +224,38 @@ if (allNodes.length === 0) {
 // 智慧節點與過濾
 let filteredNodes = allNodes;
 
-// 💥【全新功能：1. 節點名稱替換 (Rename)】
+// 💥【全新功能：1. 節點名稱智慧替換 (支援 DEL- 與 - 分隔)】
 // 順序最優先，必須在篩選前執行，才能讓直連對準乾淨的名字
 if (renameParam) {
   try {
-    const rules = renameParam.split(';');
+    const rules = renameParam.split('|');
     for (const rule of rules) {
-      const [search, replace] = rule.split(',');
-      if (search !== undefined && replace !== undefined) {
-        filteredNodes.forEach(node => {
-          if (node.name) {
-            node.name = node.name.split(search).join(replace); // 安全的全局替換
-          }
-        });
+      const trimmedRule = rule.trim();
+      if (!trimmedRule) continue;
+
+      if (trimmedRule.startsWith('DEL-')) {
+        // 刪除模式：例如 DEL-[69云] -> 直接將 "[69云]" 刪除
+        const search = trimmedRule.substring(4); // 取得 "DEL-" 後面的關鍵字
+        if (search) {
+          filteredNodes.forEach(node => {
+            if (node.name) {
+              node.name = node.name.split(search).join('');
+            }
+          });
+        }
+      } else if (trimmedRule.includes('-')) {
+        // 替換模式：例如 移动优化-專線 -> 將 "移动优化" 替換為 "專線"
+        // 🔑 改良：尋找第一個 '-' 作為分隔符號，完美相容
+        const index = trimmedRule.indexOf('-');
+        const search = trimmedRule.substring(0, index).trim();
+        const replace = trimmedRule.substring(index + 1).trim();
+        if (search && replace !== undefined) {
+          filteredNodes.forEach(node => {
+            if (node.name) {
+              node.name = node.name.split(search).join(replace);
+            }
+          });
+        }
       }
     }
   } catch (e) {
@@ -244,7 +263,7 @@ if (renameParam) {
   }
 }
 
-// 💥【全新功能：2. 智慧保留與排除過濾】
+// 💥【2. 智慧保留與排除過濾】
 const buildFilterRegex = (param: string): RegExp => {
   const safePattern = param.replace(/[xXｘＸ]/g, '[xXｘＸ×]').replace(/×/g, '[xXｘＸ×]');
   return new RegExp(safePattern, 'i');
@@ -277,7 +296,7 @@ if (filteredNodes.length === 0) {
   });
 }
 
-// 對篩選過後的節點進行 智慧排序、去重複命名、自動補國旗
+// 對篩選過後的節點進行 智慧排序、去重複命名、自動補國旗 (聯合國國旗)
 const uniqueNodes = deduplicateNodeNames(filteredNodes);
 
 const target = url.searchParams.get('target');
@@ -351,7 +370,7 @@ if (target === 'clash') {
 
 const filename = `subscription${fileExt}`;
 
-// 💥 組裝最終的 Header 物件 (包含流量透傳)
+// 組裝最終的 Header 物件 (包含流量透傳) [2]
 const responseHeaders: Record<string, string> = {
   'Content-Type': `${contentType}; charset=utf-8`, 
   'Access-Control-Allow-Origin': '*', 
@@ -362,13 +381,13 @@ const responseHeaders: Record<string, string> = {
   'Profile-Update-Interval': '3600',
 };
 
-// 如果有機場回傳流量資訊，進行透傳，點亮客戶端流量面板
+// 如果有機場回傳流量資訊，進行透傳，點亮客戶端流量面板 [2]
 if (hasTrafficInfo) {
   let userInfoHeader = `upload=${totalUpload}; download=${totalDownload}; total=${totalTotal}`;
   if (minExpire > 0) {
     userInfoHeader += `; expire=${minExpire}`;
   }
-  responseHeaders['subscription-userinfo'] = userInfoHeader;
+  responseHeaders['subscription-userinfo'] = userInfoHeader; // [2]
 }
 
 return new Response(result, { headers: responseHeaders });
