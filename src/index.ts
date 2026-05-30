@@ -8,20 +8,23 @@ export default {
 async fetch(request: Request, env: Env, ctx: any): Promise<Response> {
 const url = new URL(request.url);
 
-// 1. POST /save (儲存短連結到 KV，智慧儲存過濾規則)
+// 1. POST /save (儲存短連結到 KV，智慧儲存過濾與重命名規則)
 if (request.method === 'POST' && url.pathname === '/save') {
   try {
     const body: any = await request.json();
     if (!body.path || !body.content) return new Response('Missing path or content', { status: 400 });
     
+    // 儲存完整配置 (資料來源 + 保留 + 排除 + 重命名)
     const saveData = {
       content: body.content,
       include: body.include || '',
-      exclude: body.exclude || ''
+      exclude: body.exclude || '',
+      rename: body.rename || ''
     };
     await env.SUB_CACHE.put(body.path, JSON.stringify(saveData));
     
-    const redirectUrl = `/?url=${encodeURIComponent(body.content)}&target=singbox&include=${encodeURIComponent(body.include || '')}&exclude=${encodeURIComponent(body.exclude || '')}`;
+    // 儲存成功後，自動重定向到結果頁面
+    const redirectUrl = `/?url=${encodeURIComponent(body.content)}&target=singbox&include=${encodeURIComponent(body.include || '')}&exclude=${encodeURIComponent(body.exclude || '')}&rename=${encodeURIComponent(body.rename || '')}`;
     return new Response(null, { 
       status: 302, 
       headers: { 'Location': redirectUrl } 
@@ -29,7 +32,7 @@ if (request.method === 'POST' && url.pathname === '/save') {
   } catch (e) { return new Response('Error saving profile', { status: 500 }); }
 }
 
-// 2. KV 收藏 API
+// 2. KV 收藏 API (支援 include、exclude 與 rename 欄位)
 const FAVS_KEY = 'favorites';
 
 async function getFavs(): Promise<any[]> {
@@ -49,7 +52,7 @@ if (request.method === 'GET' && url.pathname === '/favs') {
   });
 }
 
-// POST /favs
+// POST /favs (新增收藏 - 支援過濾與重命名)
 if (request.method === 'POST' && url.pathname === '/favs') {
   try {
     const body: any = await request.json();
@@ -59,14 +62,15 @@ if (request.method === 'POST' && url.pathname === '/favs') {
       name: body.name, 
       url: body.url, 
       include: body.include || '', 
-      exclude: body.exclude || '' 
+      exclude: body.exclude || '',
+      rename: body.rename || ''
     });
     await saveFavs(favs);
     return new Response('OK', { status: 200 });
   } catch (e) { return new Response('Error saving favorite', { status: 500 }); }
 }
 
-// PUT /favs
+// PUT /favs (更新收藏 - 支援過濾與重命名)
 if (request.method === 'PUT' && url.pathname === '/favs') {
   try {
     const body: any = await request.json();
@@ -77,7 +81,8 @@ if (request.method === 'PUT' && url.pathname === '/favs') {
         name: body.name, 
         url: body.url, 
         include: body.include || '', 
-        exclude: body.exclude || '' 
+        exclude: body.exclude || '',
+        rename: body.rename || ''
       };
       await saveFavs(favs);
     }
@@ -85,7 +90,7 @@ if (request.method === 'PUT' && url.pathname === '/favs') {
   } catch (e) { return new Response('Error updating favorite', { status: 500 }); }
 }
 
-// DELETE /favs
+// DELETE /favs (刪除收藏)
 if (request.method === 'DELETE' && url.pathname === '/favs') {
   try {
     const body: any = await request.json();
@@ -99,10 +104,11 @@ if (request.method === 'DELETE' && url.pathname === '/favs') {
   } catch (e) { return new Response('Error deleting favorite', { status: 500 }); }
 }
 
-// 3. GET /path (讀取短連結)
+// 3. GET /path (讀取短連結，同時取得對應規則)
 let urlParam = url.searchParams.get('url') || '';
 let includeParam = url.searchParams.get('include') || '';
 let excludeParam = url.searchParams.get('exclude') || '';
+let renameParam = url.searchParams.get('rename') || '';
 
 const path = decodeURIComponent(url.pathname.slice(1)); 
 
@@ -115,22 +121,31 @@ if (path && path !== 'favicon.ico' && path !== '') {
         urlParam = parsed.content;
         if (!includeParam) includeParam = parsed.include || '';
         if (!excludeParam) excludeParam = parsed.exclude || '';
+        if (!renameParam) renameParam = parsed.rename || '';
       }
     } catch (e) {
+      // 相容舊版純文字短連結
       urlParam = stored; 
     }
   }
 }
 
-// 顯示首頁
+// 顯示首頁 (沒有 url 參數也沒有短連結)
 if (!urlParam || urlParam.trim() === '') {
   return new Response(HTML_PAGE, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
 }
 
-// 4. 解析並下載
+// 4. 解析並下載 (支援流量資訊透傳與合併)
 const inputs = urlParam.split(/[\n\r|]+/); 
 const allNodes: ProxyNode[] = [];
 const errors: string[] = [];
+
+// 流量資訊累加變數
+let totalUpload = 0;
+let totalDownload = 0;
+let totalTotal = 0;
+let minExpire = 0;
+let hasTrafficInfo = false;
 
 await Promise.all(inputs.map(async (input) => { 
   const trimmed = input.trim(); 
@@ -151,6 +166,27 @@ await Promise.all(inputs.map(async (input) => {
       if (resp.ok) { 
         const text = await resp.text(); 
         
+        // 💥 機場流量資訊 (subscription-userinfo) 解析與累加
+        const userInfo = resp.headers.get('subscription-userinfo');
+        if (userInfo) {
+          hasTrafficInfo = true;
+          const uploadMatch = userInfo.match(/upload=(\d+)/i);
+          const downloadMatch = userInfo.match(/download=(\d+)/i);
+          const totalMatch = userInfo.match(/total=(\d+)/i);
+          const expireMatch = userInfo.match(/expire=(\d+)/i);
+
+          totalUpload += uploadMatch ? parseInt(uploadMatch[1]) : 0;
+          totalDownload += downloadMatch ? parseInt(downloadMatch[1]) : 0;
+          totalTotal += totalMatch ? parseInt(totalMatch[1]) : 0;
+          
+          const expireVal = expireMatch ? parseInt(expireMatch[1]) : 0;
+          if (expireVal > 0) {
+            if (minExpire === 0 || expireVal < minExpire) {
+              minExpire = expireVal; // 取多個訂閱中最先到期的時間
+            }
+          }
+        }
+
         if (text.trim().startsWith('<')) {
            errors.push(`❌ [${trimmed}]\n失敗原因: 伺服器回傳了 HTML 網頁而不是訂閱代碼。`);
         } else {
@@ -185,36 +221,63 @@ if (allNodes.length === 0) {
   });
 }
 
-// 智慧節點過濾
+// 智慧節點與過濾
 let filteredNodes = allNodes;
 
-// 🔑 修正版：使用單一正則一步到位替換，防止重複替換導致 RegExp 崩潰
+// 💥【全新功能：1. 節點名稱替換 (Rename)】
+// 順序最優先，必須在篩選前執行，才能讓直連對準乾淨的名字
+if (renameParam) {
+  try {
+    const rules = renameParam.split(';');
+    for (const rule of rules) {
+      const [search, replace] = rule.split(',');
+      if (search !== undefined && replace !== undefined) {
+        filteredNodes.forEach(node => {
+          if (node.name) {
+            node.name = node.name.split(search).join(replace); // 安全的全局替換
+          }
+        });
+      }
+    }
+  } catch (e) {
+    console.error('Rename replacement failed:', e);
+  }
+}
+
+// 💥【全新功能：2. 智慧保留與排除過濾】
 const buildFilterRegex = (param: string): RegExp => {
-  const safePattern = param.replace(/[xXｘＸ×]/g, '[xXｘＸ×]');
+  const safePattern = param.replace(/[xXｘＸ]/g, '[xXｘＸ×]').replace(/×/g, '[xXｘＸ×]');
   return new RegExp(safePattern, 'i');
 };
 
+// 僅保留關鍵字
 if (includeParam) {
   try {
     const includeRegex = buildFilterRegex(includeParam);
     filteredNodes = filteredNodes.filter(node => includeRegex.test(node.name));
-  } catch (e) {}
+  } catch (e) {
+    console.error('Invalid include regex:', e);
+  }
 }
 
+// 排除關鍵字
 if (excludeParam) {
   try {
     const excludeRegex = buildFilterRegex(excludeParam);
     filteredNodes = filteredNodes.filter(node => !excludeRegex.test(node.name));
-  } catch (e) {}
+  } catch (e) {
+    console.error('Invalid exclude regex:', e);
+  }
 }
 
 if (filteredNodes.length === 0) {
-  return new Response('篩選失敗：經過關鍵字過濾後，未剩下任何有效節點。', { 
+  return new Response('篩選與替換後，未剩下任何有效節點。', { 
     status: 400, 
     headers: { 'Content-Type': 'text/plain; charset=utf-8' } 
   });
 }
 
+// 對篩選過後的節點進行 智慧排序、去重複命名、自動補國旗
 const uniqueNodes = deduplicateNodeNames(filteredNodes);
 
 const target = url.searchParams.get('target');
@@ -225,6 +288,7 @@ if (!target) {
   let filterQuery = '';
   if (includeParam) filterQuery += `&include=${encodeURIComponent(includeParam)}`;
   if (excludeParam) filterQuery += `&exclude=${encodeURIComponent(excludeParam)}`;
+  if (renameParam) filterQuery += `&rename=${encodeURIComponent(renameParam)}`;
 
   const htmlInfo = `
 <!DOCTYPE html>
@@ -287,16 +351,26 @@ if (target === 'clash') {
 
 const filename = `subscription${fileExt}`;
 
-return new Response(result, { 
-  headers: { 
-    'Content-Type': `${contentType}; charset=utf-8`, 
-    'Access-Control-Allow-Origin': '*', 
-    'Cache-Control': 'no-store, no-cache, must-revalidate',
-    'profile-title': filename, 
-    'subscription-title': filename,
-    'Content-Disposition': `inline; filename="${filename}"`,
-    'Profile-Update-Interval': '3600',
-  } 
-});
+// 💥 組裝最終的 Header 物件 (包含流量透傳)
+const responseHeaders: Record<string, string> = {
+  'Content-Type': `${contentType}; charset=utf-8`, 
+  'Access-Control-Allow-Origin': '*', 
+  'Cache-Control': 'no-store, no-cache, must-revalidate',
+  'profile-title': filename, 
+  'subscription-title': filename,
+  'Content-Disposition': `inline; filename="${filename}"`,
+  'Profile-Update-Interval': '3600',
+};
+
+// 如果有機場回傳流量資訊，進行透傳，點亮客戶端流量面板
+if (hasTrafficInfo) {
+  let userInfoHeader = `upload=${totalUpload}; download=${totalDownload}; total=${totalTotal}`;
+  if (minExpire > 0) {
+    userInfoHeader += `; expire=${minExpire}`;
+  }
+  responseHeaders['subscription-userinfo'] = userInfoHeader;
+}
+
+return new Response(result, { headers: responseHeaders });
 }
 };
