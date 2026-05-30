@@ -130,7 +130,7 @@ export const HTML_PAGE = `
       <svg viewBox="0 0 24 24"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"></path></svg>
       SubConverter Pro
     </div>
-    <span class="badge">v2.1.0</span>
+    <span class="badge">v2.5.0</span>
   </header>
 
   <div class="container">
@@ -147,7 +147,6 @@ export const HTML_PAGE = `
         <textarea id="urlInput" placeholder="vmess://...\nvless://...\ntuic://...\nanytls://...\nhttps://example.com/sub"></textarea>
       </div>
 
-      <!-- 新增：保留與排除關鍵字 -->
       <div class="form-group" style="margin-top: 1.5rem;">
         <label for="includeKeywords">僅保留關鍵字節點 (選填，多個用 | 分隔)</label>
         <input type="text" id="includeKeywords" placeholder="例如: 🇭🇰|台灣|TW">
@@ -159,10 +158,20 @@ export const HTML_PAGE = `
 
       <div class="form-group" style="margin-top: 1.5rem;">
         <label for="excludeKeywords">排除關鍵字節點 (選填，多個用 | 分隔)</label>
-        <input type="text" id="excludeKeywords" placeholder="例如: 流量|官網|重置">
+        <input type="text" id="excludeKeywords" placeholder="例如: 流量|官網|重置|5x">
         <div class="hint">
           <svg viewBox="0 0 24 24" style="width:14px;height:14px"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
-          排除名稱符合關鍵字的節點（過濾垃圾廣告）。例如輸入 <code>官網|到期</code>。
+          排除名稱符合關鍵字的節點（過濾垃圾廣告）。例如輸入 <code>5x</code>。
+        </div>
+      </div>
+
+      <!-- 💥 新增：節點名稱替換 -->
+      <div class="form-group" style="margin-top: 1.5rem;">
+        <label for="renameKeywords">節點名稱替換 (選填，格式: 尋找,替換;尋找,替換)</label>
+        <input type="text" id="renameKeywords" placeholder="例如: [69云],;移动优化,專線">
+        <div class="hint">
+          <svg viewBox="0 0 24 24" style="width:14px;height:14px"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+          用來清除名稱中的機場廣告。多組替換請用分號 <code>;</code> 隔開。
         </div>
       </div>
       
@@ -181,7 +190,6 @@ export const HTML_PAGE = `
       </button>
     </main>
 
-    <!-- 結果區塊 -->
     <section class="results-wrapper" id="results">
       <div class="panel">
         <div class="panel-header">
@@ -191,7 +199,6 @@ export const HTML_PAGE = `
           </h2>
         </div>
         
-        <!-- Sing-Box -->
         <div class="result-item">
           <div class="result-icon-box"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg></div>
           <div class="result-info">
@@ -205,11 +212,10 @@ export const HTML_PAGE = `
           </div>
         </div>
 
-        <!-- Clash Meta -->
         <div class="result-item">
           <div class="result-icon-box"><svg viewBox="0 0 24 24"><path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z"></path><line x1="16" y1="8" x2="2" y2="22"></line><line x1="17.5" y1="15" x2="9" y2="6.5"></line></svg></div>
           <div class="result-info">
-            <div class="result-name">Clash Meta (Mihomo)</div>
+            <div class="result-name">Clash Meta</div>
             <div class="result-desc">YAML 格式 · 適用 Clash Verge, ClashX</div>
           </div>
           <div class="result-input-wrapper"><input type="text" id="clashUrl" readonly></div>
@@ -219,7 +225,6 @@ export const HTML_PAGE = `
           </div>
         </div>
 
-        <!-- Base64 -->
         <div class="result-item">
           <div class="result-icon-box"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg></div>
           <div class="result-info">
@@ -236,7 +241,6 @@ export const HTML_PAGE = `
       </div>
     </section>
 
-    <!-- 收藏區塊 -->
     <section class="panel">
       <div class="panel-header" style="margin-bottom: 0;">
         <h2 class="panel-title">
@@ -255,7 +259,6 @@ export const HTML_PAGE = `
     </section>
   </div>
 
-  <!-- 新增/編輯 模態框 (新增關鍵字過濾輸入) -->
   <div class="modal-overlay" id="modal">
     <div class="modal-content">
       <h3 class="modal-title" id="modalTitle">新增配置</h3>
@@ -274,6 +277,11 @@ export const HTML_PAGE = `
       <div class="form-group">
         <label>排除關鍵字 (選填)</label>
         <input type="text" id="favExclude" placeholder="例如: 流量|重置|官網">
+      </div>
+      <!-- 💥 新增：自訂重命名 -->
+      <div class="form-group">
+        <label>節點名稱替換 (選填)</label>
+        <input type="text" id="favRename" placeholder="例如: [69云],;移动优化,專線">
       </div>
       <div class="modal-footer">
         <button class="modal-btn modal-btn-cancel" onclick="closeModal()">取消</button>
@@ -307,9 +315,9 @@ export const HTML_PAGE = `
       }
       grid.style.display = 'grid';
       grid.innerHTML = favs.map((f, i) => {
-        // ✨ 新增：如果配置有過濾關鍵字，在卡片上顯示專屬標籤
         const includeBadge = f.include ? \`<span class="badge" style="background: rgba(16, 185, 129, 0.1); color: var(--success); border-color: rgba(16, 185, 129, 0.2); margin-right: 4px;">保: \${f.include}</span>\` : '';
-        const excludeBadge = f.exclude ? \`<span class="badge" style="background: rgba(239, 68, 68, 0.1); color: var(--danger); border-color: rgba(239, 68, 68, 0.2)">排: \${f.exclude}</span>\` : '';
+        const excludeBadge = f.exclude ? \`<span class="badge" style="background: rgba(239, 68, 68, 0.1); color: var(--danger); border-color: rgba(239, 68, 68, 0.2); margin-right: 4px;">排: \${f.exclude}</span>\` : '';
+        const renameBadge = f.rename ? \`<span class="badge" style="background: rgba(59, 130, 246, 0.1); color: var(--primary); border-color: rgba(59, 130, 246, 0.2)">替: \${f.rename}</span>\` : '';
         
         return \`
           <div class="fav-card" onclick="useFav(\${i})">
@@ -321,6 +329,7 @@ export const HTML_PAGE = `
             <div style="display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px;">
               \${includeBadge}
               \${excludeBadge}
+              \${renameBadge}
             </div>
             <div class="fav-actions">
               <button class="btn btn-ghost" onclick="event.stopPropagation(); editFav(\${i})">編輯</button>
@@ -335,6 +344,7 @@ export const HTML_PAGE = `
       const url = document.getElementById('favUrl').value.trim();
       const include = document.getElementById('favInclude').value.trim();
       const exclude = document.getElementById('favExclude').value.trim();
+      const rename = document.getElementById('favRename').value.trim();
       if (!name || !url) return showToast('請完整填寫名稱與內容', false);
       
       const editIndex = document.getElementById('modal').dataset.edit;
@@ -346,13 +356,13 @@ export const HTML_PAGE = `
           await fetch('/favs', { 
             method: 'PUT', 
             headers: { 'Content-Type': 'application/json' }, 
-            body: JSON.stringify({ index: parseInt(editIndex), name, url, include, exclude }) 
+            body: JSON.stringify({ index: parseInt(editIndex), name, url, include, exclude, rename }) 
           });
         } else {
           await fetch('/favs', { 
             method: 'POST', 
             headers: { 'Content-Type': 'application/json' }, 
-            body: JSON.stringify({ name, url, include, exclude }) 
+            body: JSON.stringify({ name, url, include, exclude, rename }) 
           });
         }
         closeModal();
@@ -377,9 +387,9 @@ export const HTML_PAGE = `
     function useFav(index) {
       document.getElementById('urlInput').value = favs[index].url;
       document.getElementById('shortCode').value = favs[index].name.replace(/\\s+/g, '-').toLowerCase();
-      // ✨ 載入配置時，自動填入主畫面的過濾關鍵字
       document.getElementById('includeKeywords').value = favs[index].include || '';
       document.getElementById('excludeKeywords').value = favs[index].exclude || '';
+      document.getElementById('renameKeywords').value = favs[index].rename || '';
       window.scrollTo({ top: 0, behavior: 'smooth' });
       showToast('已載入配置：' + favs[index].name);
     }
@@ -390,6 +400,7 @@ export const HTML_PAGE = `
       document.getElementById('favUrl').value = favs[index].url;
       document.getElementById('favInclude').value = favs[index].include || '';
       document.getElementById('favExclude').value = favs[index].exclude || '';
+      document.getElementById('favRename').value = favs[index].rename || '';
       document.getElementById('modal').dataset.edit = index;
       document.getElementById('modal').classList.add('show');
     }
@@ -400,6 +411,7 @@ export const HTML_PAGE = `
       document.getElementById('favUrl').value = '';
       document.getElementById('favInclude').value = '';
       document.getElementById('favExclude').value = '';
+      document.getElementById('favRename').value = '';
       document.getElementById('modal').dataset.edit = '';
       document.getElementById('modal').classList.add('show');
     }
@@ -421,15 +433,15 @@ export const HTML_PAGE = `
       const shortCode = document.getElementById('shortCode').value.trim();
       const include = document.getElementById('includeKeywords').value.trim();
       const exclude = document.getElementById('excludeKeywords').value.trim();
+      const rename = document.getElementById('renameKeywords').value.trim();
       
       try {
         let baseUrl = '';
         if (shortCode) {
-          // 🔑 關鍵：生成短連結時，將保留/排除規則一併送去雲端 KV 保存
           await fetch('/save', { 
             method: 'POST', 
             headers: { 'Content-Type': 'application/json' }, 
-            body: JSON.stringify({ path: shortCode, content: raw, include, exclude }) 
+            body: JSON.stringify({ path: shortCode, content: raw, include, exclude, rename }) 
           });
           baseUrl = host + '/' + shortCode;
         } else {
@@ -439,6 +451,7 @@ export const HTML_PAGE = `
         let queryParams = '';
         if (include) queryParams += '&include=' + encodeURIComponent(include);
         if (exclude) queryParams += '&exclude=' + encodeURIComponent(exclude);
+        if (rename) queryParams += '&rename=' + encodeURIComponent(rename);
         
         const sep = baseUrl.includes('?') ? '&' : '?';
         document.getElementById('singboxUrl').value = baseUrl + sep + 'target=singbox' + queryParams;
