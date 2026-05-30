@@ -1,10 +1,9 @@
 import { ProxyNode } from "./types";
 
-// --- 完美 Base64 解碼 (暴力過濾所有隱形與非法字元) ---
+// --- 完美 Base64 解碼 ---
 export function safeBase64Decode(str: string): string {
   try {
     let b64 = str.replace(/-/g, '+').replace(/_/g, '/').replace(/[^A-Za-z0-9+/=]/g, '');
-    
     while (b64.length % 4) b64 += '=';
     
     const binaryStr = atob(b64);
@@ -39,21 +38,18 @@ export function tryDecodeURIComponent(str: string): string {
 
 // --- 自動加入國旗 Emoji 的智慧辨識系統 ---
 export function addFlag(name: string): string {
-  // 1. 智慧防重複：如果名稱中已經包含任何國旗 Emoji (包含 🇺🇳 聯合國國旗)，則跳過不處理
-  if (/[\uD83C][\uDDE6-\uDDFF][\uD83C][\uDDE6-\uDDFF]/.test(name)) {
+  if (/[\uD83C][\uDDE6-\uDDFF][\uD83C][\uDDE6-\uDDFF]|🇺🇳/.test(name)) {
     return name;
   }
 
   const upper = name.toUpperCase();
 
-  // 2. 輔助函數：精準匹配代碼
   const isMatch = (codes: string, keywords: string) => {
     const codeRegex = new RegExp(`(?:^|[^A-Z])(${codes})(?![A-Z])`);
     const keywordRegex = new RegExp(`(${keywords})`);
     return codeRegex.test(upper) || keywordRegex.test(upper);
   };
 
-  // 3. 執行全球國家比對
   if (isMatch('HK|HKG', '香港|深港|HONGKONG|HONG KONG')) return "🇭🇰 " + name;
   if (isMatch('TW|TWN|TPE', '台灣|台湾|台北|新北|彰化')) return "🇹🇼 " + name;
   if (isMatch('JP|JPN|TYO|OSA|NRT|HND|KIX', '日本|东京|大阪|埼玉|沪日|川日|JAPAN')) return "🇯🇵 " + name;
@@ -83,7 +79,6 @@ export function addFlag(name: string): string {
   if (isMatch('DK|DNK|CPH', '丹麦|丹麥|哥本哈根|DENMARK')) return "🇩🇰 " + name;
   if (isMatch('IE|IRL|DUB', '爱尔兰|愛爾蘭|都柏林|IRELAND')) return "🇮🇪 " + name;
   if (isMatch('PT|PRT|LIS', '葡萄牙|里斯本|PORTUGAL')) return "🇵🇹 " + name;
-  
   if (isMatch('TH|THA|BKK', '泰国|泰國|曼谷|THAILAND')) return "🇹🇭 " + name;
   if (isMatch('MY|MYS|KUL', '马来西亚|馬來西亞|吉隆坡|MALAYSIA')) return "🇲🇾 " + name;
   if (isMatch('PH|PHL|MNL', '物理宾|菲律賓|马尼拉|PHILIPPINES')) return "🇵🇭 " + name;
@@ -101,36 +96,67 @@ export function addFlag(name: string): string {
   if (isMatch('PK|PAK', '巴基斯坦|PAKISTAN')) return "🇵🇰 " + name;
   if (isMatch('ZA|ZAF|CPT', '南非|开普敦|SOUTH AFRICA')) return "🇿🇦 " + name;
 
-  // 🔑 關鍵改良：若找不到任何對應國家，預設加上 🇺🇳 聯合國國旗以保持排版完美統一！
+  // 預設加上 🇺🇳 聯合國國旗
   return "🇺🇳 " + name;
 }
 
-// --- 去重複命名與自動整理 ---
+// --- 去重複命名與自動智慧排序 ---
 export function deduplicateNodeNames(nodes: ProxyNode[]): ProxyNode[] {
   const seenKey = new Set<string>();
-  const nameCount = new Map<string, number>();
+  const uniqueList: ProxyNode[] = [];
 
-  return nodes.filter(node => {
+  // 1. 先進行 Server+Port 去重
+  for (const node of nodes) {
     const key = `${node.server}:${node.port}:${node.uuid || node.password || ''}`;
+    if (!seenKey.has(key)) {
+      seenKey.add(key);
+      uniqueList.push(node);
+    }
+  }
 
-    if (seenKey.has(key)) return false;
-    seenKey.add(key);
+  // 2. 自動加上國旗
+  for (const node of uniqueList) {
+    node.name = addFlag(node.name || 'node');
+  }
 
-    let baseName = node.name || 'node';
-    baseName = addFlag(baseName);
+  // 3. 智慧排序 (依據國旗優先級與字母)
+  const flagPriority: Record<string, number> = {
+    "🇭🇰": 1, "🇹🇼": 2, "🇯🇵": 3, "🇸🇬": 4, "🇺🇸": 5, "🇰🇷": 6, "🇬🇧": 7, "🇩🇪": 8,
+    "🇫🇷": 9, "🇳🇱": 10, "🇨🇦": 11, "🇦🇺": 12, "🇧🇷": 13, "🇪🇬": 14, "🇻🇳": 15,
+    "🇲🇾": 16, "🇰🇭": 17, "🇵🇰": 18, "🇬臨": 19, "🇵🇱": 20, "🇹🇭": 21, "🇲🇴": 22,
+    "🇷🇺": 23, "🇨🇳": 24, "🇺🇳": 900
+  };
 
+  const getFlag = (name: string): string => {
+    const match = name.match(/^([\uD83C][\uDDE6-\uDDFF][\uD83C][\uDDE6-\uDDFF]|🇺🇳)/);
+    return match ? match[1] : "";
+  };
+
+  uniqueList.sort((a, b) => {
+    const flagA = getFlag(a.name);
+    const flagB = getFlag(b.name);
+    const pA = flagPriority[flagA] || 999;
+    const pB = flagPriority[flagB] || 999;
+
+    if (pA !== pB) return pA - pB;
+    return a.name.localeCompare(b.name, 'zh-TW');
+  });
+
+  // 4. 計算重名編號，同步更新子物件名稱
+  const nameCount = new Map<string, number>();
+  for (const node of uniqueList) {
+    const baseName = node.name;
     if (!nameCount.has(baseName)) {
       nameCount.set(baseName, 1);
-      node.name = baseName;
     } else {
       const count = nameCount.get(baseName)! + 1;
       nameCount.set(baseName, count);
       node.name = `${baseName} (${count})`;
     }
-    
+
     if (node.singboxObj) node.singboxObj.tag = node.name;
     if (node.clashObj) node.clashObj.name = node.name;
+  }
 
-    return true;
-  });
+  return uniqueList;
 }
