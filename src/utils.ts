@@ -38,7 +38,7 @@ export function tryDecodeURIComponent(str: string): string {
 
 // --- 自動加入國旗 Emoji 的智慧辨識系統 ---
 export function addFlag(name: string): string {
-  if (/[\uD83C][\uDDE6-\uDDFF][\uD83C][\uDDE6-\uDDFF]|🇺🇳/.test(name)) {
+  if (/[\uD83C][\uDDE6-\uDDFF][\uD83C][\uDDE6-\uDDFF]/.test(name)) {
     return name;
   }
 
@@ -62,6 +62,7 @@ export function addFlag(name: string): string {
   if (isMatch('EG|EGY|CAI', '埃及|开罗|開羅|EGYPT')) return "🇪🇬 " + name;
   if (isMatch('VN|VNM|HAN|SGN', '越南|河内|河內|西贡|VIETNAM')) return "🇻🇳 " + name;
   
+  // 澳門、柬埔寨、希臘、波蘭國旗補完
   if (isMatch('MO|MAC|MFM', '澳門|澳门')) return "🇲🇴 " + name;
   if (isMatch('KH|KHM|PNH', '柬埔寨|金边|金邊|CAMBODIA')) return "🇰🇭 " + name;
   if (isMatch('GR|GRC|ATH', '希腊|希臘|雅典|GREECE')) return "🇬🇷 " + name;
@@ -86,7 +87,7 @@ export function addFlag(name: string): string {
   if (isMatch('TR|TUR|IST', '土耳其|伊斯坦堡|TURKEY')) return "🇹🇷 " + name;
   if (isMatch('IN|IND|BOM', '印度|孟买|INDIA')) return "🇮🇳 " + name;
   if (isMatch('CA|CAN|YVR|YYZ', '加拿大|多伦多|温哥华|CANADA')) return "🇨🇦 " + name;
-  if (isMatch('AU|AUS|SYD|MEL', '澳大利亚|澳洲|悉尼|墨合本|AUSTRALIA')) return "🇦🇺 " + name;
+  if (isMatch('AU|AUS|SYD|MEL', '澳大利亚|澳洲|悉尼|墨尔本|AUSTRALIA')) return "🇦🇺 " + name;
   if (isMatch('CN|CHN', '中国|回国|国内|北京|上海|廣州|深圳|CHINA')) return "🇨🇳 " + name;
   if (isMatch('NZ|NZL|AKL', '新西兰|紐西蘭|奥克兰|NEW ZEALAND')) return "🇳🇿 " + name;
   if (isMatch('AE|ARE|DXB', '阿联酋|迪拜|杜拜|UAE')) return "🇦🇪 " + name;
@@ -100,63 +101,35 @@ export function addFlag(name: string): string {
   return "🇺🇳 " + name;
 }
 
-// --- 去重複命名與自動智慧排序 ---
+// --- 去重複命名與還原機場預設排序 ---
 export function deduplicateNodeNames(nodes: ProxyNode[]): ProxyNode[] {
   const seenKey = new Set<string>();
-  const uniqueList: ProxyNode[] = [];
-
-  // 1. 先進行 Server+Port 去重
-  for (const node of nodes) {
-    const key = `${node.server}:${node.port}:${node.uuid || node.password || ''}`;
-    if (!seenKey.has(key)) {
-      seenKey.add(key);
-      uniqueList.push(node);
-    }
-  }
-
-  // 2. 自動加上國旗
-  for (const node of uniqueList) {
-    node.name = addFlag(node.name || 'node');
-  }
-
-  // 3. 智慧排序 (依據國旗優先級與字母)
-  const flagPriority: Record<string, number> = {
-    "🇭🇰": 1, "🇹🇼": 2, "🇯🇵": 3, "🇸🇬": 4, "🇺🇸": 5, "🇰🇷": 6, "🇬🇧": 7, "🇩🇪": 8,
-    "🇫🇷": 9, "🇳🇱": 10, "🇨🇦": 11, "🇦🇺": 12, "🇧🇷": 13, "🇪🇬": 14, "🇻🇳": 15,
-    "🇲🇾": 16, "🇰🇭": 17, "🇵🇰": 18, "🇬臨": 19, "🇵🇱": 20, "🇹🇭": 21, "🇲🇴": 22,
-    "🇷🇺": 23, "🇨🇳": 24, "🇺🇳": 900
-  };
-
-  const getFlag = (name: string): string => {
-    const match = name.match(/^([\uD83C][\uDDE6-\uDDFF][\uD83C][\uDDE6-\uDDFF]|🇺🇳)/);
-    return match ? match[1] : "";
-  };
-
-  uniqueList.sort((a, b) => {
-    const flagA = getFlag(a.name);
-    const flagB = getFlag(b.name);
-    const pA = flagPriority[flagA] || 999;
-    const pB = flagPriority[flagB] || 999;
-
-    if (pA !== pB) return pA - pB;
-    return a.name.localeCompare(b.name, 'zh-TW');
-  });
-
-  // 4. 計算重名編號，同步更新子物件名稱
   const nameCount = new Map<string, number>();
-  for (const node of uniqueList) {
-    const baseName = node.name;
+
+  // 直接使用 filter 保留機場原本最優化、最習慣的原始節點順序
+  return nodes.filter(node => {
+    const key = `${node.server}:${node.port}:${node.uuid || node.password || ''}`;
+
+    if (seenKey.has(key)) return false;
+    seenKey.add(key);
+
+    let baseName = node.name || 'node';
+    
+    // 自動補上國旗或 🇺🇳 聯合國國旗，達成完美對齊
+    baseName = addFlag(baseName);
+
     if (!nameCount.has(baseName)) {
       nameCount.set(baseName, 1);
+      node.name = baseName;
     } else {
       const count = nameCount.get(baseName)! + 1;
       nameCount.set(baseName, count);
       node.name = `${baseName} (${count})`;
     }
-
+    
     if (node.singboxObj) node.singboxObj.tag = node.name;
     if (node.clashObj) node.clashObj.name = node.name;
-  }
 
-  return uniqueList;
+    return true;
+  });
 }
