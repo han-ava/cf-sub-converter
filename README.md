@@ -1,21 +1,23 @@
 # ⚡ CF Sub Converter Pro
 
-基於 Cloudflare Workers 的 Serverless 訂閱轉換工具。擁有全新專業級的無廣告深色 UI，內建智慧節點過濾與重命名系統，一鍵將雜亂的訂閱或節點轉換為 Sing-Box / Clash Meta (Mihomo) / Base64 格式，完美支援所有最新代理協議與進階路由策略。
+基於 Cloudflare Workers 的 Serverless 訂閱轉換工具。擁有全新專業級的無廣告深色 UI，內建智慧過濾、替換與智慧國旗萬國對齊系統。一鍵將雜亂的訂閱或節點轉換為 Sing-Box / Clash Meta (Mihomo) / Base64 格式，亦可**直接作為第三方轉換網頁（如 `sub-web`）的自定義後端** [1]。
 
 [![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/sammy0101/cf-sub-converter)
 
 ## 🌟 特性
 
 - 🎨 **專業級 UI** - 全新深色主題設計 (Slate/Zinc)，無廣告、純淨排版，搭配流暢的互動動畫與一鍵掃碼功能。
+- 📊 **流量與到期日智慧透傳** - 自動從上游多個機場擷取並**加總多個訂閱的流量（上傳、下載、總量），並自動計算最近的到期時間**，透過標準 `subscription-userinfo` 標頭透傳，完美點亮客戶端的流量條 [1, 2]！
+- ⚡ **標準 SubConverter 後端支援** - 內建 **`/sub`** 和 **`/version`** API 路由，回傳標準的 `v0.9.9-cd74f4d` 標記並全面支援跨域 (CORS)。可直接做為任何第三方訂閱前端網頁（如 `sub-web`）的自定義後端 [1, 3.4.4]。
 - 🔍 **智慧過濾與替換** - 
-  - **節點篩選**：支援「僅保留」與「排除」雙向過濾（使用 `|` 隔開，如 `HK|TW` 或 `5x`）。後端內建字元智慧相容技術，自動將 `x`、`X`、全形 `ｘ` 與數學乘號 `×` 互通匹配，解決過濾乘率節點的衝突。
-  - **名稱替換**：支援極簡統一的替換語法。刪除請用 `DEL-關鍵字`，替換請用 `尋找-替換`，多組規則使用 `|` 隔開（例如：`DEL-[69云]|移动优化-專線|DEL-永久`）。
-- 🚩 **自動國旗與萬國標註** - 內建智慧辨識系統，自動為節點名稱補上對應的國家國旗 Emoji (如 🇹🇼、🇭🇰、🇯🇵、🇲🇴、🇰🇭、🇬🇷、🇵🇱 等 40+ 國家與常用機場機場縮寫)。**若遇到無對應國家的節點（如流量提示），自動補上 🇺🇳 (聯合國國旗)**，達成 100% 完美工整排版。
+  - **節點篩選**：支援「僅保留」與「排除」雙向過濾（使用 `|` 隔開，如 `HK|TW` 或 `5x`）。後端內建字元智慧相容技術，自動將 `x`、`X`、全形 `ｘ` 與數學乘號 `×` 進行互通匹配。
+  - **名稱替換**：支援極簡統一的替換與刪除語法。刪除請用 `DEL-關鍵字`，替換請用 `尋找-替換`，多組規則使用 `|` 隔開（例如：`DEL-[69云]|移动优化-專線|DEL-永久`）。
+- 🚩 **自動國旗與萬國標註** - 內建智慧辨識系統，自動為節點名稱補上對應的國家國旗 Emoji (如 🇹🇼、🇭🇰、🇯🇵、🇲🇴、🇰🇭、🇬🇷、🇵🇱 等 40+ 國家與常用機場縮寫)。**若遇到無對應國家的節點（如流量提示、機場官網），自動補上 🇺🇳 (聯合國國旗)**，達成 100% 完美工整排版。
 - 🔌 **全協議支援** - 完美解析 `Trojan`, `VLESS`, `VMess`, `Shadowsocks`, `Hysteria2 (hy2)`, `TUIC`, `AnyTLS` 等主流與新興協議。
 - 🚀 **極速路由與 DNS** - 轉換出的配置檔內建頂級路由規則：
   - **Clash Meta**：流量嗅探 (Sniffer)、Fake-IP、TProxy 軟路由最佳化、中外 DNS 智慧解析。
   - **Sing-Box**：Mixed TUN 堆疊優化、獨立 DNS 快取、蘋果/國內服務精準直連。
-- ☁️ **雲端與配置同步** - 運行在 Cloudflare 邊緣網絡，零成本運維。生成短連結時，**系統會將「資料來源、過濾規則、替換規則」打包存入 KV**，客戶端直接更新短連結即可自動套用所有規則，不需在客戶端 URL 後手動拼接複雜參數。
+- ☁️ **雲端與配置同步** - 運行在 Cloudflare 邊緣網絡，零成本運維。生成短連結時，**系統會將「資料來源、過濾規則、替換規則」打包存入 KV**，客戶端直接更新短連結即可自動套用所有規則，不需在客戶端 URL 後手動外掛複雜參數。
 
 ## 🚀 部署教學
 
@@ -61,12 +63,20 @@
   - **節點名稱替換**：刪除寫 `DEL-關鍵字`，替換寫 `尋找-替換`，多組規則用 `|` 隔開。例如輸入 `DEL-[69云]|移动优化-專線`。
 - **配置收藏**：常用的節點與過濾替換規則可以儲存到「已儲存的配置」區塊。卡片上會直觀地以綠色 `保`、紅色 `排` 和藍色 `替` 標籤顯示你所設定的規則，點擊卡片即可自動載入所有設定。
 
-### API 調用格式
-若不使用圖形化介面，也可以直接透過 URL 參數進行轉換、過濾與重命名：
+### API 調用與外部前端對接 [1]
+
+#### 1. 當作標準 SubConverter 後端使用
+本專案內建對應 `/sub` 與 `/version` 端點。你可以打開任何一個開源的 `sub-web` 網頁（例如：`sub.id9.cc` 或其他的轉換前端），並在**「後端地址 (Backend URL)」**中，填入你的 Cloudflare Workers 網址 [1]：
+```text
+https://your-worker.workers.dev
+```
+
+#### 2. 自訂 API 參數格式
+你也可以直接透過 URL 參數進行手動調用與過濾：
 
 ```http
 # 轉換原始連結 + 僅保留港台 + 排除 5x 節點 + 移除 [69云] 廣告 + 將 移动优化 替換為 專線
-https://your-worker.workers.dev/?url=<URL編碼後的訂閱連結>&target=singbox&include=HK|TW&exclude=5x&rename=DEL-[69云]|移动优化-專線
+https://your-worker.workers.dev/sub?url=<URL編碼後的訂閱連結>&target=singbox&include=HK|TW&exclude=5x&rename=DEL-[69云]|移动优化-專線
 
 # 轉換短連結 + 自動套用在雲端 KV 中存好的過濾與名稱替換規則
 https://your-worker.workers.dev/<自訂短連結名稱>?target=clash
@@ -95,11 +105,11 @@ https://your-worker.workers.dev/<自訂短連結名稱>?target=clash
 ```text
 cf-sub-converter/
 ├── src/
-│   ├── index.ts          # Worker 主入口路由、並發請求控制、智慧過濾與雲端配置同步
+│   ├── index.ts          # Worker 主入口路由、並發請求控制、智慧過濾、雲端配置同步與 /version 後端模擬
 │   ├── constants.ts      # 專業版 HTML 視圖模板與遠端規則常數 (含過濾與收藏 UI)
 │   ├── parser.ts         # 節點解析器 (支援 Trojan, AnyTLS, TUIC, Hy2 等)
 │   ├── generator.ts      # 格式生成器 (映射為 Sing-Box / Clash Meta / Base64)
-│   ├── utils.ts          # Base64 淨化與智慧國旗自動標註系統 (豪華全球版 + 萬國對齊)
+│   ├── utils.ts          # Base64 淨化與智慧國旗自動標註系統 (豪華全球版 + 萬國 🇺🇳 對齊)
 │   └── types.ts          # TypeScript 類型定義
 ├── Sing-Box_Rules.JSON   # 遠端 Sing-Box 路由規則範本 (極速混合堆疊版)
 ├── Clash_Rules.YAML      # 遠端 Clash Meta 路由規則範本 (軟路由透明代理版)
