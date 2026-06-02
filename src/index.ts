@@ -8,6 +8,17 @@ export default {
 async fetch(request: Request, env: Env, ctx: any): Promise<Response> {
 const url = new URL(request.url);
 
+// 💥 0. GET /version (標準 SubConverter 檢測端點，模擬自訂後端版本)
+if (request.method === 'GET' && url.pathname === '/version') {
+  return new Response('subconverter v0.9.9-cd74f4d backend\n', {
+    headers: { 
+      'Content-Type': 'text/plain; charset=utf-8', 
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Headers': '*'
+    } 
+  });
+}
+
 // 1. POST /save (儲存短連結到 KV，智慧儲存過濾與重命名規則)
 if (request.method === 'POST' && url.pathname === '/save') {
   try {
@@ -112,7 +123,7 @@ let renameParam = url.searchParams.get('rename') || '';
 
 const path = decodeURIComponent(url.pathname.slice(1)); 
 
-// 💥 智慧相容：如果路徑是 'sub'，這是標準 SubConverter 的 API 端點，我們跳過 KV 查詢，直接視為普通轉換！[1]
+// 智慧相容：如果路徑是 'sub'，這是標準 SubConverter 的 API 端點，我們跳過 KV 查詢，直接視為普通轉換！
 if (path && path !== 'sub' && path !== 'favicon.ico' && path !== '') {
   const stored = await env.SUB_CACHE.get(path);
   if (stored) { 
@@ -133,7 +144,7 @@ if (path && path !== 'sub' && path !== 'favicon.ico' && path !== '') {
 
 // 顯示首頁或回傳 API 錯誤
 if (!urlParam || urlParam.trim() === '') {
-  // 💥 如果請求的是 /sub，卻沒有帶 url 參數，回傳標準 API 400 錯誤而非 HTML 首頁 [1]
+  // 如果請求的是 /sub，卻沒有帶 url 參數，回傳標準 API 400 錯誤而非 HTML 首頁
   if (path === 'sub') {
     return new Response('Error: Missing parameter "url"', { status: 400, headers: { 'Access-Control-Allow-Origin': '*' } });
   }
@@ -171,7 +182,7 @@ await Promise.all(inputs.map(async (input) => {
       if (resp.ok) { 
         const text = await resp.text(); 
         
-        // 機場流量資訊 (subscription-userinfo) 解析與累加 [2]
+        // 機場流量資訊 (subscription-userinfo) 解析與累加
         const userInfo = resp.headers.get('subscription-userinfo');
         if (userInfo) {
           hasTrafficInfo = true;
@@ -299,7 +310,7 @@ if (filteredNodes.length === 0) {
   });
 }
 
-// 對篩選過後的節點進行 智慧排序、去重複命名、自動補國旗 (聯合國國旗)
+// 對篩選過後的節點進行 去重複命名與自動補國旗
 const uniqueNodes = deduplicateNodeNames(filteredNodes);
 
 const target = url.searchParams.get('target');
@@ -373,7 +384,7 @@ if (target === 'clash') {
 
 const filename = `subscription${fileExt}`;
 
-// 組裝最終的 Header 物件 (包含流量透傳) [2]
+// 組裝最終的 Header 物件 (包含流量透傳)
 const responseHeaders: Record<string, string> = {
   'Content-Type': `${contentType}; charset=utf-8`, 
   'Access-Control-Allow-Origin': '*', 
@@ -384,13 +395,13 @@ const responseHeaders: Record<string, string> = {
   'Profile-Update-Interval': '3600',
 };
 
-// 如果有機場回傳流量資訊，進行透傳，點亮客戶端流量面板 [2]
+// 如果有機場回傳流量資訊，進行透傳，點亮客戶端流量面板
 if (hasTrafficInfo) {
   let userInfoHeader = `upload=${totalUpload}; download=${totalDownload}; total=${totalTotal}`;
   if (minExpire > 0) {
     userInfoHeader += `; expire=${minExpire}`;
   }
-  responseHeaders['subscription-userinfo'] = userInfoHeader; // [2]
+  responseHeaders['subscription-userinfo'] = userInfoHeader;
 }
 
 return new Response(result, { headers: responseHeaders });
