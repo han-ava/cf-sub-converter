@@ -112,7 +112,8 @@ let renameParam = url.searchParams.get('rename') || '';
 
 const path = decodeURIComponent(url.pathname.slice(1)); 
 
-if (path && path !== 'favicon.ico' && path !== '') {
+// 💥 智慧相容：如果路徑是 'sub'，這是標準 SubConverter 的 API 端點，我們跳過 KV 查詢，直接視為普通轉換！[1]
+if (path && path !== 'sub' && path !== 'favicon.ico' && path !== '') {
   const stored = await env.SUB_CACHE.get(path);
   if (stored) { 
     try {
@@ -130,8 +131,12 @@ if (path && path !== 'favicon.ico' && path !== '') {
   }
 }
 
-// 顯示首頁 (沒有 url 參數也沒有短連結)
+// 顯示首頁或回傳 API 錯誤
 if (!urlParam || urlParam.trim() === '') {
+  // 💥 如果請求的是 /sub，卻沒有帶 url 參數，回傳標準 API 400 錯誤而非 HTML 首頁 [1]
+  if (path === 'sub') {
+    return new Response('Error: Missing parameter "url"', { status: 400, headers: { 'Access-Control-Allow-Origin': '*' } });
+  }
   return new Response(HTML_PAGE, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
 }
 
@@ -166,7 +171,7 @@ await Promise.all(inputs.map(async (input) => {
       if (resp.ok) { 
         const text = await resp.text(); 
         
-        // 機場流量資訊 (subscription-userinfo) 解析與累加
+        // 機場流量資訊 (subscription-userinfo) 解析與累加 [2]
         const userInfo = resp.headers.get('subscription-userinfo');
         if (userInfo) {
           hasTrafficInfo = true;
@@ -261,9 +266,9 @@ if (renameParam) {
   }
 }
 
-// 🔑 修正：一步到位正則替換，徹底修復 5x 過濾崩潰的 Bug
+// 2. 智慧保留與排除過濾
 const buildFilterRegex = (param: string): RegExp => {
-  const safePattern = param.replace(/[xXｘＸ×]/g, '[xXｘＸ×]');
+  const safePattern = param.replace(/[xXｘＸ]/g, '[xXｘＸ×]').replace(/×/g, '[xXｘＸ×]');
   return new RegExp(safePattern, 'i');
 };
 
@@ -330,17 +335,17 @@ if (!target) {
     <h1>⚡ 篩選並轉換完成 (${uniqueNodes.length} 節點)</h1>
     <div class="result">
       <div class="result-title">📄 Sing-Box (JSON)</div>
-      <div class="result-link">${host}/?url=${encodedUrl}&target=singbox${filterQuery}</div>
+      <div class="result-link">${host}/?url=${encodedUrl}&target=singbox</div>
     </div>
     <div class="result">
       <div class="result-title">📋 Clash Meta (YAML)</div>
-      <div class="result-link">${host}/?url=${encodedUrl}&target=clash${filterQuery}</div>
+      <div class="result-link">${host}/?url=${encodedUrl}&target=clash</div>
     </div>
     <div class="result">
       <div class="result-title">🔗 Base64 (原始)</div>
-      <div class="result-link">${host}/?url=${encodedUrl}&target=base64${filterQuery}</div>
+      <div class="result-link">${host}/?url=${encodedUrl}&target=base64</div>
     </div>
-    <a class="btn" href="${host}/?url=${encodedUrl}&target=singbox${filterQuery}">📥 下載 Sing-Box 訂閱</a>
+    <a class="btn" href="${host}/?url=${encodedUrl}&target=singbox">📥 下載 Sing-Box 訂閱</a>
   </div>
 </body>
 </html>
@@ -368,7 +373,7 @@ if (target === 'clash') {
 
 const filename = `subscription${fileExt}`;
 
-// 組裝最終的 Header 物件 (包含流量透傳)
+// 組裝最終的 Header 物件 (包含流量透傳) [2]
 const responseHeaders: Record<string, string> = {
   'Content-Type': `${contentType}; charset=utf-8`, 
   'Access-Control-Allow-Origin': '*', 
@@ -379,13 +384,13 @@ const responseHeaders: Record<string, string> = {
   'Profile-Update-Interval': '3600',
 };
 
-// 如果有機場回傳流量資訊，進行透傳，點亮客戶端流量面板
+// 如果有機場回傳流量資訊，進行透傳，點亮客戶端流量面板 [2]
 if (hasTrafficInfo) {
   let userInfoHeader = `upload=${totalUpload}; download=${totalDownload}; total=${totalTotal}`;
   if (minExpire > 0) {
     userInfoHeader += `; expire=${minExpire}`;
   }
-  responseHeaders['subscription-userinfo'] = userInfoHeader;
+  responseHeaders['subscription-userinfo'] = userInfoHeader; // [2]
 }
 
 return new Response(result, { headers: responseHeaders });
