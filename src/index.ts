@@ -1,16 +1,22 @@
+// @ts-ignore
+// 🔑 智慧同步：引入專案根目錄的 package.json
+import packageJson from '../package.json';
 import { Env, ProxyNode } from './types';
 import { HTML_PAGE } from './constants';
 import { parseContent } from './parser';
 import { toSingBoxWithTemplate, toClashWithTemplate, toBase64 } from './generator';
 import { deduplicateNodeNames } from './utils';
 
+// 動態獲取 package.json 中的版本號，若找不到則使用 v2.5.0 兜底
+const version = packageJson.version || '2.5.0';
+
 export default {
 async fetch(request: Request, env: Env, ctx: any): Promise<Response> {
 const url = new URL(request.url);
 
-// 💥 0. GET /version (標準 SubConverter 檢測端點，模擬自訂後端版本)
+// 💥 0. GET /version (標準 SubConverter 檢測端點，動態讀取專案 package.json 版本與網域)
 if (request.method === 'GET' && url.pathname === '/version') {
-  return new Response('subconverter v0.9.9-cd74f4d backend\n', {
+  return new Response(`subconverter v${version} ${url.host} backend\n`, {
     headers: { 
       'Content-Type': 'text/plain; charset=utf-8', 
       'Access-Control-Allow-Origin': '*',
@@ -148,7 +154,9 @@ if (!urlParam || urlParam.trim() === '') {
   if (path === 'sub') {
     return new Response('Error: Missing parameter "url"', { status: 400, headers: { 'Access-Control-Allow-Origin': '*' } });
   }
-  return new Response(HTML_PAGE, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+  // 💥 智慧同步：將前端 UI 寫死的 "v2.5.0" 動態替換為 package.json 中的最新版本號！
+  const dynamicHtml = HTML_PAGE.replace('v2.5.0', `v${version}`);
+  return new Response(dynamicHtml, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
 }
 
 // 4. 解析並下載 (支援流量資訊透傳與合併)
