@@ -30,6 +30,8 @@ export const HTML_PAGE = `
       --primary-hover: #2563eb;
       --success: #10b981;
       --danger: #ef4444;
+      --orange: #ea580c;
+      --orange-hover: #c2410c;
       --radius-sm: 6px;
       --radius-md: 10px;
       --radius-lg: 16px;
@@ -187,6 +189,47 @@ export const HTML_PAGE = `
       <button class="btn btn-primary" id="generateBtn" onclick="generate()" style="margin-top: 2rem;">
         <svg viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
         <span>執行轉換</span>
+      </button>
+    </main>
+
+    <!-- 💥 新增：Cloudflare Argo 隧道節點生成器 -->
+    <main class="panel" style="margin-top: 1.5rem;">
+      <div class="panel-header">
+        <h2 class="panel-title" style="color: var(--orange);">
+          <svg viewBox="0 0 24 24" style="color: var(--orange);"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"></path></svg>
+          Cloudflare Argo 隧道節點生成器
+        </h2>
+      </div>
+      
+      <div class="form-group">
+        <label for="argoBaseVless">基底 VLESS 連結 (包含真實 UUID 與 WS Path)</label>
+        <input type="text" id="argoBaseVless" placeholder="vless://xxxxxx@localhost:port?path=/abc...">
+      </div>
+
+      <div class="form-group" style="margin-top: 1.25rem;">
+        <label for="argoTempDomain">臨時隧道網域 (選填，trycloudflare.com)</label>
+        <input type="text" id="argoTempDomain" placeholder="例如: matching-translated-cartridges-obtained.trycloudflare.com">
+      </div>
+
+      <div class="form-group" style="margin-top: 1.25rem;">
+        <label for="argoFixedDomain">固定隧道網域 (選填，自訂網域)</label>
+        <input type="text" id="argoFixedDomain" placeholder="例如: argo.sammyvs.pp.ua">
+      </div>
+
+      <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 12px; margin-top: 1.25rem; margin-bottom: 1.5rem;">
+        <div class="form-group">
+          <label for="argoCleanIp">Cloudflare 優選網域/IP</label>
+          <input type="text" id="argoCleanIp" value="cf.090227.xyz" placeholder="例如: cf.090227.xyz">
+        </div>
+        <div class="form-group">
+          <label for="argoCleanPort">優選連接埠</label>
+          <input type="text" id="argoCleanPort" value="8443" placeholder="例如: 8443">
+        </div>
+      </div>
+
+      <button class="btn" onclick="generateArgo()" style="width: 100%; border: 1px solid var(--orange); color: var(--orange); background: rgba(234, 88, 12, 0.05); font-weight: 600;">
+        <svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5z"></path></svg>
+        <span>產生 Argo 節點並加入資料來源</span>
       </button>
     </main>
 
@@ -447,7 +490,7 @@ export const HTML_PAGE = `
           baseUrl = host + '/?url=' + encodeURIComponent(raw);
         }
         
-        // 💥 修正：前台結果網址也不再強制拼接過濾與替換參數
+        // 智慧：前台結果網址也不再強制拼接過濾與替換參數
         const sep = baseUrl.includes('?') ? '&' : '?';
         document.getElementById('singboxUrl').value = baseUrl + sep + 'target=singbox';
         document.getElementById('clashUrl').value = baseUrl + sep + 'target=clash';
@@ -462,6 +505,75 @@ export const HTML_PAGE = `
       
       btn.disabled = false;
       btn.innerHTML = originalHTML;
+    }
+
+    // 💥 新增：智慧型 Cloudflare Argo 節點生成演算法
+    function generateArgo() {
+      const baseVless = document.getElementById('argoBaseVless').value.trim();
+      const tempDomain = document.getElementById('argoTempDomain').value.trim();
+      const fixedDomain = document.getElementById('argoFixedDomain').value.trim();
+      const cleanIp = document.getElementById('argoCleanIp').value.trim() || 'cf.090227.xyz';
+      const cleanPort = document.getElementById('argoCleanPort').value.trim() || '8443';
+      
+      if (!baseVless) return showToast('請先輸入基底 VLESS 連結', false);
+      if (!tempDomain && !fixedDomain) return showToast('請至少輸入一種隧道網域（臨時或固定）', false);
+      
+      try {
+        // 解析原始 VLESS 網址 (格式：vless://uuid@host:port?query#name)
+        const urlStr = baseVless.replace('vless://', 'http://'); // 騙過瀏覽器的原生 URL 解析器以防崩潰
+        const url = new URL(urlStr);
+        const uuid = url.username;
+        const params = url.searchParams;
+        const originalName = decodeURIComponent(url.hash.slice(1)) || 'Argo';
+        
+        let path = params.get('path') || '/';
+        if (!path.startsWith('/')) path = '/' + path;
+        
+        const generatedNodes = [];
+        
+        // 1. 產生 臨時隧道 (trycloudflare.com) 節點
+        if (tempDomain) {
+          const tempParams = new URLSearchParams();
+          tempParams.set('encryption', 'none');
+          tempParams.set('security', 'tls');
+          tempParams.set('type', 'ws');
+          tempParams.set('host', tempDomain);
+          tempParams.set('sni', tempDomain);
+          tempParams.set('path', path);
+          if (params.get('fp')) tempParams.set('fp', params.get('fp'));
+          
+          const tempVless = \`vless://\${uuid}@\${cleanIp}:\${cleanPort}?\${tempParams.toString()}#\${encodeURIComponent(originalName + '-臨時隧道')}\`;
+          generatedNodes.push(tempVless);
+        }
+        
+        // 2. 產生 固定隧道 (自訂網域) 節點
+        if (fixedDomain) {
+          const fixedParams = new URLSearchParams();
+          fixedParams.set('encryption', 'none');
+          fixedParams.set('security', 'tls');
+          fixedParams.set('type', 'ws');
+          fixedParams.set('host', fixedDomain);
+          fixedParams.set('sni', fixedDomain);
+          fixedParams.set('path', path);
+          if (params.get('fp')) fixedParams.set('fp', params.get('fp'));
+          
+          const fixedVless = \`vless://\${uuid}@\${cleanIp}:\${cleanPort}?\${fixedParams.toString()}#\${encodeURIComponent(originalName + '-固定隧道')}\`;
+          generatedNodes.push(fixedVless);
+        }
+        
+        // 將產生的節點自動追加到上方的主資料來源輸入框中
+        const urlInput = document.getElementById('urlInput');
+        if (urlInput.value.trim()) {
+          urlInput.value = urlInput.value.trim() + '\\n' + generatedNodes.join('\\n');
+        } else {
+          urlInput.value = generatedNodes.join('\\n');
+        }
+        
+        showToast('✅ Argo 節點已成功追加至主資料來源！');
+        
+      } catch (e) {
+        showToast('解析基底 VLESS 失敗，請確認格式是否正確', false);
+      }
     }
     
     function copyResult(id) {
