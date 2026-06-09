@@ -582,7 +582,6 @@ export const HTML_PAGE = `
       btn.innerHTML = originalHTML;
     }
 
-    // 智慧型多節點 Cloudflare Argo 隧道節點生成演算法
     async function generateArgo() {
       const baseVlessText = document.getElementById('argoBaseVless').value.trim();
       const tempDomain = document.getElementById('argoTempDomain').value.trim();
@@ -662,7 +661,6 @@ export const HTML_PAGE = `
         if (failCount > 0) toastMsg += ' (有 ' + failCount + ' 個節點解析失敗)';
         showToast(toastMsg);
 
-        // 動態生成一鍵腳本內容 (不帶任何引發報錯的字眼)
         const targetDomain = fixedDomain ? fixedDomain : tempDomain;
         const scriptStr = '#!/bin/bash\\n' +
           '# 專屬 Sing-Box + Argo 自動部署腳本\\n' +
@@ -742,7 +740,6 @@ export const HTML_PAGE = `
       }
     }
 
-    // 從收藏配置中直接一鍵將 VLESS 載入為 Argo 隧道基底 (相容多網址與訂閱連結遠端提取)
     async function useAsArgoBase(index) {
       const urlVal = favs[index].url;
       const vlessNodes = extractVlessNodes(urlVal);
