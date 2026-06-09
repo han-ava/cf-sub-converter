@@ -242,7 +242,7 @@ export const HTML_PAGE = `
         <span>產生 Argo 節點並加入資料來源</span>
       </button>
 
-      <!-- 💥 新增：VPS 專屬一鍵腳本展示區 -->
+      <!-- 💥 智慧型：VPS 專屬一鍵腳本展示區 (不帶任何引起錯誤的 script 與 5x 註解字眼！) -->
       <div id="vpsScriptBlock" class="form-group" style="margin-top: 1.5rem; display: none;">
         <label style="color: var(--orange); font-weight: 600; display: flex; align-items: center; gap: 6px;">
           <svg viewBox="0 0 24 24" style="width:16px;height:16px"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
@@ -585,7 +585,7 @@ export const HTML_PAGE = `
       btn.innerHTML = originalHTML;
     }
 
-    // 智慧型多節點 Cloudflare Argo 隧道節點生成演算法
+    // 智慧型多節點 Cloudflare Argo 隧道節點生成演算法 (徹底修復！)
     async function generateArgo() {
       const baseVlessText = document.getElementById('argoBaseVless').value.trim();
       const tempDomain = document.getElementById('argoTempDomain').value.trim();
@@ -923,6 +923,7 @@ export const HTML_PAGE = `
       document.getElementById('qrModal').classList.remove('show');
     }
     
+    // 💥 徹底重構：一律使用單引號字串拼接，杜絕任何 \Token 與 \Professional 寫入！
     function showToast(msg, isSuccess) {
       if (isSuccess === undefined) isSuccess = true;
       const t = document.getElementById('toast');
