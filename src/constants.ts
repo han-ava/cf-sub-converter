@@ -192,7 +192,7 @@ export const HTML_PAGE = `
       </button>
     </main>
 
-    <!-- Cloudflare Argo 隧道節點生成器 (支援多行/多網址並發下載選單) -->
+    <!-- Cloudflare Argo 隧道節點生成器 -->
     <main class="panel" style="margin-top: 1.5rem;">
       <div class="panel-header">
         <h2 class="panel-title" style="color: var(--orange);">
@@ -203,15 +203,14 @@ export const HTML_PAGE = `
       
       <div class="form-group">
         <label for="argoBaseVless">基底 VLESS 連結 (支援多個，每行一個)</label>
-        <div style="display: flex; flex-direction: column; gap: 8px;">
+        <div style="display: flex; gap: 8px;">
           <textarea id="argoBaseVless" placeholder="vless://xxxxxx@localhost:port?path=/abc...&#10;可手動貼上多行，或由下方配置一鍵智慧載入" style="min-height: 80px;"></textarea>
-          <button class="btn btn-ghost" id="loadVlessBtn" onclick="loadVlessFromSource()" style="width: 100%; border-color: var(--border);">
+          <button class="btn btn-ghost" id="loadVlessBtn" onclick="loadVlessFromSource()" style="white-space: nowrap; font-size: 0.85rem; padding: 0 12px; border-color: var(--border);">
             從上方資料來源載入
           </button>
         </div>
       </div>
 
-      <!-- 💥 智慧優化：臨時隧道網域新增一鍵「隨機生成」功能 -->
       <div class="form-group" style="margin-top: 1.25rem;">
         <label for="argoTempDomain">臨時隧道網域 (選填，trycloudflare.com)</label>
         <div style="display: flex; gap: 8px;">
@@ -558,7 +557,7 @@ export const HTML_PAGE = `
       btn.innerHTML = originalHTML;
     }
 
-    // 智慧型多節點 Cloudflare Argo 隧道節點生成演算法
+    // 💥 智慧型：多節點 Cloudflare Argo 隧道節點生成演算法
     async function generateArgo() {
       const baseVlessText = document.getElementById('argoBaseVless').value.trim();
       const tempDomain = document.getElementById('argoTempDomain').value.trim();
@@ -599,7 +598,7 @@ export const HTML_PAGE = `
             tempParams.set('path', path);
             if (params.get('fp')) tempParams.set('fp', params.get('fp'));
             
-            const tempVless = \`vless://\Professional\${uuid}@\${cleanIp}:\${cleanPort}?\${tempParams.toString()}#\${encodeURIComponent(originalName + '-臨時隧道')}\`;
+            const tempVless = \`vless://\${uuid}@\${cleanIp}:\Professional\${cleanPort}?\Professional\${tempParams.toString()}#\Professional\${encodeURIComponent(originalName + '-臨時隧道')}\`;
             generatedNodes.push(tempVless);
           }
           
@@ -648,9 +647,10 @@ export const HTML_PAGE = `
       const btn = document.getElementById('loadVlessBtn');
       const originalText = btn.textContent;
       
-      const vlessNodes = extractVlessNodes(sourceVal);
+      const lines = sourceVal.split(/[\\n\\r]+/);
       
       // 1. 如果輸入框裡直接就有 vless:// 或 anytls:// 節點
+      const vlessNodes = extractVlessNodes(sourceVal);
       if (vlessNodes.length > 0) {
         handleVlessSelection(vlessNodes);
         return;
@@ -746,7 +746,7 @@ export const HTML_PAGE = `
       }
     }
 
-    // 💥 輔助：從文本中提取所有合法的 VLESS/AnyTLS 節點
+    // 輔助：從文本中提取所有合法的 VLESS/AnyTLS 節點
     function extractVlessNodes(text) {
       const lines = text.split(/[\\n\\r]+/);
       return lines
@@ -772,7 +772,7 @@ export const HTML_PAGE = `
     function openNodeSelectModal() {
       const container = document.getElementById('nodeSelectContainer');
       const countEl = document.getElementById('nodeSelectCount');
-      countEl.textContent = \`已找到 \${extractedNodes.length} 個 VLESS 節點\`;
+      countEl.textContent = \`已找到 \Token\${extractedNodes.length} 個 VLESS 節點\`;
       
       container.innerHTML = extractedNodes.map((node, i) => {
         let nodeName = '未命名節點';
@@ -835,7 +835,7 @@ export const HTML_PAGE = `
       targetEl.focus();
     }
 
-    // 💥 智慧型：新增隨機產生 Argo 臨時網域算法 (模擬官方三單字減號規格)
+    // 新增：隨機產生 Argo 臨時網域算法 (模擬官方三單字減號規格)
     function generateRandomTempDomain() {
       const words = [
         "accurate", "active", "alert", "alive", "beautiful", "brave", "busy", "calm", "clean", "clever",
