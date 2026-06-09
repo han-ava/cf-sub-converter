@@ -192,7 +192,7 @@ export const HTML_PAGE = `
       </button>
     </main>
 
-    <!-- Cloudflare Argo 隧道節點生成器 (已重構：支援多選/多行導入) -->
+    <!-- Cloudflare Argo 隧道節點生成器 (支援多行/多網址並發下載選單) -->
     <main class="panel" style="margin-top: 1.5rem;">
       <div class="panel-header">
         <h2 class="panel-title" style="color: var(--orange);">
@@ -201,7 +201,6 @@ export const HTML_PAGE = `
         </h2>
       </div>
       
-      <!-- 💥 升級：基底連結改為 textarea，支援多個基底 -->
       <div class="form-group">
         <label for="argoBaseVless">基底 VLESS 連結 (支援多個，每行一個)</label>
         <div style="display: flex; flex-direction: column; gap: 8px;">
@@ -213,13 +212,11 @@ export const HTML_PAGE = `
       </div>
 
       <div class="form-group" style="margin-top: 1.25rem;">
-        <!-- 🔑 隱私修復：修改 placeholder 範例，不再顯示任何私有網域 -->
         <label for="argoTempDomain">臨時隧道網域 (選填，trycloudflare.com)</label>
         <input type="text" id="argoTempDomain" placeholder="例如: xxxx-xxxx-xxxx.trycloudflare.com">
       </div>
 
       <div class="form-group" style="margin-top: 1.25rem;">
-        <!-- 🔑 隱私修復：修改 placeholder 範例，使用通用 example 網域 -->
         <label for="argoFixedDomain">固定隧道網域 (選填，自訂網域)</label>
         <input type="text" id="argoFixedDomain" placeholder="例如: argo.example.com">
       </div>
@@ -340,7 +337,7 @@ export const HTML_PAGE = `
     </div>
   </div>
 
-  <!-- 💥 新增：節點選擇智慧模態框 -->
+  <!-- 節點選擇智慧模態框 -->
   <div class="modal-overlay" id="nodeSelectModal" style="z-index: 110;">
     <div class="modal-content" style="max-width: 500px;">
       <h3 class="modal-title">選擇基底 VLESS 節點</h3>
@@ -404,7 +401,7 @@ export const HTML_PAGE = `
         const excludeBadge = f.exclude ? \`<span class="badge" style="background: rgba(239, 68, 68, 0.1); color: var(--danger); border-color: rgba(239, 68, 68, 0.2); margin-right: 4px;">排: \${f.exclude}</span>\` : '';
         const renameBadge = f.rename ? \`<span class="badge" style="background: rgba(59, 130, 246, 0.1); color: var(--primary); border-color: rgba(59, 130, 246, 0.2)">替: \${f.rename}</span>\` : '';
         
-        // 智慧型快速檢查該配置是否包含 VLESS (含遠端訂閱)，如果是，則渲染出專屬的 Argo 基底載入按鈕
+        // ✨ 新增：智慧檢查該配置是否包含 VLESS (無論是明文還是訂閱網址)，如果包含，渲染出一個橘色的 "Argo" 快速載入按鈕
         const hasVless = f.url.includes('vless://') || f.url.includes('anytls://') || f.url.includes('http');
         const argoBtn = hasVless ? \`<button class="btn btn-ghost" style="color: var(--orange); border-color: rgba(234, 88, 12, 0.2); padding: 0.3rem 0.6rem; font-size: 0.8rem; margin-right: 4px;" onclick="event.stopPropagation(); useAsArgoBase(\${i})">Argo</button>\` : '';
 
@@ -538,6 +535,7 @@ export const HTML_PAGE = `
           baseUrl = host + '/?url=' + encodeURIComponent(raw);
         }
         
+        // 智慧：前台結果網址也不再強制拼接過濾與替換參數
         const sep = baseUrl.includes('?') ? '&' : '?';
         document.getElementById('singboxUrl').value = baseUrl + sep + 'target=singbox';
         document.getElementById('clashUrl').value = baseUrl + sep + 'target=clash';
@@ -554,7 +552,7 @@ export const HTML_PAGE = `
       btn.innerHTML = originalHTML;
     }
 
-    // 💥 新增：智慧型多節點 Cloudflare Argo 隧道節點生成演算法
+    // 智慧型多節點 Cloudflare Argo 隧道節點生成演算法
     async function generateArgo() {
       const baseVlessText = document.getElementById('argoBaseVless').value.trim();
       const tempDomain = document.getElementById('argoTempDomain').value.trim();
@@ -636,7 +634,7 @@ export const HTML_PAGE = `
       }
     }
 
-    // 💥 從主輸入框中自動提取所有 VLESS 節點 (相容遠端機場訂閱解析)
+    // 💥 從主輸入框中自動提取所有 VLESS 節點 (相容訂閱連結遠端提取)
     async function loadVlessFromSource() {
       const sourceVal = document.getElementById('urlInput').value.trim();
       if (!sourceVal) return showToast('請先輸入資料來源', false);
@@ -644,34 +642,45 @@ export const HTML_PAGE = `
       const btn = document.getElementById('loadVlessBtn');
       const originalText = btn.textContent;
       
-      const vlessNodes = extractVlessNodes(sourceVal);
+      const lines = sourceVal.split(/[\\n\\r]+/);
       
       // 1. 如果輸入框裡直接就有 vless:// 或 anytls:// 節點
+      const vlessNodes = extractVlessNodes(sourceVal);
       if (vlessNodes.length > 0) {
         handleVlessSelection(vlessNodes);
         return;
       }
       
-      // 2. 如果輸入框裡是訂閱網址 (http 開頭)
-      const lines = sourceVal.split(/[\\n\\r]+/);
-      const firstUrl = lines.find(line => line.trim().startsWith('http'));
-      if (firstUrl) {
+      // 2. 如果輸入框裡是訂閱網址 (http 開頭)，向後端 API 請求解開並下載提取所有網址
+      const urls = lines.map(line => line.trim()).filter(line => line.startsWith('http'));
+      if (urls.length > 0) {
         btn.textContent = '遠端下載中...';
         btn.disabled = true;
         try {
-          const apiTarget = window.location.origin + '/sub?url=' + encodeURIComponent(firstUrl) + '&target=base64';
-          const resp = await fetch(apiTarget);
-          if (resp.ok) {
-            const b64Text = await resp.text();
-            const decoded = safeBase64Decode(b64Text);
-            const remoteVlessNodes = extractVlessNodes(decoded);
-            if (remoteVlessNodes.length > 0) {
-              handleVlessSelection(remoteVlessNodes);
-            } else {
-              showToast('該遠端訂閱中未找到任何 VLESS 節點', false);
+          const combinedRemoteVless = [];
+          
+          // 💥 智慧並發：同時下載所有訂閱網址，並解鎖所有裡面的 VLESS 節點
+          await Promise.all(urls.map(async (trimmedUrl) => {
+            try {
+              const apiTarget = window.location.origin + '/sub?url=' + encodeURIComponent(trimmedUrl) + '&target=base64';
+              const resp = await fetch(apiTarget);
+              if (resp.ok) {
+                const b64Text = await resp.text();
+                const decoded = safeBase64Decode(b64Text);
+                const remoteVlessNodes = extractVlessNodes(decoded);
+                combinedRemoteVless.push(...remoteVlessNodes);
+              }
+            } catch (e) {
+              console.error('Failed to fetch from url:', trimmedUrl, e);
             }
+          }));
+
+          if (combinedRemoteVless.length > 0) {
+            // 自動去重複
+            const uniqueRemoteVless = Array.from(new Set(combinedRemoteVless));
+            handleVlessSelection(uniqueRemoteVless);
           } else {
-            showToast('下載遠端訂閱失敗，狀態碼: ' + resp.status, false);
+            showToast('所有遠端訂閱中皆未找到任何 VLESS 節點', false);
           }
         } catch (e) {
           showToast('連線失敗，請檢查網路或伺服器憑證', false);
@@ -684,7 +693,7 @@ export const HTML_PAGE = `
       }
     }
 
-    // 💥 從收藏配置中一鍵載入 VLESS 基底 (相容遠端機場訂閱解析)
+    // 💥 從收藏配置中直接一鍵將 VLESS 載入為 Argo 隧道基底 (相容多網址與訂閱連結遠端提取)
     async function useAsArgoBase(index) {
       const urlVal = favs[index].url;
       const vlessNodes = extractVlessNodes(urlVal);
@@ -695,23 +704,34 @@ export const HTML_PAGE = `
       }
       
       const lines = urlVal.split(/[\\n\\r]+/);
-      const firstUrl = lines.find(line => line.trim().startsWith('http'));
-      if (firstUrl) {
-        showToast('正在從遠端訂閱中提取 VLESS 節點...');
+      const urls = lines.map(line => line.trim()).filter(line => line.startsWith('http'));
+      
+      if (urls.length > 0) {
+        showToast('正在向多個遠端訂閱下載並提取 VLESS 節點...');
         try {
-          const apiTarget = window.location.origin + '/sub?url=' + encodeURIComponent(firstUrl) + '&target=base64';
-          const resp = await fetch(apiTarget);
-          if (resp.ok) {
-            const b64Text = await resp.text();
-            const decoded = safeBase64Decode(b64Text);
-            const remoteVlessNodes = extractVlessNodes(decoded);
-            if (remoteVlessNodes.length > 0) {
-              handleVlessSelection(remoteVlessNodes);
-            } else {
-              showToast('該遠端訂閱中未找到任何 VLESS 節點', false);
+          const combinedRemoteVless = [];
+          
+          // 💥 智慧並發：同步下載收藏配置內的所有訂閱連結
+          await Promise.all(urls.map(async (trimmedUrl) => {
+            try {
+              const apiTarget = window.location.origin + '/sub?url=' + encodeURIComponent(trimmedUrl) + '&target=base64';
+              const resp = await fetch(apiTarget);
+              if (resp.ok) {
+                const b64Text = await resp.text();
+                const decoded = safeBase64Decode(b64Text);
+                const remoteVlessNodes = extractVlessNodes(decoded);
+                combinedRemoteVless.push(...remoteVlessNodes);
+              }
+            } catch (e) {
+              console.error('Failed to fetch from url:', trimmedUrl, e);
             }
+          }));
+
+          if (combinedRemoteVless.length > 0) {
+            const uniqueRemoteVless = Array.from(new Set(combinedRemoteVless));
+            handleVlessSelection(uniqueRemoteVless);
           } else {
-            showToast('下載遠端訂閱失敗，狀態碼: ' + resp.status, false);
+            showToast('所有遠端訂閱中皆未找到任何 VLESS 節點', false);
           }
         } catch (e) {
           showToast('連線失敗，請檢查網路或伺服器憑證', false);
@@ -721,7 +741,7 @@ export const HTML_PAGE = `
       }
     }
 
-    // 💥 輔助：從文本中提取所有合法的 VLESS/AnyTLS 節點
+    // 輔助：從文本中提取所有合法的 VLESS/AnyTLS 節點
     function extractVlessNodes(text) {
       const lines = text.split(/[\\n\\r]+/);
       return lines
@@ -729,21 +749,21 @@ export const HTML_PAGE = `
         .filter(line => line.startsWith('vless://') || line.startsWith('anytls://'));
     }
 
-    // 💥 智慧篩選與彈出選單處理
+    // 智慧篩選與選單處理
     function handleVlessSelection(nodes) {
       if (nodes.length === 1) {
-        // 如果只有一個節點，不打擾使用者，直接載入！
+        // 如果只有一個，直接載入！
         document.getElementById('argoBaseVless').value = nodes[0];
         focusAndScrollToArgo();
         showToast('已成功載入 VLESS 節點為 Argo 基底！');
       } else {
-        // 如果有多個節點，彈出智慧選單讓使用者勾選
+        // 如果有多個，彈出智慧選單讓使用者勾選
         extractedNodes = nodes;
         openNodeSelectModal();
       }
     }
 
-    // 💥 智慧選單模態框：開啟並動態渲染
+    // 智慧選單模態框：開啟並動態渲染
     function openNodeSelectModal() {
       const container = document.getElementById('nodeSelectContainer');
       const countEl = document.getElementById('nodeSelectCount');
@@ -776,7 +796,7 @@ export const HTML_PAGE = `
       document.getElementById('nodeSelectModal').classList.remove('show');
     }
 
-    // 智慧型一鍵全選 / 反選
+    // 一鍵全選 / 反選
     function toggleSelectAllNodes() {
       const checkboxes = document.querySelectorAll('.node-checkbox');
       const anyUnchecked = Array.from(checkboxes).some(cb => !cb.checked);
