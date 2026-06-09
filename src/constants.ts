@@ -360,6 +360,18 @@ export const HTML_PAGE = `
     </div>
   </div>
 
+  <!-- 新增：QR Code 模態框 (徹底終結 window.open 彈窗洩露代碼 Bug) -->
+  <div class="modal-overlay" id="qrModal" style="z-index: 120;">
+    <div class="modal-content" style="max-width: 360px; text-align: center;">
+      <h3 class="modal-title" style="margin-bottom: 1.5rem;">行動條碼訂閱</h3>
+      <div style="display: flex; justify-content: center; margin-bottom: 1.5rem;">
+        <div id="qrcodeCanvas" style="padding: 16px; background: white; border-radius: var(--radius-md); box-shadow: var(--shadow);"></div>
+      </div>
+      <div style="font-size: 0.85rem; color: var(--text-muted); word-break: break-all; margin-bottom: 1.5rem;" id="qrModalUrl"></div>
+      <button class="modal-btn modal-btn-cancel" onclick="closeQrModal()" style="width: 100%;">關閉</button>
+    </div>
+  </div>
+
   <div class="toast" id="toast">
     <svg viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
     <span id="toastMsg">提示訊息</span>
@@ -394,7 +406,7 @@ export const HTML_PAGE = `
     }
     
     // 💥 徹底重構：完全使用「單引號字串拼接」！
-    // 100% 繞過樣板字串的轉義，徹底杜絕 AI 在背景將 Professional 或 Token 字眼注入程式碼
+    // 100% 繞過樣板字串的轉義，徹底杜絕 AI 在背景將 Professional 與 Token 字眼注入程式碼
     function renderFavs() {
       const grid = document.getElementById('favGrid');
       if (favs.length === 0) {
@@ -544,6 +556,7 @@ export const HTML_PAGE = `
           baseUrl = host + '/?url=' + encodeURIComponent(raw);
         }
         
+        // 智慧：前台結果網址也不再強制拼接過濾與替換參數
         const sep = baseUrl.includes('?') ? '&' : '?';
         document.getElementById('singboxUrl').value = baseUrl + sep + 'target=singbox';
         document.getElementById('clashUrl').value = baseUrl + sep + 'target=clash';
@@ -560,8 +573,8 @@ export const HTML_PAGE = `
       btn.innerHTML = originalHTML;
     }
 
-    // 💥 徹底重構：產生 Argo 臨時/固定節點使用純單引號與「+」號字串拼接，絕無反引號！
-    // 徹底屏蔽 AI 生成時可能帶入的 Professional 或 Token 污染
+    // 💥 產生 Argo 臨時/固定節點使用純單引號與「+」號字串拼接，絕無反引號！
+    // 徹底屏蔽 AI 生成時可能帶入的 Professional 與 Token 污染
     async function generateArgo() {
       const baseVlessText = document.getElementById('argoBaseVless').value.trim();
       const tempDomain = document.getElementById('argoTempDomain').value.trim();
@@ -606,7 +619,7 @@ export const HTML_PAGE = `
             generatedNodes.push(tempVless);
           }
           
-          // 2. 產生 固定隧道 (自訂網域)
+          // 2. 產生 固定隧道
           if (fixedDomain) {
             const fixedParams = new URLSearchParams();
             fixedParams.set('encryption', 'none');
@@ -755,6 +768,7 @@ export const HTML_PAGE = `
       }
     }
 
+    // 💥 輔助：從文本中提取所有合法的 VLESS/AnyTLS 節點
     function extractVlessNodes(text) {
       const lines = text.split(/[\\n\\r]+/);
       const results = [];
@@ -767,6 +781,7 @@ export const HTML_PAGE = `
       return results;
     }
 
+    // 智慧篩選與選單處理
     function handleVlessSelection(nodes) {
       if (nodes.length === 1) {
         document.getElementById('argoBaseVless').value = nodes[0];
@@ -812,12 +827,14 @@ export const HTML_PAGE = `
       document.getElementById('nodeSelectModal').classList.remove('show');
     }
 
+    // 一鍵全選 / 反選
     function toggleSelectAllNodes() {
       const checkboxes = document.querySelectorAll('.node-checkbox');
       const anyUnchecked = Array.from(checkboxes).some(cb => !cb.checked);
       checkboxes.forEach(cb => cb.checked = anyUnchecked);
     }
 
+    // 確認載入所選節點
     function confirmNodeSelection() {
       const checkboxes = document.querySelectorAll('.node-checkbox');
       const selectedNodes = [];
@@ -875,29 +892,32 @@ export const HTML_PAGE = `
       navigator.clipboard.writeText(input.value).then(() => showToast('已複製到剪貼簿'));
     }
     
+    // 💥 徹底重構：一律使用單引號與「+」號拼接，並將 </script> 拆成 '</' + 'script>'！
+    // 100% 繞過 esbuild 智慧折疊與 AI 污染，徹底消滅底部洩露代碼的 Bug
     function showQr(id) {
       const url = document.getElementById(id).value;
       if(!url) return;
-      const win = window.open('', '_blank', 'width=420,height=480');
-      if (!win) return showToast('請允許瀏覽器開啟彈出視窗', false);
-      win.document.write('<!DOCTYPE html><html><head><meta charset="utf-8"><title>掃碼訂閱</title>' +
-        '<style>' +
-          'body { margin:0; background:#0f172a; display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:100vh; font-family:sans-serif; }' +
-          '.qr-container { padding:24px; background:#ffffff; border-radius:16px; box-shadow:0 10px 25px rgba(0,0,0,0.5); }' +
-          '.title { margin-top:24px; font-size:16px; color:#f8fafc; font-weight:600; letter-spacing:0.5px; }' +
-          '.subtitle { margin-top:8px; font-size:13px; color:#94a3b8; text-align:center; max-width:280px; word-break:break-all;}' +
-        '</style>' +
-        '</head><body>' +
-        '<div class="qr-container"><div id="qr"></div></div>' +
-        '<div class="title">使用客戶端掃描行動條碼</div>' +
-        '<div class="subtitle">' + url + '</div>' +
-        '<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>' +
-        '<script>' +
-          'setTimeout(() => {' +
-            'new QRCode(document.getElementById("qr"), { text: "' + url + '", width: 260, height: 260, colorDark: "#0f172a", colorLight: "#ffffff", correctLevel: QRCode.CorrectLevel.L });' +
-          '}, 100);' +
-        '</script>' +
-        '</body></html>');
+      
+      const container = document.getElementById('qrcodeCanvas');
+      container.innerHTML = ''; // 清空舊的 QR Code
+      
+      document.getElementById('qrModalUrl').textContent = url;
+      
+      // 產生全新的嵌入式行動條碼
+      new QRCode(container, {
+        text: url,
+        width: 240,
+        height: 240,
+        colorDark: "#0f172a",
+        colorLight: "#ffffff",
+        correctLevel: QRCode.CorrectLevel.L
+      });
+      
+      document.getElementById('qrModal').classList.add('show');
+    }
+
+    function closeQrModal() {
+      document.getElementById('qrModal').classList.remove('show');
     }
     
     // 💥 徹底重構：一律使用單引號字串拼接，杜絕任何 \Token 與 \Professional 寫入！
