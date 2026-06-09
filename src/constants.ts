@@ -885,8 +885,6 @@ export const HTML_PAGE = `
       navigator.clipboard.writeText(input.value).then(() => showToast('已複製到剪貼簿'));
     }
     
-    // 💥 徹底重構：一律使用單引號與「+」號拼接，並將 </script> 拆成 '</' + 'script>'！
-    // 100% 繞過 esbuild 智慧折疊與 AI 污染，徹底消滅底部洩露代碼的 Bug
     function showQr(id) {
       const url = document.getElementById(id).value;
       if(!url) return;
