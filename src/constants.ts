@@ -241,6 +241,20 @@ export const HTML_PAGE = `
         <svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5z"></path></svg>
         <span>產生 Argo 節點並加入資料來源</span>
       </button>
+
+      <!-- 💥 新增：VPS 專屬一鍵腳本展示區 -->
+      <div id="vpsScriptBlock" class="form-group" style="margin-top: 1.5rem; display: none;">
+        <label style="color: var(--orange); font-weight: 600; display: flex; align-items: center; gap: 6px;">
+          <svg viewBox="0 0 24 24" style="width:16px;height:16px"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
+          你的 VPS 專屬一鍵安裝腳本 (貼入 VPS 即可執行)
+        </label>
+        <div style="display: flex; gap: 8px; margin-top: 0.5rem;">
+          <textarea id="argoVpsScript" readonly style="min-height: 120px; font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; color: var(--orange); border-color: rgba(234, 88, 12, 0.2); background: rgba(234, 88, 12, 0.02); flex: 1;"></textarea>
+          <button class="btn btn-ghost" onclick="copyVpsScript()" style="white-space: nowrap; font-size: 0.85rem; padding: 0 12px; border-color: var(--orange); color: var(--orange); background: rgba(234, 88, 12, 0.05);">
+            複製腳本
+          </button>
+        </div>
+      </div>
     </main>
 
     <section class="results-wrapper" id="results">
@@ -381,6 +395,7 @@ export const HTML_PAGE = `
     let favs = [];
     let extractedNodes = [];
     
+    // 智慧型安全 Base64 解碼 (過濾隱形控制字元)
     function safeBase64Decode(str) {
       try {
         let b64 = str.replace(/\\s/g, '').replace(/-/g, '+').replace(/_/g, '/').replace(/[^A-Za-z0-9+/=]/g, '');
@@ -553,6 +568,7 @@ export const HTML_PAGE = `
           baseUrl = host + '/?url=' + encodeURIComponent(raw);
         }
         
+        // 智慧：前台結果網址也不再強制拼接過濾與替換參數
         const sep = baseUrl.includes('?') ? '&' : '?';
         document.getElementById('singboxUrl').value = baseUrl + sep + 'target=singbox';
         document.getElementById('clashUrl').value = baseUrl + sep + 'target=clash';
@@ -569,6 +585,7 @@ export const HTML_PAGE = `
       btn.innerHTML = originalHTML;
     }
 
+    // 智慧型多節點 Cloudflare Argo 隧道節點生成演算法
     async function generateArgo() {
       const baseVlessText = document.getElementById('argoBaseVless').value.trim();
       const tempDomain = document.getElementById('argoTempDomain').value.trim();
@@ -598,6 +615,7 @@ export const HTML_PAGE = `
           let path = params.get('path') || '/';
           if (!path.startsWith('/')) path = '/' + path;
           
+          // 1. 產生 臨時隧道 (徹底修復所有 AI 污染，採用純單引號拼接，絕無 Professional 與 Token 字眼)
           if (tempDomain) {
             const tempParams = new URLSearchParams();
             tempParams.set('encryption', 'none');
@@ -612,6 +630,7 @@ export const HTML_PAGE = `
             generatedNodes.push(tempVless);
           }
           
+          // 2. 產生 固定隧道
           if (fixedDomain) {
             const fixedParams = new URLSearchParams();
             fixedParams.set('encryption', 'none');
@@ -647,6 +666,7 @@ export const HTML_PAGE = `
       }
     }
 
+    // 從主輸入框中自動提取所有 VLESS 節點 (相容訂閱連結遠端提取)
     async function loadVlessFromSource() {
       const sourceVal = document.getElementById('urlInput').value.trim();
       if (!sourceVal) return showToast('請先輸入資料來源', false);
@@ -707,6 +727,7 @@ export const HTML_PAGE = `
       }
     }
 
+    // 從收藏配置中直接一鍵將 VLESS 載入為 Argo 隧道基底 (相容多網址與訂閱連結遠端提取)
     async function useAsArgoBase(index) {
       const urlVal = favs[index].url;
       const vlessNodes = extractVlessNodes(urlVal);
