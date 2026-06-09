@@ -192,7 +192,7 @@ export const HTML_PAGE = `
       </button>
     </main>
 
-    <!-- Cloudflare Argo 隧道節點生成器 (已整合智慧提取功能) -->
+    <!-- Cloudflare Argo 隧道節點生成器 (已重構：支援多選/多行導入) -->
     <main class="panel" style="margin-top: 1.5rem;">
       <div class="panel-header">
         <h2 class="panel-title" style="color: var(--orange);">
@@ -201,24 +201,27 @@ export const HTML_PAGE = `
         </h2>
       </div>
       
+      <!-- 💥 升級：基底連結改為 textarea，支援多個基底 -->
       <div class="form-group">
-        <label for="argoBaseVless">基底 VLESS 連結 (包含真實 UUID 與 WS Path)</label>
-        <div style="display: flex; gap: 8px;">
-          <input type="text" id="argoBaseVless" placeholder="vless://xxxxxx@localhost:port?path=/abc..." style="flex: 1;">
-          <button class="btn btn-ghost" id="loadVlessBtn" onclick="loadVlessFromSource()" style="white-space: nowrap; font-size: 0.85rem; padding: 0 12px; border-color: var(--border);">
-            從上方載入
+        <label for="argoBaseVless">基底 VLESS 連結 (支援多個，每行一個)</label>
+        <div style="display: flex; flex-direction: column; gap: 8px;">
+          <textarea id="argoBaseVless" placeholder="vless://xxxxxx@localhost:port?path=/abc...&#10;可手動貼上多行，或由下方配置一鍵智慧載入" style="min-height: 80px;"></textarea>
+          <button class="btn btn-ghost" id="loadVlessBtn" onclick="loadVlessFromSource()" style="width: 100%; border-color: var(--border);">
+            從上方資料來源載入
           </button>
         </div>
       </div>
 
       <div class="form-group" style="margin-top: 1.25rem;">
+        <!-- 🔑 隱私修復：修改 placeholder 範例，不再顯示任何私有網域 -->
         <label for="argoTempDomain">臨時隧道網域 (選填，trycloudflare.com)</label>
-        <input type="text" id="argoTempDomain" placeholder="例如: matching-translated-cartridges-obtained.trycloudflare.com">
+        <input type="text" id="argoTempDomain" placeholder="例如: xxxx-xxxx-xxxx.trycloudflare.com">
       </div>
 
       <div class="form-group" style="margin-top: 1.25rem;">
+        <!-- 🔑 隱私修復：修改 placeholder 範例，使用通用 example 網域 -->
         <label for="argoFixedDomain">固定隧道網域 (選填，自訂網域)</label>
-        <input type="text" id="argoFixedDomain" placeholder="例如: argo.sammyvs.pp.ua">
+        <input type="text" id="argoFixedDomain" placeholder="例如: argo.example.com">
       </div>
 
       <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 12px; margin-top: 1.25rem; margin-bottom: 1.5rem;">
@@ -337,6 +340,24 @@ export const HTML_PAGE = `
     </div>
   </div>
 
+  <!-- 💥 新增：節點選擇智慧模態框 -->
+  <div class="modal-overlay" id="nodeSelectModal" style="z-index: 110;">
+    <div class="modal-content" style="max-width: 500px;">
+      <h3 class="modal-title">選擇基底 VLESS 節點</h3>
+      <div style="margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center;">
+        <span style="font-size: 0.85rem; color: var(--text-muted);" id="nodeSelectCount">已找到 0 個節點</span>
+        <button class="btn btn-ghost" style="padding: 4px 8px; font-size: 0.75rem;" onclick="toggleSelectAllNodes()">全選 / 反選</button>
+      </div>
+      <div id="nodeSelectContainer" style="max-height: 240px; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius-md); padding: 10px; display: flex; flex-direction: column; gap: 10px; background: var(--bg-input);">
+        <!-- 由 JS 動態生成 -->
+      </div>
+      <div class="modal-footer">
+        <button class="modal-btn modal-btn-cancel" onclick="closeNodeSelectModal()">取消</button>
+        <button class="modal-btn modal-btn-save" onclick="confirmNodeSelection()">確認載入</button>
+      </div>
+    </div>
+  </div>
+
   <div class="toast" id="toast">
     <svg viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
     <span id="toastMsg">提示訊息</span>
@@ -344,8 +365,9 @@ export const HTML_PAGE = `
 
   <script>
     let favs = [];
+    let extractedNodes = []; // 暫存提取出來的多個節點
     
-    // 💥 輔助：安全 Base64 解碼 (前端 JS 專屬，過濾隱形字元)
+    // 智慧型安全 Base64 解碼 (過濾隱形控制字元)
     function safeBase64Decode(str) {
       try {
         let b64 = str.replace(/\\s/g, '').replace(/-/g, '+').replace(/_/g, '/').replace(/[^A-Za-z0-9+/=]/g, '');
@@ -382,7 +404,7 @@ export const HTML_PAGE = `
         const excludeBadge = f.exclude ? \`<span class="badge" style="background: rgba(239, 68, 68, 0.1); color: var(--danger); border-color: rgba(239, 68, 68, 0.2); margin-right: 4px;">排: \${f.exclude}</span>\` : '';
         const renameBadge = f.rename ? \`<span class="badge" style="background: rgba(59, 130, 246, 0.1); color: var(--primary); border-color: rgba(59, 130, 246, 0.2)">替: \${f.rename}</span>\` : '';
         
-        // ✨ 新增：智慧檢查該收藏中是否包含 VLESS (無論是明文還是訂閱網址)，如果包含，渲染出一個橘色的 "Argo" 快速載入按鈕
+        // 智慧型快速檢查該配置是否包含 VLESS (含遠端訂閱)，如果是，則渲染出專屬的 Argo 基底載入按鈕
         const hasVless = f.url.includes('vless://') || f.url.includes('anytls://') || f.url.includes('http');
         const argoBtn = hasVless ? \`<button class="btn btn-ghost" style="color: var(--orange); border-color: rgba(234, 88, 12, 0.2); padding: 0.3rem 0.6rem; font-size: 0.8rem; margin-right: 4px;" onclick="event.stopPropagation(); useAsArgoBase(\${i})">Argo</button>\` : '';
 
@@ -516,7 +538,6 @@ export const HTML_PAGE = `
           baseUrl = host + '/?url=' + encodeURIComponent(raw);
         }
         
-        // 智慧：前台結果網址也不再強制拼接過濾與替換參數
         const sep = baseUrl.includes('?') ? '&' : '?';
         document.getElementById('singboxUrl').value = baseUrl + sep + 'target=singbox';
         document.getElementById('clashUrl').value = baseUrl + sep + 'target=clash';
@@ -533,61 +554,73 @@ export const HTML_PAGE = `
       btn.innerHTML = originalHTML;
     }
 
-    // 💥 新增：智慧型 Cloudflare Argo 節點生成演算法
-    function generateArgo() {
-      const baseVless = document.getElementById('argoBaseVless').value.trim();
+    // 💥 新增：智慧型多節點 Cloudflare Argo 隧道節點生成演算法
+    async function generateArgo() {
+      const baseVlessText = document.getElementById('argoBaseVless').value.trim();
       const tempDomain = document.getElementById('argoTempDomain').value.trim();
       const fixedDomain = document.getElementById('argoFixedDomain').value.trim();
       const cleanIp = document.getElementById('argoCleanIp').value.trim() || 'cf.090227.xyz';
       const cleanPort = document.getElementById('argoCleanPort').value.trim() || '8443';
       
-      if (!baseVless) return showToast('請先輸入基底 VLESS 連結', false);
+      if (!baseVlessText) return showToast('請先輸入或載入基底 VLESS 連結', false);
       if (!tempDomain && !fixedDomain) return showToast('請至少輸入一種隧道網域（臨時或固定）', false);
       
-      try {
-        // 解析原始 VLESS 網址 (格式：vless://uuid@host:port?query#name)
-        const urlStr = baseVless.replace('vless://', 'http://'); // 騙過瀏覽器的原生 URL 解析器以防崩潰
-        const url = new URL(urlStr);
-        const uuid = url.username;
-        const params = url.searchParams;
-        const originalName = decodeURIComponent(url.hash.slice(1)) || 'Argo';
+      const baseVlessList = baseVlessText.split(/[\\n\\r]+/);
+      const generatedNodes = [];
+      let successCount = 0;
+      let failCount = 0;
+      
+      for (const baseVless of baseVlessList) {
+        const trimmed = baseVless.trim();
+        if (!trimmed) continue;
         
-        let path = params.get('path') || '/';
-        if (!path.startsWith('/')) path = '/' + path;
-        
-        const generatedNodes = [];
-        
-        // 1. 產生 臨時隧道 (trycloudflare.com) 節點
-        if (tempDomain) {
-          const tempParams = new URLSearchParams();
-          tempParams.set('encryption', 'none');
-          tempParams.set('security', 'tls');
-          tempParams.set('type', 'ws');
-          tempParams.set('host', tempDomain);
-          tempParams.set('sni', tempDomain);
-          tempParams.set('path', path);
-          if (params.get('fp')) tempParams.set('fp', params.get('fp'));
+        try {
+          const urlStr = trimmed.replace('vless://', 'http://');
+          const url = new URL(urlStr);
+          const uuid = url.username;
+          const params = url.searchParams;
+          const originalName = decodeURIComponent(url.hash.slice(1)) || 'Argo';
           
-          const tempVless = \`vless://\${uuid}@\${cleanIp}:\${cleanPort}?\${tempParams.toString()}#\${encodeURIComponent(originalName + '-臨時隧道')}\`;
-          generatedNodes.push(tempVless);
-        }
-        
-        // 2. 產生 固定隧道 (自訂網域) 節點
-        if (fixedDomain) {
-          const fixedParams = new URLSearchParams();
-          fixedParams.set('encryption', 'none');
-          fixedParams.set('security', 'tls');
-          fixedParams.set('type', 'ws');
-          fixedParams.set('host', fixedDomain);
-          fixedParams.set('sni', fixedDomain);
-          fixedParams.set('path', path);
-          if (params.get('fp')) fixedParams.set('fp', params.get('fp'));
+          let path = params.get('path') || '/';
+          if (!path.startsWith('/')) path = '/' + path;
           
-          const fixedVless = \`vless://\${uuid}@\${cleanIp}:\${cleanPort}?\${fixedParams.toString()}#\${encodeURIComponent(originalName + '-固定隧道')}\`;
-          generatedNodes.push(fixedVless);
+          // 1. 產生 臨時隧道
+          if (tempDomain) {
+            const tempParams = new URLSearchParams();
+            tempParams.set('encryption', 'none');
+            tempParams.set('security', 'tls');
+            tempParams.set('type', 'ws');
+            tempParams.set('host', tempDomain);
+            tempParams.set('sni', tempDomain);
+            tempParams.set('path', path);
+            if (params.get('fp')) tempParams.set('fp', params.get('fp'));
+            
+            const tempVless = \`vless://\${uuid}@\${cleanIp}:\${cleanPort}?\${tempParams.toString()}#\${encodeURIComponent(originalName + '-臨時隧道')}\`;
+            generatedNodes.push(tempVless);
+          }
+          
+          // 2. 產生 固定隧道
+          if (fixedDomain) {
+            const fixedParams = new URLSearchParams();
+            fixedParams.set('encryption', 'none');
+            fixedParams.set('security', 'tls');
+            fixedParams.set('type', 'ws');
+            fixedParams.set('host', fixedDomain);
+            fixedParams.set('sni', fixedDomain);
+            fixedParams.set('path', path);
+            if (params.get('fp')) fixedParams.set('fp', params.get('fp'));
+            
+            const fixedVless = \`vless://\${uuid}@\${cleanIp}:\${cleanPort}?\${fixedParams.toString()}#\${encodeURIComponent(originalName + '-固定隧道')}\`;
+            generatedNodes.push(fixedVless);
+          }
+          successCount++;
+        } catch (e) {
+          failCount++;
         }
-        
-        // 將產生的節點自動追加到上方的主資料來源輸入框中
+      }
+      
+      if (generatedNodes.length > 0) {
+        // 將新產生的 Argo 節點，100% 完整追加到最上方的主資料來源輸入框中（完美保留原節點，絕不覆蓋）
         const urlInput = document.getElementById('urlInput');
         if (urlInput.value.trim()) {
           urlInput.value = urlInput.value.trim() + '\\n' + generatedNodes.join('\\n');
@@ -595,14 +628,15 @@ export const HTML_PAGE = `
           urlInput.value = generatedNodes.join('\\n');
         }
         
-        showToast('✅ Argo 節點已成功追加至主資料來源！');
-        
-      } catch (e) {
-        showToast('解析基底 VLESS 失敗，請確認格式是否正確', false);
+        let toastMsg = \`✅ 成功轉換 \${successCount} 個節點，已產生 \${generatedNodes.length} 個 Argo 節點並追加！\`;
+        if (failCount > 0) toastMsg += \` (有 \${failCount} 個節點解析失敗)\`;
+        showToast(toastMsg);
+      } else {
+        showToast('解析失敗，請確認基底 VLESS 格式是否正確', false);
       }
     }
 
-    // 💥 從主輸入框中自動提取第一個 VLESS 節點載入至 Argo (相容訂閱連結遠端提取)
+    // 💥 從主輸入框中自動提取所有 VLESS 節點 (相容遠端機場訂閱解析)
     async function loadVlessFromSource() {
       const sourceVal = document.getElementById('urlInput').value.trim();
       if (!sourceVal) return showToast('請先輸入資料來源', false);
@@ -610,38 +644,34 @@ export const HTML_PAGE = `
       const btn = document.getElementById('loadVlessBtn');
       const originalText = btn.textContent;
       
-      const lines = sourceVal.split(/[\\n\\r]+/);
+      const vlessNodes = extractVlessNodes(sourceVal);
       
       // 1. 如果輸入框裡直接就有 vless:// 或 anytls:// 節點
-      const firstVless = lines.find(line => line.trim().startsWith('vless://') || line.trim().startsWith('anytls://'));
-      if (firstVless) {
-        document.getElementById('argoBaseVless').value = firstVless.trim();
-        showToast('已載入第一個 VLESS 節點');
+      if (vlessNodes.length > 0) {
+        handleVlessSelection(vlessNodes);
         return;
       }
       
-      // 2. 如果輸入框裡是訂閱網址 (http 開頭)，向後端 API 請求解開訂閱並下載提取
+      // 2. 如果輸入框裡是訂閱網址 (http 開頭)
+      const lines = sourceVal.split(/[\\n\\r]+/);
       const firstUrl = lines.find(line => line.trim().startsWith('http'));
       if (firstUrl) {
-        btn.textContent = '提取中...';
+        btn.textContent = '遠端下載中...';
         btn.disabled = true;
         try {
           const apiTarget = window.location.origin + '/sub?url=' + encodeURIComponent(firstUrl) + '&target=base64';
           const resp = await fetch(apiTarget);
           if (resp.ok) {
             const b64Text = await resp.text();
-            // 使用本機安全解碼器解碼
             const decoded = safeBase64Decode(b64Text);
-            const decodedLines = decoded.split(/[\\n\\r]+/);
-            const foundVless = decodedLines.find(line => line.trim().startsWith('vless://') || line.trim().startsWith('anytls://'));
-            if (foundVless) {
-              document.getElementById('argoBaseVless').value = foundVless.trim();
-              showToast('已成功從遠端訂閱網址中提取 VLESS 節點！');
+            const remoteVlessNodes = extractVlessNodes(decoded);
+            if (remoteVlessNodes.length > 0) {
+              handleVlessSelection(remoteVlessNodes);
             } else {
               showToast('該遠端訂閱中未找到任何 VLESS 節點', false);
             }
           } else {
-            showToast('下載失敗，狀態碼: ' + resp.status, false);
+            showToast('下載遠端訂閱失敗，狀態碼: ' + resp.status, false);
           }
         } catch (e) {
           showToast('連線失敗，請檢查網路或伺服器憑證', false);
@@ -654,39 +684,34 @@ export const HTML_PAGE = `
       }
     }
 
-    // 💥 從收藏配置中直接一鍵將 VLESS 載入為 Argo 隧道基底 (相容訂閱連結遠端提取)
+    // 💥 從收藏配置中一鍵載入 VLESS 基底 (相容遠端機場訂閱解析)
     async function useAsArgoBase(index) {
       const urlVal = favs[index].url;
-      const lines = urlVal.split(/[\\n\\r]+/);
+      const vlessNodes = extractVlessNodes(urlVal);
       
-      const firstVless = lines.find(line => line.trim().startsWith('vless://') || line.trim().startsWith('anytls://'));
-      if (firstVless) {
-        document.getElementById('argoBaseVless').value = firstVless.trim();
-        focusAndScrollToArgo();
-        showToast('已將 ' + favs[index].name + ' 載入為 Argo 隧道基底！');
+      if (vlessNodes.length > 0) {
+        handleVlessSelection(vlessNodes);
         return;
       }
       
+      const lines = urlVal.split(/[\\n\\r]+/);
       const firstUrl = lines.find(line => line.trim().startsWith('http'));
       if (firstUrl) {
-        showToast('正在向遠端訂閱提取 VLESS 節點...');
+        showToast('正在從遠端訂閱中提取 VLESS 節點...');
         try {
           const apiTarget = window.location.origin + '/sub?url=' + encodeURIComponent(firstUrl) + '&target=base64';
           const resp = await fetch(apiTarget);
           if (resp.ok) {
             const b64Text = await resp.text();
             const decoded = safeBase64Decode(b64Text);
-            const decodedLines = decoded.split(/[\\n\\r]+/);
-            const foundVless = decodedLines.find(line => line.trim().startsWith('vless://') || line.trim().startsWith('anytls://'));
-            if (foundVless) {
-              document.getElementById('argoBaseVless').value = foundVless.trim();
-              focusAndScrollToArgo();
-              showToast('已成功從 ' + favs[index].name + ' 的遠端訂閱中提取 VLESS 節點！');
+            const remoteVlessNodes = extractVlessNodes(decoded);
+            if (remoteVlessNodes.length > 0) {
+              handleVlessSelection(remoteVlessNodes);
             } else {
               showToast('該遠端訂閱中未找到任何 VLESS 節點', false);
             }
           } else {
-            showToast('下載失敗，狀態碼: ' + resp.status, false);
+            showToast('下載遠端訂閱失敗，狀態碼: ' + resp.status, false);
           }
         } catch (e) {
           showToast('連線失敗，請檢查網路或伺服器憑證', false);
@@ -696,7 +721,89 @@ export const HTML_PAGE = `
       }
     }
 
-    // 輔助滾動與聚焦到 Argo 輸入框
+    // 💥 輔助：從文本中提取所有合法的 VLESS/AnyTLS 節點
+    function extractVlessNodes(text) {
+      const lines = text.split(/[\\n\\r]+/);
+      return lines
+        .map(line => line.trim())
+        .filter(line => line.startsWith('vless://') || line.startsWith('anytls://'));
+    }
+
+    // 💥 智慧篩選與彈出選單處理
+    function handleVlessSelection(nodes) {
+      if (nodes.length === 1) {
+        // 如果只有一個節點，不打擾使用者，直接載入！
+        document.getElementById('argoBaseVless').value = nodes[0];
+        focusAndScrollToArgo();
+        showToast('已成功載入 VLESS 節點為 Argo 基底！');
+      } else {
+        // 如果有多個節點，彈出智慧選單讓使用者勾選
+        extractedNodes = nodes;
+        openNodeSelectModal();
+      }
+    }
+
+    // 💥 智慧選單模態框：開啟並動態渲染
+    function openNodeSelectModal() {
+      const container = document.getElementById('nodeSelectContainer');
+      const countEl = document.getElementById('nodeSelectCount');
+      countEl.textContent = \`已找到 \${extractedNodes.length} 個 VLESS 節點\`;
+      
+      container.innerHTML = extractedNodes.map((node, i) => {
+        let nodeName = '未命名節點';
+        try {
+          const hashIndex = node.indexOf('#');
+          if (hashIndex !== -1) {
+            nodeName = decodeURIComponent(node.substring(hashIndex + 1));
+          }
+        } catch (e) {}
+        
+        return \`
+          <label style="display: flex; align-items: flex-start; gap: 10px; cursor: pointer; padding: 6px; border-radius: var(--radius-sm); transition: background 0.2s;" onmouseover="this.style.background='var(--bg-hover)'" onmouseout="this.style.background='transparent'">
+            <input type="checkbox" class="node-checkbox" value="\${i}" checked style="margin-top: 4px; width: 16px; height: 16px; cursor: pointer;">
+            <div style="flex: 1; font-size: 0.85rem; word-break: break-all;">
+              <span style="font-weight: 600; color: var(--primary);">\${nodeName}</span>
+              <div style="font-family: monospace; font-size: 0.75rem; color: var(--text-muted); margin-top: 2px;">\${node.substring(0, 80)}...</div>
+            </div>
+          </label>
+        \`;
+      }).join('');
+      
+      document.getElementById('nodeSelectModal').classList.add('show');
+    }
+
+    function closeNodeSelectModal() {
+      document.getElementById('nodeSelectModal').classList.remove('show');
+    }
+
+    // 智慧型一鍵全選 / 反選
+    function toggleSelectAllNodes() {
+      const checkboxes = document.querySelectorAll('.node-checkbox');
+      const anyUnchecked = Array.from(checkboxes).some(cb => !cb.checked);
+      checkboxes.forEach(cb => cb.checked = anyUnchecked);
+    }
+
+    // 確認載入所選節點
+    function confirmNodeSelection() {
+      const checkboxes = document.querySelectorAll('.node-checkbox');
+      const selectedIndices = Array.from(checkboxes)
+        .filter(cb => cb.checked)
+        .map(cb => parseInt(cb.value));
+        
+      if (selectedIndices.length === 0) {
+        return showToast('請至少選擇一個節點', false);
+      }
+      
+      const selectedNodes = selectedIndices.map(idx => extractedNodes[idx]);
+      
+      // 智慧載入至 Argo 生成器文本框（多個用換行隔開）
+      document.getElementById('argoBaseVless').value = selectedNodes.join('\\n');
+      
+      closeNodeSelectModal();
+      focusAndScrollToArgo();
+      showToast(\`已成功載入 \${selectedNodes.length} 個 VLESS 節點為 Argo 隧道基底！\`);
+    }
+
     function focusAndScrollToArgo() {
       const targetEl = document.getElementById('argoBaseVless');
       targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
