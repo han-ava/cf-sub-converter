@@ -211,9 +211,15 @@ export const HTML_PAGE = `
         </div>
       </div>
 
+      <!-- 💥 智慧優化：臨時隧道網域新增一鍵「隨機生成」功能 -->
       <div class="form-group" style="margin-top: 1.25rem;">
         <label for="argoTempDomain">臨時隧道網域 (選填，trycloudflare.com)</label>
-        <input type="text" id="argoTempDomain" placeholder="例如: xxxx-xxxx-xxxx.trycloudflare.com">
+        <div style="display: flex; gap: 8px;">
+          <input type="text" id="argoTempDomain" placeholder="例如: splendid-verified-stars-trains.trycloudflare.com" style="flex: 1;">
+          <button class="btn btn-ghost" onclick="generateRandomTempDomain()" style="white-space: nowrap; font-size: 0.85rem; padding: 0 12px; border-color: var(--border);">
+            隨機生成
+          </button>
+        </div>
       </div>
 
       <div class="form-group" style="margin-top: 1.25rem;">
@@ -593,7 +599,7 @@ export const HTML_PAGE = `
             tempParams.set('path', path);
             if (params.get('fp')) tempParams.set('fp', params.get('fp'));
             
-            const tempVless = \`vless://\${uuid}@\${cleanIp}:\${cleanPort}?\${tempParams.toString()}#\${encodeURIComponent(originalName + '-臨時隧道')}\`;
+            const tempVless = \`vless://\Professional\${uuid}@\${cleanIp}:\${cleanPort}?\${tempParams.toString()}#\${encodeURIComponent(originalName + '-臨時隧道')}\`;
             generatedNodes.push(tempVless);
           }
           
@@ -642,10 +648,9 @@ export const HTML_PAGE = `
       const btn = document.getElementById('loadVlessBtn');
       const originalText = btn.textContent;
       
-      const lines = sourceVal.split(/[\\n\\r]+/);
+      const vlessNodes = extractVlessNodes(sourceVal);
       
       // 1. 如果輸入框裡直接就有 vless:// 或 anytls:// 節點
-      const vlessNodes = extractVlessNodes(sourceVal);
       if (vlessNodes.length > 0) {
         handleVlessSelection(vlessNodes);
         return;
@@ -659,7 +664,7 @@ export const HTML_PAGE = `
         try {
           const combinedRemoteVless = [];
           
-          // 💥 智慧並發：同時下載所有訂閱網址，並解鎖所有裡面的 VLESS 節點
+          // 智慧並發：同時下載所有訂閱網址，並解鎖所有裡面的 VLESS 節點
           await Promise.all(urls.map(async (trimmedUrl) => {
             try {
               const apiTarget = window.location.origin + '/sub?url=' + encodeURIComponent(trimmedUrl) + '&target=base64';
@@ -711,7 +716,7 @@ export const HTML_PAGE = `
         try {
           const combinedRemoteVless = [];
           
-          // 💥 智慧並發：同步下載收藏配置內的所有訂閱連結
+          // 智慧並發：同步下載收藏配置內的所有訂閱連結
           await Promise.all(urls.map(async (trimmedUrl) => {
             try {
               const apiTarget = window.location.origin + '/sub?url=' + encodeURIComponent(trimmedUrl) + '&target=base64';
@@ -741,7 +746,7 @@ export const HTML_PAGE = `
       }
     }
 
-    // 輔助：從文本中提取所有合法的 VLESS/AnyTLS 節點
+    // 💥 輔助：從文本中提取所有合法的 VLESS/AnyTLS 節點
     function extractVlessNodes(text) {
       const lines = text.split(/[\\n\\r]+/);
       return lines
@@ -828,6 +833,31 @@ export const HTML_PAGE = `
       const targetEl = document.getElementById('argoBaseVless');
       targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
       targetEl.focus();
+    }
+
+    // 💥 智慧型：新增隨機產生 Argo 臨時網域算法 (模擬官方三單字減號規格)
+    function generateRandomTempDomain() {
+      const words = [
+        "accurate", "active", "alert", "alive", "beautiful", "brave", "busy", "calm", "clean", "clever",
+        "cooperative", "courageous", "creative", "decisive", "eager", "enthusiastic", "energetic", "faithful",
+        "friendly", "gentle", "happy", "healthy", "helpful", "honest", "industrious", "jolly", "kind", "lively",
+        "lovely", "lucky", "obedient", "polite", "proud", "quick", "quiet", "relieved", "rich", "smiling",
+        "splendid", "successful", "thoughtful", "victorious", "wary", "witty", "wonderful", "zealous",
+        "obtained", "translated", "matched", "verified", "secured", "certified", "tested", "managed", "selected",
+        "trusted", "combined", "cartridges", "apples", "bananas", "tigers", "lions", "eagles", "dolphins", "clouds",
+        "waves", "rivers", "mountains", "forests", "stars", "oceans", "planets", "crystals", "diamonds", "pearls",
+        "arrows", "shields", "swords", "books", "pens", "clocks", "keys", "locks", "lights", "lamps", "flags",
+        "maps", "globes", "compasses", "anchors", "sails", "boats", "ships", "trains", "planes", "cars", "bikes"
+      ];
+      
+      const result = [];
+      for (let i = 0; i < 4; i++) {
+        const idx = Math.floor(Math.random() * words.length);
+        result.push(words[idx]);
+      }
+      const randomDomain = result.join('-') + '.trycloudflare.com';
+      document.getElementById('argoTempDomain').value = randomDomain;
+      showToast('已隨機產生臨時隧道網域：' + randomDomain);
     }
     
     function copyResult(id) {
