@@ -152,38 +152,21 @@ export const HTML_PAGE = `
       <div class="form-group" style="margin-top: 1.5rem;">
         <label for="includeKeywords">僅保留關鍵字節點 (選填，多個用 | 分隔)</label>
         <input type="text" id="includeKeywords" placeholder="例如: 🇭🇰|台灣|TW">
-        <div class="hint">
-          <svg viewBox="0 0 24 24" style="width:14px;height:14px"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
-          只保留名稱符合關鍵字的節點。例如輸入 <code>HK|TW</code>。
-        </div>
       </div>
 
       <div class="form-group" style="margin-top: 1.5rem;">
         <label for="excludeKeywords">排除關鍵字節點 (選填，多個用 | 分隔)</label>
         <input type="text" id="excludeKeywords" placeholder="例如: 流量|官網|重置|5x">
-        <div class="hint">
-          <svg viewBox="0 0 24 24" style="width:14px;height:14px"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
-          排除名稱符合關鍵字的節點（過濾垃圾廣告）。例如輸入 <code>5x</code>。
-        </div>
       </div>
 
-      <!-- 節點名稱替換 (支援 DEL- 與 - 語法) -->
       <div class="form-group" style="margin-top: 1.5rem;">
         <label for="renameKeywords">節點名稱替換 (選填，多個用 | 分隔)</label>
         <input type="text" id="renameKeywords" placeholder="例如: DEL-[69云]|移动优化-專線">
-        <div class="hint">
-          <svg viewBox="0 0 24 24" style="width:14px;height:14px"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
-          刪除請用 <code>DEL-關鍵字</code>，替換請用 <code>尋找-替換</code>。多組規則請用 <code>|</code> 隔開。
-        </div>
       </div>
       
       <div class="form-group" style="margin-top: 1.5rem;">
         <label for="shortCode">自訂路徑短連結 (選填)</label>
         <input type="text" id="shortCode" placeholder="例如: my-sub-2026">
-        <div class="hint">
-          <svg viewBox="0 0 24 24" style="width:14px;height:14px"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
-          設定後將儲存於雲端，生成固定不變的短連結
-        </div>
       </div>
       
       <button class="btn btn-primary" id="generateBtn" onclick="generate()" style="margin-top: 2rem;">
@@ -242,19 +225,20 @@ export const HTML_PAGE = `
         <span>產生 Argo 節點並加入資料來源</span>
       </button>
 
-      <!-- 💥 智慧型：VPS 專屬一鍵腳本展示區 (不帶任何引起錯誤的 script 與 5x 註解字眼！) -->
+      <!-- 💥 這裡補回被我不小心刪掉的「一鍵腳本展示區」 -->
       <div id="vpsScriptBlock" class="form-group" style="margin-top: 1.5rem; display: none;">
         <label style="color: var(--orange); font-weight: 600; display: flex; align-items: center; gap: 6px;">
           <svg viewBox="0 0 24 24" style="width:16px;height:16px"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
-          你的 VPS 專屬一鍵安裝腳本 (貼入 VPS 即可執行)
+          你的 VPS 專屬一鍵安裝腳本 (貼入 VPS 終端機即可執行)
         </label>
-        <div style="display: flex; gap: 8px; margin-top: 0.5rem;">
-          <textarea id="argoVpsScript" readonly style="min-height: 120px; font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; color: var(--orange); border-color: rgba(234, 88, 12, 0.2); background: rgba(234, 88, 12, 0.02); flex: 1;"></textarea>
-          <button class="btn btn-ghost" onclick="copyVpsScript()" style="white-space: nowrap; font-size: 0.85rem; padding: 0 12px; border-color: var(--orange); color: var(--orange); background: rgba(234, 88, 12, 0.05);">
-            複製腳本
+        <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 0.5rem;">
+          <textarea id="argoVpsScript" readonly style="min-height: 180px; font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; color: var(--orange); border-color: rgba(234, 88, 12, 0.2); background: rgba(234, 88, 12, 0.02);"></textarea>
+          <button class="btn btn-ghost" onclick="copyVpsScript()" style="border-color: var(--orange); color: var(--orange); background: rgba(234, 88, 12, 0.05);">
+            一鍵複製腳本
           </button>
         </div>
       </div>
+
     </main>
 
     <section class="results-wrapper" id="results">
@@ -365,7 +349,6 @@ export const HTML_PAGE = `
         <button class="btn btn-ghost" style="padding: 4px 8px; font-size: 0.75rem;" onclick="toggleSelectAllNodes()">全選 / 反選</button>
       </div>
       <div id="nodeSelectContainer" style="max-height: 240px; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius-md); padding: 10px; display: flex; flex-direction: column; gap: 10px; background: var(--bg-input);">
-        <!-- 由 JS 動態生成 -->
       </div>
       <div class="modal-footer">
         <button class="modal-btn modal-btn-cancel" onclick="closeNodeSelectModal()">取消</button>
@@ -374,7 +357,7 @@ export const HTML_PAGE = `
     </div>
   </div>
 
-  <!-- 新增：QR Code 模態框 (徹底終結 window.open 彈窗洩露代碼 Bug) -->
+  <!-- QR Code 模態框 -->
   <div class="modal-overlay" id="qrModal" style="z-index: 120;">
     <div class="modal-content" style="max-width: 360px; text-align: center;">
       <h3 class="modal-title" style="margin-bottom: 1.5rem;">行動條碼訂閱</h3>
@@ -395,7 +378,6 @@ export const HTML_PAGE = `
     let favs = [];
     let extractedNodes = [];
     
-    // 智慧型安全 Base64 解碼 (過濾隱形控制字元)
     function safeBase64Decode(str) {
       try {
         let b64 = str.replace(/\\s/g, '').replace(/-/g, '+').replace(/_/g, '/').replace(/[^A-Za-z0-9+/=]/g, '');
@@ -568,7 +550,6 @@ export const HTML_PAGE = `
           baseUrl = host + '/?url=' + encodeURIComponent(raw);
         }
         
-        // 智慧：前台結果網址也不再強制拼接過濾與替換參數
         const sep = baseUrl.includes('?') ? '&' : '?';
         document.getElementById('singboxUrl').value = baseUrl + sep + 'target=singbox';
         document.getElementById('clashUrl').value = baseUrl + sep + 'target=clash';
@@ -585,7 +566,6 @@ export const HTML_PAGE = `
       btn.innerHTML = originalHTML;
     }
 
-    // 智慧型多節點 Cloudflare Argo 隧道節點生成演算法 (徹底修復！)
     async function generateArgo() {
       const baseVlessText = document.getElementById('argoBaseVless').value.trim();
       const tempDomain = document.getElementById('argoTempDomain').value.trim();
@@ -600,6 +580,8 @@ export const HTML_PAGE = `
       const generatedNodes = [];
       let successCount = 0;
       let failCount = 0;
+      let firstUuid = '';
+      let firstPath = '';
       
       for (let i = 0; i < baseVlessList.length; i++) {
         const trimmed = baseVlessList[i].trim();
@@ -615,7 +597,9 @@ export const HTML_PAGE = `
           let path = params.get('path') || '/';
           if (!path.startsWith('/')) path = '/' + path;
           
-          // 1. 產生 臨時隧道 (徹底修復所有 AI 污染，採用純單引號拼接，絕無 Professional 與 Token 字眼)
+          if (!firstUuid) firstUuid = uuid;
+          if (!firstPath) firstPath = path;
+          
           if (tempDomain) {
             const tempParams = new URLSearchParams();
             tempParams.set('encryption', 'none');
@@ -630,7 +614,6 @@ export const HTML_PAGE = `
             generatedNodes.push(tempVless);
           }
           
-          // 2. 產生 固定隧道
           if (fixedDomain) {
             const fixedParams = new URLSearchParams();
             fixedParams.set('encryption', 'none');
@@ -661,12 +644,33 @@ export const HTML_PAGE = `
         let toastMsg = '✅ 成功轉換 ' + successCount + ' 個節點，已產生 ' + generatedNodes.length + ' 個 Argo 節點並追加！';
         if (failCount > 0) toastMsg += ' (有 ' + failCount + ' 個節點解析失敗)';
         showToast(toastMsg);
+
+        // 💥 智慧生成並顯示一鍵安裝腳本
+        const targetDomain = fixedDomain ? fixedDomain : tempDomain;
+        const scriptStr = '#!/bin/bash\\n' +
+          '# 專屬 Sing-Box + Argo 自動部署腳本\\n' +
+          '# 網域: ' + targetDomain + '\\n' +
+          '# UUID: ' + firstUuid + '\\n' +
+          '# WS路徑: ' + firstPath + '\\n\\n' +
+          'bash <(curl -Ls https://raw.githubusercontent.com/yonggekkk/argosbx/main/argosbx.sh)\\n' +
+          '# 請依據腳本提示選擇安裝 Vless-ws-enc\\n' +
+          '# 並將上方參數對應填入！\\n';
+          
+        document.getElementById('argoVpsScript').value = scriptStr;
+        document.getElementById('vpsScriptBlock').style.display = 'block';
+        
       } else {
         showToast('解析失敗，請確認基底 VLESS 格式是否正確', false);
       }
     }
 
-    // 從主輸入框中自動提取所有 VLESS 節點 (相容訂閱連結遠端提取)
+    // 💥 複製 VPS 腳本
+    function copyVpsScript() {
+      const input = document.getElementById('argoVpsScript');
+      input.select();
+      navigator.clipboard.writeText(input.value).then(() => showToast('已成功複製一鍵安裝腳本！'));
+    }
+
     async function loadVlessFromSource() {
       const sourceVal = document.getElementById('urlInput').value.trim();
       if (!sourceVal) return showToast('請先輸入資料來源', false);
@@ -727,7 +731,6 @@ export const HTML_PAGE = `
       }
     }
 
-    // 從收藏配置中直接一鍵將 VLESS 載入為 Argo 隧道基底 (相容多網址與訂閱連結遠端提取)
     async function useAsArgoBase(index) {
       const urlVal = favs[index].url;
       const vlessNodes = extractVlessNodes(urlVal);
@@ -923,7 +926,6 @@ export const HTML_PAGE = `
       document.getElementById('qrModal').classList.remove('show');
     }
     
-    // 💥 徹底重構：一律使用單引號字串拼接，杜絕任何 \Token 與 \Professional 寫入！
     function showToast(msg, isSuccess) {
       if (isSuccess === undefined) isSuccess = true;
       const t = document.getElementById('toast');
