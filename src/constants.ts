@@ -30,8 +30,6 @@ export const HTML_PAGE = `
       --primary-hover: #2563eb;
       --success: #10b981;
       --danger: #ef4444;
-      --orange: #ea580c;
-      --orange-hover: #c2410c;
       --radius-sm: 6px;
       --radius-md: 10px;
       --radius-lg: 16px;
@@ -192,71 +190,6 @@ export const HTML_PAGE = `
       </button>
     </main>
 
-    <!-- Cloudflare Argo 隧道節點生成器 -->
-    <main class="panel" style="margin-top: 1.5rem;">
-      <div class="panel-header">
-        <h2 class="panel-title" style="color: var(--orange);">
-          <svg viewBox="0 0 24 24" style="color: var(--orange);"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"></path></svg>
-          Cloudflare Argo 隧道節點生成器
-        </h2>
-      </div>
-      
-      <div class="form-group">
-        <label for="argoBaseVless">基底 VLESS 連結 (支援多個，每行一個)</label>
-        <div style="display: flex; gap: 8px;">
-          <textarea id="argoBaseVless" placeholder="vless://xxxxxx@localhost:port?path=/abc...&#10;可手動貼上多行，或由下方配置一鍵智慧載入" style="min-height: 80px;"></textarea>
-          <button class="btn btn-ghost" id="loadVlessBtn" onclick="loadVlessFromSource()" style="white-space: nowrap; font-size: 0.85rem; padding: 0 12px; border-color: var(--border);">
-            從上方資料來源載入
-          </button>
-        </div>
-      </div>
-
-      <div class="form-group" style="margin-top: 1.25rem;">
-        <label for="argoTempDomain">臨時隧道網域 (選填，trycloudflare.com)</label>
-        <div style="display: flex; gap: 8px;">
-          <input type="text" id="argoTempDomain" placeholder="例如: splendid-verified-stars-trains.trycloudflare.com" style="flex: 1;">
-          <button class="btn btn-ghost" onclick="generateRandomTempDomain()" style="white-space: nowrap; font-size: 0.85rem; padding: 0 12px; border-color: var(--border);">
-            隨機生成
-          </button>
-        </div>
-      </div>
-
-      <div class="form-group" style="margin-top: 1.25rem;">
-        <label for="argoFixedDomain">固定隧道網域 (選填，自訂網域)</label>
-        <input type="text" id="argoFixedDomain" placeholder="例如: argo.example.com">
-      </div>
-
-      <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 12px; margin-top: 1.25rem; margin-bottom: 1.5rem;">
-        <div class="form-group">
-          <label for="argoCleanIp">Cloudflare 優選網域/IP</label>
-          <input type="text" id="argoCleanIp" value="cf.090227.xyz" placeholder="例如: cf.090227.xyz">
-        </div>
-        <div class="form-group">
-          <label for="argoCleanPort">優選連接埠</label>
-          <input type="text" id="argoCleanPort" value="8443" placeholder="例如: 8443">
-        </div>
-      </div>
-
-      <button class="btn" onclick="generateArgo()" style="width: 100%; border: 1px solid var(--orange); color: var(--orange); background: rgba(234, 88, 12, 0.05); font-weight: 600;">
-        <svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5z"></path></svg>
-        <span>產生 Argo 節點並加入資料來源</span>
-      </button>
-
-      <!-- 智慧型：VPS 專屬一鍵腳本展示區 -->
-      <div id="vpsScriptBlock" class="form-group" style="margin-top: 1.5rem; display: none;">
-        <label style="color: var(--orange); font-weight: 600; display: flex; align-items: center; gap: 6px;">
-          <svg viewBox="0 0 24 24" style="width:16px;height:16px"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
-          專屬 Cloudflare Argo 部署腳本 (不破壞原有節點，直接貼入 VPS 執行)
-        </label>
-        <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 0.5rem;">
-          <textarea id="argoVpsScript" readonly style="min-height: 180px; font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; color: var(--orange); border-color: rgba(234, 88, 12, 0.2); background: rgba(234, 88, 12, 0.02);"></textarea>
-          <button class="btn btn-ghost" onclick="copyVpsScript()" style="border-color: var(--orange); color: var(--orange); background: rgba(234, 88, 12, 0.05);">
-            一鍵複製腳本
-          </button>
-        </div>
-      </div>
-    </main>
-
     <section class="results-wrapper" id="results">
       <div class="panel">
         <div class="panel-header">
@@ -356,35 +289,6 @@ export const HTML_PAGE = `
     </div>
   </div>
 
-  <!-- 節點選擇智慧模態框 -->
-  <div class="modal-overlay" id="nodeSelectModal" style="z-index: 110;">
-    <div class="modal-content" style="max-width: 500px;">
-      <h3 class="modal-title">選擇基底 VLESS 節點</h3>
-      <div style="margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center;">
-        <span style="font-size: 0.85rem; color: var(--text-muted);" id="nodeSelectCount">已找到 0 個節點</span>
-        <button class="btn btn-ghost" style="padding: 4px 8px; font-size: 0.75rem;" onclick="toggleSelectAllNodes()">全選 / 反選</button>
-      </div>
-      <div id="nodeSelectContainer" style="max-height: 240px; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius-md); padding: 10px; display: flex; flex-direction: column; gap: 10px; background: var(--bg-input);">
-      </div>
-      <div class="modal-footer">
-        <button class="modal-btn modal-btn-cancel" onclick="closeNodeSelectModal()">取消</button>
-        <button class="modal-btn modal-btn-save" onclick="confirmNodeSelection()">確認載入</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- QR Code 模態框 -->
-  <div class="modal-overlay" id="qrModal" style="z-index: 120;">
-    <div class="modal-content" style="max-width: 360px; text-align: center;">
-      <h3 class="modal-title" style="margin-bottom: 1.5rem;">行動條碼訂閱</h3>
-      <div style="display: flex; justify-content: center; margin-bottom: 1.5rem;">
-        <div id="qrcodeCanvas" style="padding: 16px; background: white; border-radius: var(--radius-md); box-shadow: var(--shadow);"></div>
-      </div>
-      <div style="font-size: 0.85rem; color: var(--text-muted); word-break: break-all; margin-bottom: 1.5rem;" id="qrModalUrl"></div>
-      <button class="modal-btn modal-btn-cancel" onclick="closeQrModal()" style="width: 100%;">關閉</button>
-    </div>
-  </div>
-
   <div class="toast" id="toast">
     <svg viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
     <span id="toastMsg">提示訊息</span>
@@ -392,29 +296,13 @@ export const HTML_PAGE = `
 
   <script>
     let favs = [];
-    let extractedNodes = [];
     
-    function safeBase64Decode(str) {
-      try {
-        let b64 = str.replace(/\\s/g, '').replace(/-/g, '+').replace(/_/g, '/').replace(/[^A-Za-0-9+/=]/g, '');
-        while (b64.length % 4) b64 += '=';
-        const binaryStr = atob(b64);
-        const bytes = new Uint8Array(binaryStr.length);
-        for (let i = 0; i < binaryStr.length; i++) {
-          bytes[i] = binaryStr.charCodeAt(i);
-        }
-        return new TextDecoder('utf-8').decode(bytes);
-      } catch (e) {
-        return "";
-      }
-    }
-
     async function loadFavs() {
       try {
         const resp = await fetch('/favs');
         if (resp.ok) favs = await resp.json();
         renderFavs();
-      } catch(e) {}
+      } catch(e) { console.error('Failed to load favs'); }
     }
     
     function renderFavs() {
@@ -425,36 +313,29 @@ export const HTML_PAGE = `
         return;
       }
       grid.style.display = 'grid';
-      
-      let html = '';
-      for (let i = 0; i < favs.length; i++) {
-        const f = favs[i];
-        const includeBadge = f.include ? '<span class="badge" style="background: rgba(16, 185, 129, 0.1); color: var(--success); border-color: rgba(16, 185, 129, 0.2); margin-right: 4px;">保: ' + f.include + '</span>' : '';
-        const excludeBadge = f.exclude ? '<span class="badge" style="background: rgba(239, 68, 68, 0.1); color: var(--danger); border-color: rgba(239, 68, 68, 0.2); margin-right: 4px;">排: ' + f.exclude + '</span>' : '';
-        const renameBadge = f.rename ? '<span class="badge" style="background: rgba(59, 130, 246, 0.1); color: var(--primary); border-color: rgba(59, 130, 246, 0.2)">替: ' + f.rename + '</span>' : '';
+      grid.innerHTML = favs.map((f, i) => {
+        const includeBadge = f.include ? \`<span class="badge" style="background: rgba(16, 185, 129, 0.1); color: var(--success); border-color: rgba(16, 185, 129, 0.2); margin-right: 4px;">保: \${f.include}</span>\` : '';
+        const excludeBadge = f.exclude ? \`<span class="badge" style="background: rgba(239, 68, 68, 0.1); color: var(--danger); border-color: rgba(239, 68, 68, 0.2); margin-right: 4px;">排: \${f.exclude}</span>\` : '';
+        const renameBadge = f.rename ? \`<span class="badge" style="background: rgba(59, 130, 246, 0.1); color: var(--primary); border-color: rgba(59, 130, 246, 0.2)">替: \${f.rename}</span>\` : '';
         
-        const hasVless = f.url.includes('vless://') || f.url.includes('anytls://') || f.url.includes('http');
-        const argoBtn = hasVless ? '<button class="btn btn-ghost" style="color: var(--orange); border-color: rgba(234, 88, 12, 0.2); padding: 0.3rem 0.6rem; font-size: 0.8rem; margin-right: 4px;" onclick="event.stopPropagation(); useAsArgoBase(' + i + ')">Argo</button>' : '';
-
-        html += '<div class="fav-card" onclick="useFav(' + i + ')">' +
-            '<div class="fav-title">' +
-              '<svg viewBox="0 0 24 24" style="width:16px;height:16px;color:var(--primary)"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg>' +
-              f.name +
-            '</div>' +
-            '<div class="fav-url" style="margin-bottom: 8px;">' + f.url + '</div>' +
-            '<div style="display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px;">' +
-              includeBadge +
-              excludeBadge +
-              renameBadge +
-            '</div>' +
-            '<div class="fav-actions" style="gap: 4px;">' +
-              argoBtn +
-              '<button class="btn btn-ghost" onclick="event.stopPropagation(); editFav(' + i + ')">編輯</button>' +
-              '<button class="btn btn-ghost btn-danger" onclick="event.stopPropagation(); deleteFav(' + i + ')">刪除</button>' +
-            '</div>' +
-          '</div>';
-      }
-      grid.innerHTML = html;
+        return \`
+          <div class="fav-card" onclick="useFav(\${i})">
+            <div class="fav-title">
+              <svg viewBox="0 0 24 24" style="width:16px;height:16px;color:var(--primary)"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg>
+              \${f.name}
+            </div>
+            <div class="fav-url" style="margin-bottom: 8px;">\${f.url}</div>
+            <div style="display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px;">
+              \${includeBadge}
+              \${excludeBadge}
+              \${renameBadge}
+            </div>
+            <div class="fav-actions">
+              <button class="btn btn-ghost" onclick="event.stopPropagation(); editFav(\${i})">編輯</button>
+              <button class="btn btn-ghost btn-danger" onclick="event.stopPropagation(); deleteFav(\${i})">刪除</button>
+            </div>
+          </div>\`;
+      }).join('');
     }
     
     async function saveFav() {
@@ -566,6 +447,7 @@ export const HTML_PAGE = `
           baseUrl = host + '/?url=' + encodeURIComponent(raw);
         }
         
+        // 💥 修正：前台結果網址也不再強制拼接過濾與替換參數
         const sep = baseUrl.includes('?') ? '&' : '?';
         document.getElementById('singboxUrl').value = baseUrl + sep + 'target=singbox';
         document.getElementById('clashUrl').value = baseUrl + sep + 'target=clash';
@@ -581,328 +463,6 @@ export const HTML_PAGE = `
       btn.disabled = false;
       btn.innerHTML = originalHTML;
     }
-
-    async function generateArgo() {
-      const baseVlessText = document.getElementById('argoBaseVless').value.trim();
-      const tempDomain = document.getElementById('argoTempDomain').value.trim();
-      const fixedDomain = document.getElementById('argoFixedDomain').value.trim();
-      const cleanIp = document.getElementById('argoCleanIp').value.trim() || 'cf.090227.xyz';
-      const cleanPort = document.getElementById('argoCleanPort').value.trim() || '8443';
-      
-      if (!baseVlessText) return showToast('請先輸入或載入基底 VLESS 連結', false);
-      if (!tempDomain && !fixedDomain) return showToast('請至少輸入一種隧道網域（臨時或固定）', false);
-      
-      const baseVlessList = baseVlessText.split(/[\\n\\r]+/);
-      const generatedNodes = [];
-      let successCount = 0;
-      let failCount = 0;
-      let firstUuid = '';
-      let firstPath = '';
-      
-      for (let i = 0; i < baseVlessList.length; i++) {
-        const trimmed = baseVlessList[i].trim();
-        if (!trimmed) continue;
-        
-        try {
-          const urlStr = trimmed.replace('vless://', 'http://');
-          const url = new URL(urlStr);
-          const uuid = url.username;
-          const params = url.searchParams;
-          const originalName = decodeURIComponent(url.hash.slice(1)) || 'Argo';
-          
-          let path = params.get('path') || '/';
-          if (!path.startsWith('/')) path = '/' + path;
-          
-          if (!firstUuid) firstUuid = uuid;
-          if (!firstPath) firstPath = path;
-          
-          if (tempDomain) {
-            const tempParams = new URLSearchParams();
-            tempParams.set('encryption', 'none');
-            tempParams.set('security', 'tls');
-            tempParams.set('type', 'ws');
-            tempParams.set('host', tempDomain);
-            tempParams.set('sni', tempDomain);
-            tempParams.set('path', path);
-            if (params.get('fp')) tempParams.set('fp', params.get('fp'));
-            
-            const tempVless = 'vless://' + uuid + '@' + cleanIp + ':' + cleanPort + '?' + tempParams.toString() + '#' + encodeURIComponent(originalName + '-臨時隧道');
-            generatedNodes.push(tempVless);
-          }
-          
-          if (fixedDomain) {
-            const fixedParams = new URLSearchParams();
-            fixedParams.set('encryption', 'none');
-            fixedParams.set('security', 'tls');
-            fixedParams.set('type', 'ws');
-            fixedParams.set('host', fixedDomain);
-            fixedParams.set('sni', fixedDomain);
-            fixedParams.set('path', path);
-            if (params.get('fp')) fixedParams.set('fp', params.get('fp'));
-            
-            const fixedVless = 'vless://' + uuid + '@' + cleanIp + ':' + cleanPort + '?' + fixedParams.toString() + '#' + encodeURIComponent(originalName + '-固定隧道');
-            generatedNodes.push(fixedVless);
-          }
-          successCount++;
-        } catch (e) {
-          failCount++;
-        }
-      }
-      
-      if (generatedNodes.length > 0) {
-        const urlInput = document.getElementById('urlInput');
-        if (urlInput.value.trim()) {
-          urlInput.value = urlInput.value.trim() + '\\n' + generatedNodes.join('\\n');
-        } else {
-          urlInput.value = generatedNodes.join('\\n');
-        }
-        
-        let toastMsg = '✅ 成功轉換 ' + successCount + ' 個節點，已產生 ' + generatedNodes.length + ' 個 Argo 節點並追加！';
-        if (failCount > 0) toastMsg += ' (有 ' + failCount + ' 個節點解析失敗)';
-        showToast(toastMsg);
-
-        const targetDomain = fixedDomain ? fixedDomain : tempDomain;
-        const scriptStr = '#!/bin/bash\\n' +
-          '# 專屬 Sing-Box + Argo 自動部署腳本\\n' +
-          '# 網域: ' + targetDomain + '\\n' +
-          '# UUID: ' + firstUuid + '\\n' +
-          '# WS路徑: ' + firstPath + '\\n\\n' +
-          'bash <(curl -Ls https://raw.githubusercontent.com/yonggekkk/argosbx/main/argosbx.sh)\\n' +
-          '# 請依據腳本提示選擇安裝 Vless-ws-enc\\n' +
-          '# 並將上方參數對應填入！\\n';
-          
-        document.getElementById('argoVpsScript').value = scriptStr;
-        document.getElementById('vpsScriptBlock').style.display = 'block';
-        
-      } else {
-        showToast('解析失敗，請確認基底 VLESS 格式是否正確', false);
-      }
-    }
-
-    // 從主輸入框中自動提取所有 VLESS 節點 (相容訂閱連結遠端提取)
-    async function loadVlessFromSource() {
-      const sourceVal = document.getElementById('urlInput').value.trim();
-      if (!sourceVal) return showToast('請先輸入資料來源', false);
-      
-      const btn = document.getElementById('loadVlessBtn');
-      const originalText = btn.textContent;
-      
-      const lines = sourceVal.split(/[\\n\\r]+/);
-      const vlessNodes = extractVlessNodes(sourceVal);
-      
-      if (vlessNodes.length > 0) {
-        handleVlessSelection(vlessNodes);
-        return;
-      }
-      
-      const urls = [];
-      for (let i = 0; i < lines.length; i++) {
-        if (lines[i].trim().startsWith('http')) {
-          urls.push(lines[i].trim());
-        }
-      }
-
-      if (urls.length > 0) {
-        btn.textContent = '遠端下載中...';
-        btn.disabled = true;
-        try {
-          const combinedRemoteVless = [];
-          
-          await Promise.all(urls.map(async (trimmedUrl) => {
-            try {
-              const apiTarget = window.location.origin + '/sub?url=' + encodeURIComponent(trimmedUrl) + '&target=base64';
-              const resp = await fetch(apiTarget);
-              if (resp.ok) {
-                const b64Text = await resp.text();
-                const decoded = safeBase64Decode(b64Text);
-                const remoteVlessNodes = extractVlessNodes(decoded);
-                combinedRemoteVless.push(...remoteVlessNodes);
-              }
-            } catch (e) {
-              console.error('Failed to fetch from url:', trimmedUrl, e);
-            }
-          }));
-
-          if (combinedRemoteVless.length > 0) {
-            const uniqueRemoteVless = Array.from(new Set(combinedRemoteVless));
-            handleVlessSelection(uniqueRemoteVless);
-          } else {
-            showToast('所有遠端訂閱中皆未找到任何 VLESS 節點', false);
-          }
-        } catch (e) {
-          showToast('連線失敗，請檢查網路或伺服器憑證', false);
-        } finally {
-          btn.textContent = originalText;
-          btn.disabled = false;
-        }
-      } else {
-        showToast('資料來源中未找到 VLESS 節點或訂閱網址', false);
-      }
-    }
-
-    async function useAsArgoBase(index) {
-      const urlVal = favs[index].url;
-      const vlessNodes = extractVlessNodes(urlVal);
-      
-      if (vlessNodes.length > 0) {
-        handleVlessSelection(vlessNodes);
-        return;
-      }
-      
-      const lines = urlVal.split(/[\\n\\r]+/);
-      const urls = [];
-      for (let i = 0; i < lines.length; i++) {
-        if (lines[i].trim().startsWith('http')) {
-          urls.push(lines[i].trim());
-        }
-      }
-      
-      if (urls.length > 0) {
-        showToast('正在向多個遠端訂閱下載並提取 VLESS 節點...');
-        try {
-          const combinedRemoteVless = [];
-          
-          await Promise.all(urls.map(async (trimmedUrl) => {
-            try {
-              const apiTarget = window.location.origin + '/sub?url=' + encodeURIComponent(trimmedUrl) + '&target=base64';
-              const resp = await fetch(apiTarget);
-              if (resp.ok) {
-                const b64Text = await resp.text();
-                const decoded = safeBase64Decode(b64Text);
-                const remoteVlessNodes = extractVlessNodes(decoded);
-                combinedRemoteVless.push(...remoteVlessNodes);
-              }
-            } catch (e) {
-              console.error('Failed to fetch from url:', trimmedUrl, e);
-            }
-          }));
-
-          if (combinedRemoteVless.length > 0) {
-            const uniqueRemoteVless = Array.from(new Set(combinedRemoteVless));
-            handleVlessSelection(uniqueRemoteVless);
-          } else {
-            showToast('所有遠端訂閱中皆未找到任何 VLESS 節點', false);
-          }
-        } catch (e) {
-          showToast('連線失敗，請檢查網路或伺服器憑證', false);
-        }
-      } else {
-        showToast('該配置內未包含任何 VLESS 節點或訂閱網址', false);
-      }
-    }
-
-    function extractVlessNodes(text) {
-      const lines = text.split(/[\\n\\r]+/);
-      const results = [];
-      for (let i = 0; i < lines.length; i++) {
-        const trimmed = lines[i].trim();
-        if (trimmed.startsWith('vless://') || trimmed.startsWith('anytls://')) {
-          results.push(trimmed);
-        }
-      }
-      return results;
-    }
-
-    function handleVlessSelection(nodes) {
-      if (nodes.length === 1) {
-        document.getElementById('argoBaseVless').value = nodes[0];
-        focusAndScrollToArgo();
-        showToast('已成功載入 VLESS 節點為 Argo 基底！');
-      } else {
-        extractedNodes = nodes;
-        openNodeSelectModal();
-      }
-    }
-
-    function openNodeSelectModal() {
-      const container = document.getElementById('nodeSelectContainer');
-      const countEl = document.getElementById('nodeSelectCount');
-      countEl.textContent = '已找到 ' + extractedNodes.length + ' 個 VLESS 節點';
-      
-      let html = '';
-      for (let i = 0; i < extractedNodes.length; i++) {
-        const node = extractedNodes[i];
-        let nodeName = '未命名節點';
-        try {
-          const hashIndex = node.indexOf('#');
-          if (hashIndex !== -1) {
-            nodeName = decodeURIComponent(node.substring(hashIndex + 1));
-          }
-        } catch (e) {}
-        
-        html += '<label style="display: flex; align-items: flex-start; gap: 10px; cursor: pointer; padding: 6px; border-radius: var(--radius-sm); transition: background 0.2s;" onmouseover="this.style.background=\\'var(--bg-hover)\\'" onmouseout="this.style.background=\\'transparent\\'" >' +
-            '<input type="checkbox" class="node-checkbox" value="' + i + '" checked style="margin-top: 4px; width: 16px; height: 16px; cursor: pointer;">' +
-            '<div style="flex: 1; font-size: 0.85rem; word-break: break-all;">' +
-              '<span style="font-weight: 600; color: var(--primary);">' + nodeName + '</span>' +
-              '<div style="font-family: monospace; font-size: 0.75rem; color: var(--text-muted); margin-top: 2px;">' + node.substring(0, 80) + '...</div>' +
-            '</div>' +
-          '</label>';
-      }
-      container.innerHTML = html;
-      
-      document.getElementById('nodeSelectModal').classList.add('show');
-    }
-
-    function closeNodeSelectModal() {
-      document.getElementById('nodeSelectModal').classList.remove('show');
-    }
-
-    function toggleSelectAllNodes() {
-      const checkboxes = document.querySelectorAll('.node-checkbox');
-      const anyUnchecked = Array.from(checkboxes).some(cb => !cb.checked);
-      checkboxes.forEach(cb => cb.checked = anyUnchecked);
-    }
-
-    function confirmNodeSelection() {
-      const checkboxes = document.querySelectorAll('.node-checkbox');
-      const selectedNodes = [];
-      for (let i = 0; i < checkboxes.length; i++) {
-        if (checkboxes[i].checked) {
-          const idx = parseInt(checkboxes[i].value);
-          selectedNodes.push(extractedNodes[idx]);
-        }
-      }
-        
-      if (selectedNodes.length === 0) {
-        return showToast('請至少選擇一個節點', false);
-      }
-      
-      document.getElementById('argoBaseVless').value = selectedNodes.join('\\n');
-      
-      closeNodeSelectModal();
-      focusAndScrollToArgo();
-      showToast('已成功載入 ' + selectedNodes.length + ' 個 VLESS 節點為 Argo 隧道基底！');
-    }
-
-    function focusAndScrollToArgo() {
-      const targetEl = document.getElementById('argoBaseVless');
-      targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      targetEl.focus();
-    }
-
-    function generateRandomTempDomain() {
-      const words = [
-        "accurate", "active", "alert", "alive", "beautiful", "brave", "busy", "calm", "clean", "clever",
-        "cooperative", "courageous", "creative", "decisive", "eager", "enthusiastic", "energetic", "faithful",
-        "friendly", "gentle", "happy", "healthy", "helpful", "honest", "industrious", "jolly", "kind", "lively",
-        "lovely", "lucky", "obedient", "polite", "proud", "quick", "quiet", "relieved", "rich", "smiling",
-        "splendid", "successful", "thoughtful", "victorious", "wary", "witty", "wonderful", "zealous",
-        "obtained", "translated", "matched", "verified", "secured", "certified", "tested", "managed", "selected",
-        "trusted", "combined", "cartridges", "apples", "bananas", "tigers", "lions", "eagles", "dolphins", "clouds",
-        "waves", "rivers", "mountains", "forests", "stars", "oceans", "planets", "crystals", "diamonds", "pearls",
-        "arrows", "shields", "swords", "books", "pens", "clocks", "keys", "locks", "lights", "lamps", "flags",
-        "maps", "globes", "compasses", "anchors", "sails", "boats", "ships", "trains", "planes", "cars", "bikes"
-      ];
-      
-      const result = [];
-      for (let i = 0; i < 4; i++) {
-        const idx = Math.floor(Math.random() * words.length);
-        result.push(words[idx]);
-      }
-      const randomDomain = result.join('-') + '.trycloudflare.com';
-      document.getElementById('argoTempDomain').value = randomDomain;
-      showToast('已隨機產生臨時隧道網域：' + randomDomain);
-    }
     
     function copyResult(id) {
       const input = document.getElementById(id);
@@ -913,30 +473,31 @@ export const HTML_PAGE = `
     function showQr(id) {
       const url = document.getElementById(id).value;
       if(!url) return;
-      
-      const container = document.getElementById('qrcodeCanvas');
-      container.innerHTML = '';
-      
-      document.getElementById('qrModalUrl').textContent = url;
-      
-      new QRCode(container, {
-        text: url,
-        width: 240,
-        height: 240,
-        colorDark: "#0f172a",
-        colorLight: "#ffffff",
-        correctLevel: QRCode.CorrectLevel.L
-      });
-      
-      document.getElementById('qrModal').classList.add('show');
-    }
-
-    function closeQrModal() {
-      document.getElementById('qrModal').classList.remove('show');
+      const win = window.open('', '_blank', 'width=420,height=480');
+      if (!win) return showToast('請允許瀏覽器開啟彈出視窗', false);
+      win.document.write(\`
+        <!DOCTYPE html><html><head><meta charset="utf-8"><title>掃碼訂閱</title>
+        <style>
+          body { margin:0; background:#0f172a; display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:100vh; font-family:sans-serif; }
+          .qr-container { padding:24px; background:#ffffff; border-radius:16px; box-shadow:0 10px 25px rgba(0,0,0,0.5); }
+          .title { margin-top:24px; font-size:16px; color:#f8fafc; font-weight:600; letter-spacing:0.5px; }
+          .subtitle { margin-top:8px; font-size:13px; color:#94a3b8; text-align:center; max-width:280px; word-break:break-all;}
+        </style>
+        </head><body>
+        <div class="qr-container"><div id="qr"></div></div>
+        <div class="title">使用客戶端掃描行動條碼</div>
+        <div class="subtitle\">\${url}</div>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"><\\/script>
+        <script>
+          setTimeout(() => {
+            new QRCode(document.getElementById('qr'), { text: "\${url}", width: 260, height: 260, colorDark: "#0f172a", colorLight: "#ffffff", correctLevel: QRCode.CorrectLevel.L });
+          }, 100);
+        <\\/script>
+        </body></html>
+      \`);
     }
     
-    function showToast(msg, isSuccess) {
-      if (isSuccess === undefined) isSuccess = true;
+    function showToast(msg, isSuccess = true) {
       const t = document.getElementById('toast');
       const msgEl = document.getElementById('toastMsg');
       
@@ -951,11 +512,9 @@ export const HTML_PAGE = `
       
       msgEl.textContent = msg;
       t.classList.add('show');
-      setTimeout(function() {
+      setTimeout(() => {
         t.classList.remove('show');
-        setTimeout(function() {
-          t.querySelector('svg').style.color = '';
-        }, 300);
+        setTimeout(() => t.querySelector('svg').style.color = '', 300);
       }, 3000);
     }
     
