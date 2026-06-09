@@ -260,13 +260,13 @@ export const HTML_PAGE = `
           </div>
           <div class="result-input-wrapper"><input type="text" id="singboxUrl" readonly></div>
           <div class="result-actions">
-            <button class="btn-icon" onclick="copyResult('singboxUrl')" title="複製連結"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg></button>
+            <button class="btn-icon" onclick="copyResult('singboxUrl')" title="複製連結"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2 2v1"></path></svg></button>
             <button class="btn-icon" onclick="showQr('singboxUrl')" title="顯示 QR Code"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg></button>
           </div>
         </div>
 
         <div class="result-item">
-          <div class="result-icon-box"><svg viewBox="0 0 24 24"><path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z"></path><line x1="16" y1="8" x2="2" y2="22"></line><line x1="17.5" y1="15" x2="9" y2="6.5"></line></svg></div>
+          <div class="result-icon-box"><svg viewBox="0 0 24 24"><path d="M20.24 options"><path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z"></path><line x1="16" y1="8" x2="2" y2="22"></line><line x1="17.5" y1="15" x2="9" y2="6.5"></line></svg></div>
           <div class="result-info">
             <div class="result-name">Clash Meta</div>
             <div class="result-desc">YAML 格式 · 適用 Clash Verge, ClashX</div>
@@ -405,8 +405,6 @@ export const HTML_PAGE = `
       } catch(e) { console.error('Failed to load favs'); }
     }
     
-    // 💥 徹底重構：完全使用「單引號字串拼接」！
-    // 100% 繞過樣板字串的轉義，徹底杜絕 AI 在背景將 Professional 與 Token 字眼注入程式碼
     function renderFavs() {
       const grid = document.getElementById('favGrid');
       if (favs.length === 0) {
@@ -573,8 +571,7 @@ export const HTML_PAGE = `
       btn.innerHTML = originalHTML;
     }
 
-    // 💥 產生 Argo 臨時/固定節點使用純單引號與「+」號字串拼接，絕無反引號！
-    // 徹底屏蔽 AI 生成時可能帶入的 Professional 與 Token 污染
+    // 智慧型多節點 Cloudflare Argo 隧道節點生成演算法 (徹底修正！)
     async function generateArgo() {
       const baseVlessText = document.getElementById('argoBaseVless').value.trim();
       const tempDomain = document.getElementById('argoTempDomain').value.trim();
@@ -768,7 +765,6 @@ export const HTML_PAGE = `
       }
     }
 
-    // 💥 輔助：從文本中提取所有合法的 VLESS/AnyTLS 節點
     function extractVlessNodes(text) {
       const lines = text.split(/[\\n\\r]+/);
       const results = [];
@@ -781,7 +777,6 @@ export const HTML_PAGE = `
       return results;
     }
 
-    // 智慧篩選與選單處理
     function handleVlessSelection(nodes) {
       if (nodes.length === 1) {
         document.getElementById('argoBaseVless').value = nodes[0];
@@ -827,14 +822,12 @@ export const HTML_PAGE = `
       document.getElementById('nodeSelectModal').classList.remove('show');
     }
 
-    // 一鍵全選 / 反選
     function toggleSelectAllNodes() {
       const checkboxes = document.querySelectorAll('.node-checkbox');
       const anyUnchecked = Array.from(checkboxes).some(cb => !cb.checked);
       checkboxes.forEach(cb => cb.checked = anyUnchecked);
     }
 
-    // 確認載入所選節點
     function confirmNodeSelection() {
       const checkboxes = document.querySelectorAll('.node-checkbox');
       const selectedNodes = [];
