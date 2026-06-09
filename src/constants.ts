@@ -192,7 +192,7 @@ export const HTML_PAGE = `
       </button>
     </main>
 
-    <!-- Cloudflare Argo 隧道節點生成器 -->
+    <!-- Cloudflare Argo 隧道節點生成器 (已重構：排除所有 \Professional 污染) -->
     <main class="panel" style="margin-top: 1.5rem;">
       <div class="panel-header">
         <h2 class="panel-title" style="color: var(--orange);">
@@ -401,34 +401,36 @@ export const HTML_PAGE = `
         return;
       }
       grid.style.display = 'grid';
-      grid.innerHTML = favs.map((f, i) => {
-        const includeBadge = f.include ? \`<span class="badge" style="background: rgba(16, 185, 129, 0.1); color: var(--success); border-color: rgba(16, 185, 129, 0.2); margin-right: 4px;">保: \${f.include}</span>\` : '';
-        const excludeBadge = f.exclude ? \`<span class="badge" style="background: rgba(239, 68, 68, 0.1); color: var(--danger); border-color: rgba(239, 68, 68, 0.2); margin-right: 4px;">排: \${f.exclude}</span>\` : '';
-        const renameBadge = f.rename ? \`<span class="badge" style="background: rgba(59, 130, 246, 0.1); color: var(--primary); border-color: rgba(59, 130, 246, 0.2)">替: \${f.rename}</span>\` : '';
+      
+      let html = '';
+      for (let i = 0; i < favs.length; i++) {
+        const f = favs[i];
+        const includeBadge = f.include ? '<span class="badge" style="background: rgba(16, 185, 129, 0.1); color: var(--success); border-color: rgba(16, 185, 129, 0.2); margin-right: 4px;">保: ' + f.include + '</span>' : '';
+        const excludeBadge = f.exclude ? '<span class="badge" style="background: rgba(239, 68, 68, 0.1); color: var(--danger); border-color: rgba(239, 68, 68, 0.2); margin-right: 4px;">排: ' + f.exclude + '</span>' : '';
+        const renameBadge = f.rename ? '<span class="badge" style="background: rgba(59, 130, 246, 0.1); color: var(--primary); border-color: rgba(59, 130, 246, 0.2)">替: ' + f.rename + '</span>' : '';
         
-        // ✨ 新增：智慧檢查該配置是否包含 VLESS (無論是明文還是訂閱網址)，如果包含，渲染出一個橘色的 "Argo" 快速載入按鈕
         const hasVless = f.url.includes('vless://') || f.url.includes('anytls://') || f.url.includes('http');
-        const argoBtn = hasVless ? \`<button class="btn btn-ghost" style="color: var(--orange); border-color: rgba(234, 88, 12, 0.2); padding: 0.3rem 0.6rem; font-size: 0.8rem; margin-right: 4px;" onclick="event.stopPropagation(); useAsArgoBase(\${i})">Argo</button>\` : '';
+        const argoBtn = hasVless ? '<button class="btn btn-ghost" style="color: var(--orange); border-color: rgba(234, 88, 12, 0.2); padding: 0.3rem 0.6rem; font-size: 0.8rem; margin-right: 4px;" onclick="event.stopPropagation(); useAsArgoBase(' + i + ')">Argo</button>' : '';
 
-        return \`
-          <div class="fav-card" onclick="useFav(\${i})">
-            <div class="fav-title">
-              <svg viewBox="0 0 24 24" style="width:16px;height:16px;color:var(--primary)"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg>
-              \${f.name}
-            </div>
-            <div class="fav-url" style="margin-bottom: 8px;">\${f.url}</div>
-            <div style="display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px;">
-              \${includeBadge}
-              \${excludeBadge}
-              \${renameBadge}
-            </div>
-            <div class="fav-actions" style="gap: 4px;">
-              \${argoBtn}
-              <button class="btn btn-ghost" onclick="event.stopPropagation(); editFav(\${i})">編輯</button>
-              <button class="btn btn-ghost btn-danger" onclick="event.stopPropagation(); deleteFav(\${i})">刪除</button>
-            </div>
-          </div>\`;
-      }).join('');
+        html += '<div class="fav-card" onclick="useFav(' + i + ')">' +
+            '<div class="fav-title">' +
+              '<svg viewBox="0 0 24 24" style="width:16px;height:16px;color:var(--primary)"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg>' +
+              f.name +
+            '</div>' +
+            '<div class="fav-url" style="margin-bottom: 8px;">' + f.url + '</div>' +
+            '<div style="display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px;">' +
+              includeBadge +
+              excludeBadge +
+              renameBadge +
+            '</div>' +
+            '<div class="fav-actions" style="gap: 4px;">' +
+              argoBtn +
+              '<button class="btn btn-ghost" onclick="event.stopPropagation(); editFav(' + i + ')">編輯</button>' +
+              '<button class="btn btn-ghost btn-danger" onclick="event.stopPropagation(); deleteFav(' + i + ')">刪除</button>' +
+            '</div>' +
+          '</div>';
+      }
+      grid.innerHTML = html;
     }
     
     async function saveFav() {
@@ -557,7 +559,7 @@ export const HTML_PAGE = `
       btn.innerHTML = originalHTML;
     }
 
-    // 💥 智慧型：多節點 Cloudflare Argo 隧道節點生成演算法
+    // 智慧型多節點 Cloudflare Argo 隧道節點生成演算法
     async function generateArgo() {
       const baseVlessText = document.getElementById('argoBaseVless').value.trim();
       const tempDomain = document.getElementById('argoTempDomain').value.trim();
@@ -573,8 +575,8 @@ export const HTML_PAGE = `
       let successCount = 0;
       let failCount = 0;
       
-      for (const baseVless of baseVlessList) {
-        const trimmed = baseVless.trim();
+      for (let i = 0; i < baseVlessList.length; i++) {
+        const trimmed = baseVlessList[i].trim();
         if (!trimmed) continue;
         
         try {
@@ -587,7 +589,7 @@ export const HTML_PAGE = `
           let path = params.get('path') || '/';
           if (!path.startsWith('/')) path = '/' + path;
           
-          // 1. 產生 臨時隧道
+          // 1. 產生 臨時隧道 (徹底修復拼接錯誤！)
           if (tempDomain) {
             const tempParams = new URLSearchParams();
             tempParams.set('encryption', 'none');
@@ -598,7 +600,7 @@ export const HTML_PAGE = `
             tempParams.set('path', path);
             if (params.get('fp')) tempParams.set('fp', params.get('fp'));
             
-            const tempVless = \`vless://\${uuid}@\${cleanIp}:\Professional\${cleanPort}?\Professional\${tempParams.toString()}#\Professional\${encodeURIComponent(originalName + '-臨時隧道')}\`;
+            const tempVless = 'vless://' + uuid + '@' + cleanIp + ':' + cleanPort + '?' + tempParams.toString() + '#' + encodeURIComponent(originalName + '-臨時隧道');
             generatedNodes.push(tempVless);
           }
           
@@ -613,7 +615,7 @@ export const HTML_PAGE = `
             fixedParams.set('path', path);
             if (params.get('fp')) fixedParams.set('fp', params.get('fp'));
             
-            const fixedVless = \`vless://\${uuid}@\${cleanIp}:\${cleanPort}?\${fixedParams.toString()}#\${encodeURIComponent(originalName + '-固定隧道')}\`;
+            const fixedVless = 'vless://' + uuid + '@' + cleanIp + ':' + cleanPort + '?' + fixedParams.toString() + '#' + encodeURIComponent(originalName + '-固定隧道');
             generatedNodes.push(fixedVless);
           }
           successCount++;
@@ -623,7 +625,6 @@ export const HTML_PAGE = `
       }
       
       if (generatedNodes.length > 0) {
-        // 將新產生的 Argo 節點，100% 完整追加到最上方的主資料來源輸入框中（完美保留原節點，絕不覆蓋）
         const urlInput = document.getElementById('urlInput');
         if (urlInput.value.trim()) {
           urlInput.value = urlInput.value.trim() + '\\n' + generatedNodes.join('\\n');
@@ -631,15 +632,15 @@ export const HTML_PAGE = `
           urlInput.value = generatedNodes.join('\\n');
         }
         
-        let toastMsg = \`✅ 成功轉換 \${successCount} 個節點，已產生 \${generatedNodes.length} 個 Argo 節點並追加！\`;
-        if (failCount > 0) toastMsg += \` (有 \${failCount} 個節點解析失敗)\`;
+        let toastMsg = '✅ 成功轉換 ' + successCount + ' 個節點，已產生 ' + generatedNodes.length + ' 個 Argo 節點並追加！';
+        if (failCount > 0) toastMsg += ' (有 ' + failCount + ' 個節點解析失敗)';
         showToast(toastMsg);
       } else {
         showToast('解析失敗，請確認基底 VLESS 格式是否正確', false);
       }
     }
 
-    // 💥 從主輸入框中自動提取所有 VLESS 節點 (相容訂閱連結遠端提取)
+    // 從主輸入框中自動提取所有 VLESS 節點 (相容訂閱連結遠端提取)
     async function loadVlessFromSource() {
       const sourceVal = document.getElementById('urlInput').value.trim();
       if (!sourceVal) return showToast('請先輸入資料來源', false);
@@ -648,23 +649,26 @@ export const HTML_PAGE = `
       const originalText = btn.textContent;
       
       const lines = sourceVal.split(/[\\n\\r]+/);
-      
-      // 1. 如果輸入框裡直接就有 vless:// 或 anytls:// 節點
       const vlessNodes = extractVlessNodes(sourceVal);
+      
       if (vlessNodes.length > 0) {
         handleVlessSelection(vlessNodes);
         return;
       }
       
-      // 2. 如果輸入框裡是訂閱網址 (http 開頭)，向後端 API 請求解開並下載提取所有網址
-      const urls = lines.map(line => line.trim()).filter(line => line.startsWith('http'));
+      const urls = [];
+      for (let i = 0; i < lines.length; i++) {
+        if (lines[i].trim().startsWith('http')) {
+          urls.push(lines[i].trim());
+        }
+      }
+
       if (urls.length > 0) {
         btn.textContent = '遠端下載中...';
         btn.disabled = true;
         try {
           const combinedRemoteVless = [];
           
-          // 智慧並發：同時下載所有訂閱網址，並解鎖所有裡面的 VLESS 節點
           await Promise.all(urls.map(async (trimmedUrl) => {
             try {
               const apiTarget = window.location.origin + '/sub?url=' + encodeURIComponent(trimmedUrl) + '&target=base64';
@@ -681,7 +685,6 @@ export const HTML_PAGE = `
           }));
 
           if (combinedRemoteVless.length > 0) {
-            // 自動去重複
             const uniqueRemoteVless = Array.from(new Set(combinedRemoteVless));
             handleVlessSelection(uniqueRemoteVless);
           } else {
@@ -698,7 +701,7 @@ export const HTML_PAGE = `
       }
     }
 
-    // 💥 從收藏配置中直接一鍵將 VLESS 載入為 Argo 隧道基底 (相容多網址與訂閱連結遠端提取)
+    // 從收藏配置中直接一鍵將 VLESS 載入為 Argo 隧道基底 (相容多網址與訂閱連結遠端提取)
     async function useAsArgoBase(index) {
       const urlVal = favs[index].url;
       const vlessNodes = extractVlessNodes(urlVal);
@@ -709,14 +712,18 @@ export const HTML_PAGE = `
       }
       
       const lines = urlVal.split(/[\\n\\r]+/);
-      const urls = lines.map(line => line.trim()).filter(line => line.startsWith('http'));
+      const urls = [];
+      for (let i = 0; i < lines.length; i++) {
+        if (lines[i].trim().startsWith('http')) {
+          urls.push(lines[i].trim());
+        }
+      }
       
       if (urls.length > 0) {
         showToast('正在向多個遠端訂閱下載並提取 VLESS 節點...');
         try {
           const combinedRemoteVless = [];
           
-          // 智慧並發：同步下載收藏配置內的所有訂閱連結
           await Promise.all(urls.map(async (trimmedUrl) => {
             try {
               const apiTarget = window.location.origin + '/sub?url=' + encodeURIComponent(trimmedUrl) + '&target=base64';
@@ -746,35 +753,37 @@ export const HTML_PAGE = `
       }
     }
 
-    // 輔助：從文本中提取所有合法的 VLESS/AnyTLS 節點
     function extractVlessNodes(text) {
       const lines = text.split(/[\\n\\r]+/);
-      return lines
-        .map(line => line.trim())
-        .filter(line => line.startsWith('vless://') || line.startsWith('anytls://'));
+      const results = [];
+      for (let i = 0; i < lines.length; i++) {
+        const trimmed = lines[i].trim();
+        if (trimmed.startsWith('vless://') || trimmed.startsWith('anytls://')) {
+          results.push(trimmed);
+        }
+      }
+      return results;
     }
 
-    // 智慧篩選與選單處理
     function handleVlessSelection(nodes) {
       if (nodes.length === 1) {
-        // 如果只有一個，直接載入！
         document.getElementById('argoBaseVless').value = nodes[0];
         focusAndScrollToArgo();
         showToast('已成功載入 VLESS 節點為 Argo 基底！');
       } else {
-        // 如果有多個，彈出智慧選單讓使用者勾選
         extractedNodes = nodes;
         openNodeSelectModal();
       }
     }
 
-    // 智慧選單模態框：開啟並動態渲染
     function openNodeSelectModal() {
       const container = document.getElementById('nodeSelectContainer');
       const countEl = document.getElementById('nodeSelectCount');
-      countEl.textContent = \`已找到 \Token\${extractedNodes.length} 個 VLESS 節點\`;
+      countEl.textContent = '已找到 ' + extractedNodes.length + ' 個 VLESS 節點';
       
-      container.innerHTML = extractedNodes.map((node, i) => {
+      let html = '';
+      for (let i = 0; i < extractedNodes.length; i++) {
+        const node = extractedNodes[i];
         let nodeName = '未命名節點';
         try {
           const hashIndex = node.indexOf('#');
@@ -783,16 +792,15 @@ export const HTML_PAGE = `
           }
         } catch (e) {}
         
-        return \`
-          <label style="display: flex; align-items: flex-start; gap: 10px; cursor: pointer; padding: 6px; border-radius: var(--radius-sm); transition: background 0.2s;" onmouseover="this.style.background='var(--bg-hover)'" onmouseout="this.style.background='transparent'">
-            <input type="checkbox" class="node-checkbox" value="\${i}" checked style="margin-top: 4px; width: 16px; height: 16px; cursor: pointer;">
-            <div style="flex: 1; font-size: 0.85rem; word-break: break-all;">
-              <span style="font-weight: 600; color: var(--primary);">\${nodeName}</span>
-              <div style="font-family: monospace; font-size: 0.75rem; color: var(--text-muted); margin-top: 2px;">\${node.substring(0, 80)}...</div>
-            </div>
-          </label>
-        \`;
-      }).join('');
+        html += '<label style="display: flex; align-items: flex-start; gap: 10px; cursor: pointer; padding: 6px; border-radius: var(--radius-sm); transition: background 0.2s;" onmouseover="this.style.background=\\'var(--bg-hover)\\'" onmouseout="this.style.background=\\'transparent\\'" >' +
+            '<input type="checkbox" class="node-checkbox" value="' + i + '" checked style="margin-top: 4px; width: 16px; height: 16px; cursor: pointer;">' +
+            '<div style="flex: 1; font-size: 0.85rem; word-break: break-all;">' +
+              '<span style="font-weight: 600; color: var(--primary);">' + nodeName + '</span>' +
+              '<div style="font-family: monospace; font-size: 0.75rem; color: var(--text-muted); margin-top: 2px;">' + node.substring(0, 80) + '...</div>' +
+            '</div>' +
+          '</label>';
+      }
+      container.innerHTML = html;
       
       document.getElementById('nodeSelectModal').classList.add('show');
     }
@@ -801,32 +809,31 @@ export const HTML_PAGE = `
       document.getElementById('nodeSelectModal').classList.remove('show');
     }
 
-    // 一鍵全選 / 反選
     function toggleSelectAllNodes() {
       const checkboxes = document.querySelectorAll('.node-checkbox');
       const anyUnchecked = Array.from(checkboxes).some(cb => !cb.checked);
       checkboxes.forEach(cb => cb.checked = anyUnchecked);
     }
 
-    // 確認載入所選節點
     function confirmNodeSelection() {
       const checkboxes = document.querySelectorAll('.node-checkbox');
-      const selectedIndices = Array.from(checkboxes)
-        .filter(cb => cb.checked)
-        .map(cb => parseInt(cb.value));
+      const selectedNodes = [];
+      for (let i = 0; i < checkboxes.length; i++) {
+        if (checkboxes[i].checked) {
+          const idx = parseInt(checkboxes[i].value);
+          selectedNodes.push(extractedNodes[idx]);
+        }
+      }
         
-      if (selectedIndices.length === 0) {
+      if (selectedNodes.length === 0) {
         return showToast('請至少選擇一個節點', false);
       }
       
-      const selectedNodes = selectedIndices.map(idx => extractedNodes[idx]);
-      
-      // 智慧載入至 Argo 生成器文本框（多個用換行隔開）
       document.getElementById('argoBaseVless').value = selectedNodes.join('\\n');
       
       closeNodeSelectModal();
       focusAndScrollToArgo();
-      showToast(\`已成功載入 \${selectedNodes.length} 個 VLESS 節點為 Argo 隧道基底！\`);
+      showToast('已成功載入 ' + selectedNodes.length + ' 個 VLESS 節點為 Argo 隧道基底！');
     }
 
     function focusAndScrollToArgo() {
@@ -835,7 +842,6 @@ export const HTML_PAGE = `
       targetEl.focus();
     }
 
-    // 新增：隨機產生 Argo 臨時網域算法 (模擬官方三單字減號規格)
     function generateRandomTempDomain() {
       const words = [
         "accurate", "active", "alert", "alive", "beautiful", "brave", "busy", "calm", "clean", "clever",
@@ -871,26 +877,24 @@ export const HTML_PAGE = `
       if(!url) return;
       const win = window.open('', '_blank', 'width=420,height=480');
       if (!win) return showToast('請允許瀏覽器開啟彈出視窗', false);
-      win.document.write(\`
-        <!DOCTYPE html><html><head><meta charset="utf-8"><title>掃碼訂閱</title>
-        <style>
-          body { margin:0; background:#0f172a; display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:100vh; font-family:sans-serif; }
-          .qr-container { padding:24px; background:#ffffff; border-radius:16px; box-shadow:0 10px 25px rgba(0,0,0,0.5); }
-          .title { margin-top:24px; font-size:16px; color:#f8fafc; font-weight:600; letter-spacing:0.5px; }
-          .subtitle { margin-top:8px; font-size:13px; color:#94a3b8; text-align:center; max-width:280px; word-break:break-all;}
-        </style>
-        </head><body>
-        <div class="qr-container"><div id="qr"></div></div>
-        <div class="title">使用客戶端掃描行動條碼</div>
-        <div class="subtitle\">\${url}</div>
-        <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"><\\/script>
-        <script>
-          setTimeout(() => {
-            new QRCode(document.getElementById('qr'), { text: "\${url}", width: 260, height: 260, colorDark: "#0f172a", colorLight: "#ffffff", correctLevel: QRCode.CorrectLevel.L });
-          }, 100);
-        <\\/script>
-        </body></html>
-      \`);
+      win.document.write('<!DOCTYPE html><html><head><meta charset="utf-8"><title>掃碼訂閱</title>' +
+        '<style>' +
+          'body { margin:0; background:#0f172a; display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:100vh; font-family:sans-serif; }' +
+          '.qr-container { padding:24px; background:#ffffff; border-radius:16px; box-shadow:0 10px 25px rgba(0,0,0,0.5); }' +
+          '.title { margin-top:24px; font-size:16px; color:#f8fafc; font-weight:600; letter-spacing:0.5px; }' +
+          '.subtitle { margin-top:8px; font-size:13px; color:#94a3b8; text-align:center; max-width:280px; word-break:break-all;}' +
+        '</style>' +
+        '</head><body>' +
+        '<div class="qr-container"><div id="qr"></div></div>' +
+        '<div class="title">使用客戶端掃描行動條碼</div>' +
+        '<div class="subtitle">' + url + '</div>' +
+        '<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>' +
+        '<script>' +
+          'setTimeout(() => {' +
+            'new QRCode(document.getElementById("qr"), { text: "' + url + '", width: 260, height: 260, colorDark: "#0f172a", colorLight: "#ffffff", correctLevel: QRCode.CorrectLevel.L });' +
+          '}, 100);' +
+        '</script>' +
+        '</body></html>');
     }
     
     function showToast(msg, isSuccess = true) {
