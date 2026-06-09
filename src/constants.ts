@@ -192,7 +192,7 @@ export const HTML_PAGE = `
       </button>
     </main>
 
-    <!-- Cloudflare Argo 隧道節點生成器 -->
+    <!-- Cloudflare Argo 隧道節點生成器 (已整合智慧提取功能) -->
     <main class="panel" style="margin-top: 1.5rem;">
       <div class="panel-header">
         <h2 class="panel-title" style="color: var(--orange);">
@@ -203,10 +203,9 @@ export const HTML_PAGE = `
       
       <div class="form-group">
         <label for="argoBaseVless">基底 VLESS 連結 (包含真實 UUID 與 WS Path)</label>
-        <!-- 💥 智慧優化：新增「從上方載入」快捷鍵，不用再去手動複製貼上了 -->
         <div style="display: flex; gap: 8px;">
           <input type="text" id="argoBaseVless" placeholder="vless://xxxxxx@localhost:port?path=/abc..." style="flex: 1;">
-          <button class="btn btn-ghost" onclick="loadVlessFromSource()" style="white-space: nowrap; font-size: 0.85rem; padding: 0 12px; border-color: var(--border);">
+          <button class="btn btn-ghost" id="loadVlessBtn" onclick="loadVlessFromSource()" style="white-space: nowrap; font-size: 0.85rem; padding: 0 12px; border-color: var(--border);">
             從上方載入
           </button>
         </div>
@@ -346,6 +345,22 @@ export const HTML_PAGE = `
   <script>
     let favs = [];
     
+    // 💥 輔助：安全 Base64 解碼 (前端 JS 專屬，過濾隱形字元)
+    function safeBase64Decode(str) {
+      try {
+        let b64 = str.replace(/\\s/g, '').replace(/-/g, '+').replace(/_/g, '/').replace(/[^A-Za-z0-9+/=]/g, '');
+        while (b64.length % 4) b64 += '=';
+        const binaryStr = atob(b64);
+        const bytes = new Uint8Array(binaryStr.length);
+        for (let i = 0; i < binaryStr.length; i++) {
+          bytes[i] = binaryStr.charCodeAt(i);
+        }
+        return new TextDecoder('utf-8').decode(bytes);
+      } catch (e) {
+        return "";
+      }
+    }
+
     async function loadFavs() {
       try {
         const resp = await fetch('/favs');
@@ -367,8 +382,8 @@ export const HTML_PAGE = `
         const excludeBadge = f.exclude ? \`<span class="badge" style="background: rgba(239, 68, 68, 0.1); color: var(--danger); border-color: rgba(239, 68, 68, 0.2); margin-right: 4px;">排: \${f.exclude}</span>\` : '';
         const renameBadge = f.rename ? \`<span class="badge" style="background: rgba(59, 130, 246, 0.1); color: var(--primary); border-color: rgba(59, 130, 246, 0.2)">替: \${f.rename}</span>\` : '';
         
-        // ✨ 新增：智慧檢查該收藏中是否包含 VLESS，如果包含，渲染出一個橘色的 "Argo" 快速載入按鈕
-        const hasVless = f.url.includes('vless://') || f.url.includes('anytls://');
+        // ✨ 新增：智慧檢查該收藏中是否包含 VLESS (無論是明文還是訂閱網址)，如果包含，渲染出一個橘色的 "Argo" 快速載入按鈕
+        const hasVless = f.url.includes('vless://') || f.url.includes('anytls://') || f.url.includes('http');
         const argoBtn = hasVless ? \`<button class="btn btn-ghost" style="color: var(--orange); border-color: rgba(234, 88, 12, 0.2); padding: 0.3rem 0.6rem; font-size: 0.8rem; margin-right: 4px;" onclick="event.stopPropagation(); useAsArgoBase(\${i})">Argo</button>\` : '';
 
         return \`
@@ -384,7 +399,7 @@ export const HTML_PAGE = `
               \${renameBadge}
             </div>
             <div class="fav-actions" style="gap: 4px;">
-              \u0024{argoBtn}
+              \${argoBtn}
               <button class="btn btn-ghost" onclick="event.stopPropagation(); editFav(\${i})">編輯</button>
               <button class="btn btn-ghost btn-danger" onclick="event.stopPropagation(); deleteFav(\${i})">刪除</button>
             </div>
@@ -587,35 +602,105 @@ export const HTML_PAGE = `
       }
     }
 
-    // 💥 從主輸入框中自動提取第一個 VLESS 節點載入至 Argo
-    function loadVlessFromSource() {
-      const sourceVal = document.getElementById('urlInput').value;
+    // 💥 從主輸入框中自動提取第一個 VLESS 節點載入至 Argo (相容訂閱連結遠端提取)
+    async function loadVlessFromSource() {
+      const sourceVal = document.getElementById('urlInput').value.trim();
+      if (!sourceVal) return showToast('請先輸入資料來源', false);
+      
+      const btn = document.getElementById('loadVlessBtn');
+      const originalText = btn.textContent;
+      
       const lines = sourceVal.split(/[\\n\\r]+/);
+      
+      // 1. 如果輸入框裡直接就有 vless:// 或 anytls:// 節點
       const firstVless = lines.find(line => line.trim().startsWith('vless://') || line.trim().startsWith('anytls://'));
       if (firstVless) {
         document.getElementById('argoBaseVless').value = firstVless.trim();
         showToast('已載入第一個 VLESS 節點');
+        return;
+      }
+      
+      // 2. 如果輸入框裡是訂閱網址 (http 開頭)，向後端 API 請求解開訂閱並下載提取
+      const firstUrl = lines.find(line => line.trim().startsWith('http'));
+      if (firstUrl) {
+        btn.textContent = '提取中...';
+        btn.disabled = true;
+        try {
+          const apiTarget = window.location.origin + '/sub?url=' + encodeURIComponent(firstUrl) + '&target=base64';
+          const resp = await fetch(apiTarget);
+          if (resp.ok) {
+            const b64Text = await resp.text();
+            // 使用本機安全解碼器解碼
+            const decoded = safeBase64Decode(b64Text);
+            const decodedLines = decoded.split(/[\\n\\r]+/);
+            const foundVless = decodedLines.find(line => line.trim().startsWith('vless://') || line.trim().startsWith('anytls://'));
+            if (foundVless) {
+              document.getElementById('argoBaseVless').value = foundVless.trim();
+              showToast('已成功從遠端訂閱網址中提取 VLESS 節點！');
+            } else {
+              showToast('該遠端訂閱中未找到任何 VLESS 節點', false);
+            }
+          } else {
+            showToast('下載失敗，狀態碼: ' + resp.status, false);
+          }
+        } catch (e) {
+          showToast('連線失敗，請檢查網路或伺服器憑證', false);
+        } finally {
+          btn.textContent = originalText;
+          btn.disabled = false;
+        }
       } else {
-        showToast('上方資料來源中未找到 VLESS 節點', false);
+        showToast('資料來源中未找到 VLESS 節點或訂閱網址', false);
       }
     }
 
-    // 💥 從收藏配置中直接一鍵將 VLESS 載入為 Argo 隧道基底並平滑滾動聚焦
-    function useAsArgoBase(index) {
+    // 💥 從收藏配置中直接一鍵將 VLESS 載入為 Argo 隧道基底 (相容訂閱連結遠端提取)
+    async function useAsArgoBase(index) {
       const urlVal = favs[index].url;
       const lines = urlVal.split(/[\\n\\r]+/);
+      
       const firstVless = lines.find(line => line.trim().startsWith('vless://') || line.trim().startsWith('anytls://'));
       if (firstVless) {
         document.getElementById('argoBaseVless').value = firstVless.trim();
-        // 滾動到 Argo 生成器區塊
-        const targetEl = document.getElementById('argoBaseVless');
-        targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        // 觸發輸入框的焦點
-        targetEl.focus();
+        focusAndScrollToArgo();
         showToast('已將 ' + favs[index].name + ' 載入為 Argo 隧道基底！');
-      } else {
-        showToast('該配置內未包含任何 VLESS 節點', false);
+        return;
       }
+      
+      const firstUrl = lines.find(line => line.trim().startsWith('http'));
+      if (firstUrl) {
+        showToast('正在向遠端訂閱提取 VLESS 節點...');
+        try {
+          const apiTarget = window.location.origin + '/sub?url=' + encodeURIComponent(firstUrl) + '&target=base64';
+          const resp = await fetch(apiTarget);
+          if (resp.ok) {
+            const b64Text = await resp.text();
+            const decoded = safeBase64Decode(b64Text);
+            const decodedLines = decoded.split(/[\\n\\r]+/);
+            const foundVless = decodedLines.find(line => line.trim().startsWith('vless://') || line.trim().startsWith('anytls://'));
+            if (foundVless) {
+              document.getElementById('argoBaseVless').value = foundVless.trim();
+              focusAndScrollToArgo();
+              showToast('已成功從 ' + favs[index].name + ' 的遠端訂閱中提取 VLESS 節點！');
+            } else {
+              showToast('該遠端訂閱中未找到任何 VLESS 節點', false);
+            }
+          } else {
+            showToast('下載失敗，狀態碼: ' + resp.status, false);
+          }
+        } catch (e) {
+          showToast('連線失敗，請檢查網路或伺服器憑證', false);
+        }
+      } else {
+        showToast('該配置內未包含任何 VLESS 節點或訂閱網址', false);
+      }
+    }
+
+    // 輔助滾動與聚焦到 Argo 輸入框
+    function focusAndScrollToArgo() {
+      const targetEl = document.getElementById('argoBaseVless');
+      targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      targetEl.focus();
     }
     
     function copyResult(id) {
