@@ -260,13 +260,13 @@ export const HTML_PAGE = `
           </div>
           <div class="result-input-wrapper"><input type="text" id="singboxUrl" readonly></div>
           <div class="result-actions">
-            <button class="btn-icon" onclick="copyResult('singboxUrl')" title="複製連結"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2 2v1"></path></svg></button>
+            <button class="btn-icon" onclick="copyResult('singboxUrl')" title="複製連結"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg></button>
             <button class="btn-icon" onclick="showQr('singboxUrl')" title="顯示 QR Code"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg></button>
           </div>
         </div>
 
         <div class="result-item">
-          <div class="result-icon-box"><svg viewBox="0 0 24 24"><path d="M20.24 options"><path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z"></path><line x1="16" y1="8" x2="2" y2="22"></line><line x1="17.5" y1="15" x2="9" y2="6.5"></line></svg></div>
+          <div class="result-icon-box"><svg viewBox="0 0 24 24"><path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z"></path><line x1="16" y1="8" x2="2" y2="22"></line><line x1="17.5" y1="15" x2="9" y2="6.5"></line></svg></div>
           <div class="result-info">
             <div class="result-name">Clash Meta</div>
             <div class="result-desc">YAML 格式 · 適用 Clash Verge, ClashX</div>
@@ -379,9 +379,8 @@ export const HTML_PAGE = `
 
   <script>
     let favs = [];
-    let extractedNodes = []; // 暫存提取出來的多個節點
+    let extractedNodes = [];
     
-    // 智慧型安全 Base64 解碼 (過濾隱形控制字元)
     function safeBase64Decode(str) {
       try {
         let b64 = str.replace(/\\s/g, '').replace(/-/g, '+').replace(/_/g, '/').replace(/[^A-Za-z0-9+/=]/g, '');
@@ -554,7 +553,6 @@ export const HTML_PAGE = `
           baseUrl = host + '/?url=' + encodeURIComponent(raw);
         }
         
-        // 智慧：前台結果網址也不再強制拼接過濾與替換參數
         const sep = baseUrl.includes('?') ? '&' : '?';
         document.getElementById('singboxUrl').value = baseUrl + sep + 'target=singbox';
         document.getElementById('clashUrl').value = baseUrl + sep + 'target=clash';
@@ -571,7 +569,6 @@ export const HTML_PAGE = `
       btn.innerHTML = originalHTML;
     }
 
-    // 智慧型多節點 Cloudflare Argo 隧道節點生成演算法 (徹底修正！)
     async function generateArgo() {
       const baseVlessText = document.getElementById('argoBaseVless').value.trim();
       const tempDomain = document.getElementById('argoTempDomain').value.trim();
@@ -601,7 +598,6 @@ export const HTML_PAGE = `
           let path = params.get('path') || '/';
           if (!path.startsWith('/')) path = '/' + path;
           
-          // 1. 產生 臨時隧道 (徹底修復所有 AI 污染，採用純單引號拼接，絕無 Professional 與 Token 字眼)
           if (tempDomain) {
             const tempParams = new URLSearchParams();
             tempParams.set('encryption', 'none');
@@ -616,7 +612,6 @@ export const HTML_PAGE = `
             generatedNodes.push(tempVless);
           }
           
-          // 2. 產生 固定隧道
           if (fixedDomain) {
             const fixedParams = new URLSearchParams();
             fixedParams.set('encryption', 'none');
@@ -652,7 +647,6 @@ export const HTML_PAGE = `
       }
     }
 
-    // 從主輸入框中自動提取所有 VLESS 節點 (相容訂閱連結遠端提取)
     async function loadVlessFromSource() {
       const sourceVal = document.getElementById('urlInput').value.trim();
       if (!sourceVal) return showToast('請先輸入資料來源', false);
@@ -713,7 +707,6 @@ export const HTML_PAGE = `
       }
     }
 
-    // 從收藏配置中直接一鍵將 VLESS 載入為 Argo 隧道基底 (相容多網址與訂閱連結遠端提取)
     async function useAsArgoBase(index) {
       const urlVal = favs[index].url;
       const vlessNodes = extractVlessNodes(urlVal);
@@ -788,7 +781,6 @@ export const HTML_PAGE = `
       }
     }
 
-    // 💥 徹底重構：一律使用單引號字串拼接，杜絕任何 \Token 與 \Professional 寫入！
     function openNodeSelectModal() {
       const container = document.getElementById('nodeSelectContainer');
       const countEl = document.getElementById('nodeSelectCount');
@@ -890,11 +882,10 @@ export const HTML_PAGE = `
       if(!url) return;
       
       const container = document.getElementById('qrcodeCanvas');
-      container.innerHTML = ''; // 清空舊的 QR Code
+      container.innerHTML = '';
       
       document.getElementById('qrModalUrl').textContent = url;
       
-      // 產生全新的嵌入式行動條碼
       new QRCode(container, {
         text: url,
         width: 240,
@@ -911,7 +902,6 @@ export const HTML_PAGE = `
       document.getElementById('qrModal').classList.remove('show');
     }
     
-    // 💥 徹底重構：一律使用單引號字串拼接，杜絕任何 \Token 與 \Professional 寫入！
     function showToast(msg, isSuccess) {
       if (isSuccess === undefined) isSuccess = true;
       const t = document.getElementById('toast');
