@@ -152,21 +152,37 @@ export const HTML_PAGE = `
       <div class="form-group" style="margin-top: 1.5rem;">
         <label for="includeKeywords">僅保留關鍵字節點 (選填，多個用 | 分隔)</label>
         <input type="text" id="includeKeywords" placeholder="例如: 🇭🇰|台灣|TW">
+        <div class="hint">
+          <svg viewBox="0 0 24 24" style="width:14px;height:14px"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+          只保留名稱符合關鍵字的節點。例如輸入 <code>HK|TW</code>。
+        </div>
       </div>
 
       <div class="form-group" style="margin-top: 1.5rem;">
         <label for="excludeKeywords">排除關鍵字節點 (選填，多個用 | 分隔)</label>
         <input type="text" id="excludeKeywords" placeholder="例如: 流量|官網|重置|5x">
+        <div class="hint">
+          <svg viewBox="0 0 24 24" style="width:14px;height:14px"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+          排除名稱符合關鍵字的節點（過濾垃圾廣告）。例如輸入 <code>5x</code>。
+        </div>
       </div>
 
       <div class="form-group" style="margin-top: 1.5rem;">
         <label for="renameKeywords">節點名稱替換 (選填，多個用 | 分隔)</label>
         <input type="text" id="renameKeywords" placeholder="例如: DEL-[69云]|移动优化-專線">
+        <div class="hint">
+          <svg viewBox="0 0 24 24" style="width:14px;height:14px"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+          刪除請用 <code>DEL-關鍵字</code>，替換請用 <code>尋找-替換</code>。多組規則請用 <code>|</code> 隔開。
+        </div>
       </div>
       
       <div class="form-group" style="margin-top: 1.5rem;">
         <label for="shortCode">自訂路徑短連結 (選填)</label>
         <input type="text" id="shortCode" placeholder="例如: my-sub-2026">
+        <div class="hint">
+          <svg viewBox="0 0 24 24" style="width:14px;height:14px"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+          設定後將儲存於雲端，生成固定不變的短連結
+        </div>
       </div>
       
       <button class="btn btn-primary" id="generateBtn" onclick="generate()" style="margin-top: 2rem;">
@@ -186,9 +202,9 @@ export const HTML_PAGE = `
       
       <div class="form-group">
         <label for="argoBaseVless">基底 VLESS 連結 (支援多個，每行一個)</label>
-        <div style="display: flex; gap: 8px;">
+        <div style="display: flex; flex-direction: column; gap: 8px;">
           <textarea id="argoBaseVless" placeholder="vless://xxxxxx@localhost:port?path=/abc...&#10;可手動貼上多行，或由下方配置一鍵智慧載入" style="min-height: 80px;"></textarea>
-          <button class="btn btn-ghost" id="loadVlessBtn" onclick="loadVlessFromSource()" style="white-space: nowrap; font-size: 0.85rem; padding: 0 12px; border-color: var(--border);">
+          <button class="btn btn-ghost" id="loadVlessBtn" onclick="loadVlessFromSource()" style="width: 100%; border-color: var(--border);">
             從上方資料來源載入
           </button>
         </div>
@@ -197,7 +213,7 @@ export const HTML_PAGE = `
       <div class="form-group" style="margin-top: 1.25rem;">
         <label for="argoTempDomain">臨時隧道網域 (選填，trycloudflare.com)</label>
         <div style="display: flex; gap: 8px;">
-          <input type="text" id="argoTempDomain" placeholder="例如: splendid-verified-stars-trains.trycloudflare.com" style="flex: 1;">
+          <input type="text" id="argoTempDomain" placeholder="例如: xxxx-xxxx-xxxx.trycloudflare.com" style="flex: 1;">
           <button class="btn btn-ghost" onclick="generateRandomTempDomain()" style="white-space: nowrap; font-size: 0.85rem; padding: 0 12px; border-color: var(--border);">
             隨機生成
           </button>
@@ -225,11 +241,11 @@ export const HTML_PAGE = `
         <span>產生 Argo 節點並加入資料來源</span>
       </button>
 
-      <!-- 💥 這裡補回被我不小心刪掉的「一鍵腳本展示區」 -->
+      <!-- 💥 升級：非破壞性 Argo 隧道安裝腳本 (相容現有 mack-a/x-ui) -->
       <div id="vpsScriptBlock" class="form-group" style="margin-top: 1.5rem; display: none;">
         <label style="color: var(--orange); font-weight: 600; display: flex; align-items: center; gap: 6px;">
           <svg viewBox="0 0 24 24" style="width:16px;height:16px"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
-          你的 VPS 專屬一鍵安裝腳本 (貼入 VPS 終端機即可執行)
+          專屬 Cloudflare Argo 部署腳本 (不破壞原有節點，直接貼入 VPS 執行)
         </label>
         <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 0.5rem;">
           <textarea id="argoVpsScript" readonly style="min-height: 180px; font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; color: var(--orange); border-color: rgba(234, 88, 12, 0.2); background: rgba(234, 88, 12, 0.02);"></textarea>
@@ -238,7 +254,6 @@ export const HTML_PAGE = `
           </button>
         </div>
       </div>
-
     </main>
 
     <section class="results-wrapper" id="results">
@@ -340,7 +355,6 @@ export const HTML_PAGE = `
     </div>
   </div>
 
-  <!-- 節點選擇智慧模態框 -->
   <div class="modal-overlay" id="nodeSelectModal" style="z-index: 110;">
     <div class="modal-content" style="max-width: 500px;">
       <h3 class="modal-title">選擇基底 VLESS 節點</h3>
@@ -357,7 +371,6 @@ export const HTML_PAGE = `
     </div>
   </div>
 
-  <!-- QR Code 模態框 -->
   <div class="modal-overlay" id="qrModal" style="z-index: 120;">
     <div class="modal-content" style="max-width: 360px; text-align: center;">
       <h3 class="modal-title" style="margin-bottom: 1.5rem;">行動條碼訂閱</h3>
@@ -398,7 +411,7 @@ export const HTML_PAGE = `
         const resp = await fetch('/favs');
         if (resp.ok) favs = await resp.json();
         renderFavs();
-      } catch(e) { console.error('Failed to load favs'); }
+      } catch(e) {}
     }
     
     function renderFavs() {
@@ -566,6 +579,7 @@ export const HTML_PAGE = `
       btn.innerHTML = originalHTML;
     }
 
+    // 💥 升級：產生非破壞性 Cloudflare Argo 安裝腳本
     async function generateArgo() {
       const baseVlessText = document.getElementById('argoBaseVless').value.trim();
       const tempDomain = document.getElementById('argoTempDomain').value.trim();
@@ -580,8 +594,6 @@ export const HTML_PAGE = `
       const generatedNodes = [];
       let successCount = 0;
       let failCount = 0;
-      let firstUuid = '';
-      let firstPath = '';
       
       for (let i = 0; i < baseVlessList.length; i++) {
         const trimmed = baseVlessList[i].trim();
@@ -596,9 +608,6 @@ export const HTML_PAGE = `
           
           let path = params.get('path') || '/';
           if (!path.startsWith('/')) path = '/' + path;
-          
-          if (!firstUuid) firstUuid = uuid;
-          if (!firstPath) firstPath = path;
           
           if (tempDomain) {
             const tempParams = new URLSearchParams();
@@ -645,16 +654,55 @@ export const HTML_PAGE = `
         if (failCount > 0) toastMsg += ' (有 ' + failCount + ' 個節點解析失敗)';
         showToast(toastMsg);
 
-        // 💥 智慧生成並顯示一鍵安裝腳本
+        // 💥 動態產生「非破壞性」的 Cloudflared 隧道安裝腳本
         const targetDomain = fixedDomain ? fixedDomain : tempDomain;
-        const scriptStr = '#!/bin/bash\\n' +
-          '# 專屬 Sing-Box + Argo 自動部署腳本\\n' +
-          '# 網域: ' + targetDomain + '\\n' +
-          '# UUID: ' + firstUuid + '\\n' +
-          '# WS路徑: ' + firstPath + '\\n\\n' +
-          'bash <(curl -Ls https://raw.githubusercontent.com/yonggekkk/argosbx/main/argosbx.sh)\\n' +
-          '# 請依據腳本提示選擇安裝 Vless-ws-enc\\n' +
-          '# 並將上方參數對應填入！\\n';
+        let scriptStr = '#!/bin/bash\\n' +
+          '# 專屬 Cloudflare Argo 隧道部署腳本 (不破壞原有 mack-a/x-ui 設定)\\n' +
+          '# 網域: ' + targetDomain + '\\n\\n' +
+          'echo -e "\\\\033[0;36m==================================================\\\\033[0m"\\n' +
+          'echo -e "\\\\033[0;36m  Cloudflare Argo 隧道 安全部署腳本\\\\033[0m"\\n' +
+          'echo -e "\\\\033[0;36m==================================================\\\\033[0m"\\n\\n' +
+          'if ! command -v cloudflared &> /dev/null; then\\n' +
+          '  echo -e "\\\\033[0;33m正在下載並安裝 Cloudflare Tunnel 官方主程式...\\\\033[0m"\\n' +
+          '  curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o /usr/local/bin/cloudflared\\n' +
+          '  chmod +x /usr/local/bin/cloudflared\\n' +
+          'else\\n' +
+          '  echo -e "\\\\033[0;32mcloudflared 已安裝，跳過下載。\\\\033[0m"\\n' +
+          'fi\\n\\n';
+          
+        if (fixedDomain) {
+          scriptStr += 'echo -e "\\\\n\\\\033[0;33m[固定隧道模式]\\\\033[0m"\\n' +
+            'echo "請到 Cloudflare Zero Trust 後台獲取你的 Token"\\n' +
+            'echo "然後在 VPS 終端機執行以下指令綁定網域："\\n' +
+            'echo -e "\\\\033[0;32mcloudflared service install <你的Token>\\\\033[0m"\\n' +
+            'echo "=================================================="\\n';
+        } else {
+          scriptStr += 'read -p "請輸入你要穿透的 Xray 本機連接埠 (如 mack-a 預設通常為 443 或 80): " LOCAL_PORT\\n' +
+            'if [ -z "$LOCAL_PORT" ]; then LOCAL_PORT=443; fi\\n\\n' +
+            'PROTOCOL="https"\\n' +
+            'if [ "$LOCAL_PORT" = "80" ]; then PROTOCOL="http"; fi\\n\\n' +
+            'echo -e "\\\\033[0;33m正在設定臨時隧道背景守護服務...\\\\033[0m"\\n' +
+            'systemctl stop cloudflared-temp >/dev/null 2>&1\\n' +
+            'cat <<EOF > /etc/systemd/system/cloudflared-temp.service\\n' +
+            '[Unit]\\n' +
+            'Description=Cloudflare Argo Temporary Tunnel Service\\n' +
+            'After=network.target\\n\\n' +
+            '[Service]\\n' +
+            'ExecStart=/usr/local/bin/cloudflared tunnel --no-tls-verify --url ${PROTOCOL}://127.0.0.1:${LOCAL_PORT}\\n' +
+            'Restart=always\\n' +
+            'User=root\\n\\n' +
+            '[Install]\\n' +
+            'WantedBy=multi-user.target\\n' +
+            'EOF\\n\\n' +
+            'systemctl daemon-reload\\n' +
+            'systemctl restart cloudflared-temp\\n' +
+            'systemctl enable cloudflared-temp >/dev/null 2>&1\\n\\n' +
+            'echo -e "\\\\n\\\\033[0;32m==================================================\\\\033[0m"\\n' +
+            'echo -e "🎉 部署完成！你的臨時隧道已在背景啟動。"\\n' +
+            'echo -e "請等待 5 秒後，執行以下指令查看官方分配給你的臨時網域："\\n' +
+            'echo -e "\\\\033[0;36mjournalctl -u cloudflared-temp -n 50 | grep trycloudflare\\\\033[0m"\\n' +
+            'echo -e "\\\\033[0;32m==================================================\\\\033[0m"\\n';
+        }
           
         document.getElementById('argoVpsScript').value = scriptStr;
         document.getElementById('vpsScriptBlock').style.display = 'block';
@@ -664,7 +712,6 @@ export const HTML_PAGE = `
       }
     }
 
-    // 💥 複製 VPS 腳本
     function copyVpsScript() {
       const input = document.getElementById('argoVpsScript');
       input.select();
