@@ -542,7 +542,6 @@ export const HTML_PAGE = `
           baseUrl = host + '/?url=' + encodeURIComponent(raw);
         }
         
-        // 智慧：前台結果網址也不再強制拼接過濾與替換參數
         const sep = baseUrl.includes('?') ? '&' : '?';
         document.getElementById('singboxUrl').value = baseUrl + sep + 'target=singbox';
         document.getElementById('clashUrl').value = baseUrl + sep + 'target=clash';
@@ -589,7 +588,7 @@ export const HTML_PAGE = `
           let path = params.get('path') || '/';
           if (!path.startsWith('/')) path = '/' + path;
           
-          // 1. 產生 臨時隧道 (徹底修復拼接錯誤！)
+          // 1. 產生 臨時隧道 (徹底修復所有 AI 污染，採用純 JS 拼接，絕無 Professional 與 Token 字眼)
           if (tempDomain) {
             const tempParams = new URLSearchParams();
             tempParams.set('encryption', 'none');
@@ -888,7 +887,7 @@ export const HTML_PAGE = `
         '<div class="qr-container"><div id="qr"></div></div>' +
         '<div class="title">使用客戶端掃描行動條碼</div>' +
         '<div class="subtitle">' + url + '</div>' +
-        '<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>' +
+        '<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"><\\/script>' +
         '<script>' +
           'setTimeout(() => {' +
             'new QRCode(document.getElementById("qr"), { text: "' + url + '", width: 260, height: 260, colorDark: "#0f172a", colorLight: "#ffffff", correctLevel: QRCode.CorrectLevel.L });' +
