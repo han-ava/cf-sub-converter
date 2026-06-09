@@ -318,7 +318,7 @@ if (filteredNodes.length === 0) {
   });
 }
 
-// 對篩選過後的節點進行 去重複命名與自動補國旗
+// 對篩選過後的節點進行 智慧排序、去重複命名、自動補國旗
 const uniqueNodes = deduplicateNodeNames(filteredNodes);
 
 const target = url.searchParams.get('target');
