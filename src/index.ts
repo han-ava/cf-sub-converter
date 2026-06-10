@@ -464,7 +464,7 @@ for (const input of inputs) {
 }
 
 if (allNodes.length === 0) {
-  const errorReport = `未解析到任何有效節點。\n\n🔍 詳細錯誤診斷報告：\n-------------------------\n${errors.join('\n\n-------------------------\n')}`;
+  const errorReport = `未解析到任何有效節節點。\n\n🔍 詳細錯誤診斷報告：\n-------------------------\n${errors.join('\n\n-------------------------\n')}`;
   return new Response(errorReport, { 
     status: 400, 
     headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Access-Control-Allow-Origin': '*' } 
