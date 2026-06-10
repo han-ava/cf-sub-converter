@@ -190,6 +190,72 @@ export const HTML_PAGE = `
       </button>
     </main>
 
+    <!-- ⚡ Argo 隧道轉換助手區塊 -->
+    <main class="panel" style="margin-top: 1rem;">
+      <div class="panel-header">
+        <h2 class="panel-title" style="color: var(--primary);">
+          <svg viewBox="0 0 24 24"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"></path></svg>
+          Argo 隧道一鍵生成器 (VLESS 專用)
+        </h2>
+      </div>
+      
+      <div class="form-group">
+        <button class="btn btn-ghost" id="parseVlessBtn" onclick="parseVlessNodes()" style="width: 100%; justify-content: center; font-weight: 600;">
+          第一步：解析並載入目前輸入的 VLESS 節點
+        </button>
+      </div>
+
+      <div id="vlessSelectorWrapper" style="display: none; margin-top: 1.25rem; border: 1px solid var(--border); border-radius: var(--radius-md); padding: 1.25rem; background: var(--bg-input);">
+        <label style="margin-bottom: 0.75rem; display: block; font-weight: 600; color: var(--text-main);">選擇要複製並轉換的 VLESS 節點 (可多選)：</label>
+        <div id="vlessCheckboxList" style="display: flex; flex-direction: column; gap: 8px; max-height: 220px; overflow-y: auto; padding-right: 4px; margin-bottom: 1.25rem; border-bottom: 1px solid var(--border); padding-bottom: 0.75rem;">
+          <!-- 複選框動態生成 -->
+        </div>
+        
+        <div class="form-group">
+          <label>1. VPS 本地 VLESS 監聽連接埠 (請與 mack-a 部署配置一致)</label>
+          <input type="text" id="argoLocalPort" value="8080" placeholder="例如: 8080 或 12345">
+        </div>
+
+        <div class="form-group" style="margin-top: 1rem;">
+          <label>2. Cloudflare Tunnel Token (選填，若留空則為臨時隨機隧道)</label>
+          <input type="text" id="argoTunnelToken" placeholder="若使用臨時隧道請留空；固定隧道請貼上 eyJhIjoiY2...">
+        </div>
+
+        <div class="form-group" style="margin-top: 1rem;">
+          <label>3. 自訂綁定域名 (固定隧道必填，臨時隨機隧道免填)</label>
+          <input type="text" id="argoCustomDomain" placeholder="例如: argo-vless.yourdomain.com">
+        </div>
+
+        <button class="btn btn-primary" id="generateArgoBtn" onclick="generateArgo()" style="margin-top: 1.5rem; background: var(--success);">
+          第二步：一鍵生成 Argo 節點與一鍵部署腳本
+        </button>
+      </div>
+    </main>
+
+    <!-- ⚡ Argo 轉換結果看板 -->
+    <section class="results-wrapper" id="argoResults" style="margin-top: 1rem;">
+      <div class="panel">
+        <div class="panel-header" style="border-bottom: 1px solid var(--border); padding-bottom: 0.75rem;">
+          <h2 class="panel-title" style="color: var(--success);">
+            <svg viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+            Argo 隧道生成成功
+          </h2>
+        </div>
+        
+        <div class="form-group" style="margin-top: 1.25rem;">
+          <label style="color: var(--text-main); font-weight: 600;">📋 第一步：請在您的 VPS 上執行以下一鍵安裝腳本 (以 root 權限)：</label>
+          <textarea id="argoVpsScript" readonly style="min-height: 220px; font-size: 0.8rem; font-family: 'JetBrains Mono', monospace;"></textarea>
+          <button class="btn btn-ghost" onclick="copyText('argoVpsScript')" style="margin-top: 0.5rem; width: 100%; justify-content: center;">複製腳本代碼</button>
+        </div>
+
+        <div class="form-group" style="margin-top: 1.5rem;">
+          <label style="color: var(--text-main); font-weight: 600;">🔗 第二步：複製混合訂閱結果 (含有您原本的所有節點 + 新複製的 Argo 節點 Base64)：</label>
+          <textarea id="argoBase64Sub" readonly style="min-height: 120px; font-size: 0.8rem; font-family: 'JetBrains Mono', monospace; word-break: break-all;"></textarea>
+          <button class="btn btn-ghost" onclick="copyText('argoBase64Sub')" style="margin-top: 0.5rem; width: 100%; justify-content: center;">複製整合訂閱 (Base64 格式)</button>
+        </div>
+      </div>
+    </section>
+
     <section class="results-wrapper" id="results">
       <div class="panel">
         <div class="panel-header">
@@ -447,7 +513,6 @@ export const HTML_PAGE = `
           baseUrl = host + '/?url=' + encodeURIComponent(raw);
         }
         
-        // 💥 修正：前台結果網址也不再強制拼接過濾與替換參數
         const sep = baseUrl.includes('?') ? '&' : '?';
         document.getElementById('singboxUrl').value = baseUrl + sep + 'target=singbox';
         document.getElementById('clashUrl').value = baseUrl + sep + 'target=clash';
@@ -464,12 +529,112 @@ export const HTML_PAGE = `
       btn.innerHTML = originalHTML;
     }
     
+    // ⚡ Argo 隧道前端解析邏輯
+    async function parseVlessNodes() {
+      const raw = document.getElementById('urlInput').value.trim();
+      if (!raw) return showToast('請先在上方輸入節點連結或訂閱地址', false);
+      
+      const btn = document.getElementById('parseVlessBtn');
+      const originalText = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = '正在與後端解析 VLESS 節點...';
+      
+      try {
+        const resp = await fetch('/api/parse-vless', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: raw })
+        });
+        
+        if (!resp.ok) {
+          const err = await resp.json();
+          throw new Error(err.error || '解析失敗');
+        }
+        
+        const nodes = await resp.json();
+        const listEl = document.getElementById('vlessCheckboxList');
+        
+        if (nodes.length === 0) {
+          showToast('目前輸入內容中未找到任何 VLESS 節點', false);
+          document.getElementById('vlessSelectorWrapper').style.display = 'none';
+          return;
+        }
+        
+        listEl.innerHTML = nodes.map(n => \`
+          <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.05);">
+            <input type="checkbox" class="vless-chk" value="\${n.index}" checked style="width: auto; height: auto; cursor: pointer;">
+            <span style="font-size: 0.9rem; color: var(--text-main);">\${n.name} <span style="color: var(--text-muted); font-size: 0.8rem;">(\${n.server}:\${n.port} - \${n.type})</span></span>
+          </label>
+        \`).join('');
+        
+        document.getElementById('vlessSelectorWrapper').style.display = 'block';
+        showToast(\`解析完成，成功載入 \${nodes.length} 個 VLESS 節點！\`);
+      } catch(e) {
+        showToast('解析出錯: ' + e.message, false);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = originalText;
+      }
+    }
+
+    // ⚡ Argo 隧道一鍵生成與部署腳本生成邏輯
+    async function generateArgo() {
+      const raw = document.getElementById('urlInput').value.trim();
+      const checkboxes = document.querySelectorAll('.vless-chk:checked');
+      if (checkboxes.length === 0) return showToast('請至少選擇一個 VLESS 節點進行轉換', false);
+      
+      const indices = Array.from(checkboxes).map(cb => parseInt(cb.value));
+      const port = document.getElementById('argoLocalPort').value.trim() || '8080';
+      const token = document.getElementById('argoTunnelToken').value.trim();
+      const domain = document.getElementById('argoCustomDomain').value.trim();
+      
+      if (token && !domain) return showToast('若使用固定隧道，必須填寫對應的自訂域名', false);
+      
+      const btn = document.getElementById('generateArgoBtn');
+      const originalText = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = '正在與後端生成 Argo 一鍵腳本與訂閱...';
+      
+      try {
+        const resp = await fetch('/api/argo-generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: raw, indices, port, token, domain })
+        });
+        
+        if (!resp.ok) {
+          const err = await resp.json();
+          throw new Error(err.error || '生成失敗');
+        }
+        
+        const res = await resp.json();
+        
+        document.getElementById('argoVpsScript').value = res.script;
+        document.getElementById('argoBase64Sub').value = res.base64;
+        
+        document.getElementById('argoResults').classList.add('show');
+        showToast('Argo 隧道部署腳本與訂閱生成成功！');
+        document.getElementById('argoResults').scrollIntoView({ behavior: 'smooth' });
+      } catch(e) {
+        showToast('生成失敗: ' + e.message, false);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = originalText;
+      }
+    }
+
     function copyResult(id) {
       const input = document.getElementById(id);
       input.select();
       navigator.clipboard.writeText(input.value).then(() => showToast('已複製到剪貼簿'));
     }
     
+    function copyText(id) {
+      const el = document.getElementById(id);
+      el.select();
+      navigator.clipboard.writeText(el.value).then(() => showToast('已成功複製到剪貼簿！'));
+    }
+
     function showQr(id) {
       const url = document.getElementById(id).value;
       if(!url) return;
