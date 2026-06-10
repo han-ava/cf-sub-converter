@@ -1,18 +1,22 @@
 # ⚡ CF Sub Converter Pro
 
-基於 Cloudflare Workers 的 Serverless 訂閱轉換工具。擁有全新專業級的無廣告深色 UI，內建智慧過濾、替換與智慧國旗萬國對齊系統。一鍵將雜亂的訂閱或節點轉換為 Sing-Box / Clash Meta (Mihomo) / Base64 格式，亦可**直接作為第三方轉換網頁（如 `sub-web`）的自定義後端** [1]。
+基於 Cloudflare Workers 的 Serverless 訂閱轉換工具。擁有全新專業級的無廣告深色 UI，內建智慧過濾、替換、智慧國旗萬國對齊系統，以及 **Argo 隧道一鍵生成器**。一鍵將雜亂的訂閱或節點轉換為 Sing-Box / Clash Meta (Mihomo) / Base64 格式，亦可直接作為第三方轉換網頁（如 `sub-web`）的自定義後端 [1]。
 
 [![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/sammy0101/cf-sub-converter)
 
 ## 🌟 特性
 
 - 🎨 **專業級 UI** - 全新深色主題設計 (Slate/Zinc)，無廣告、純淨排版，搭配流暢的互動動畫與一鍵掃碼功能。
+- 🌀 **Argo 隧道一鍵生成器** - 
+  - **自動化克隆轉換**：一鍵載入貼入的節點，勾選 VLESS 或 VMess 節點，系統自動拷貝並轉換為對應的 Argo 隧道節點。
+  - **超簡短一鍵 VPS 命令**：結合 Cloudflare KV 雲端動態腳本快取技術與 `curl | bash` 機制，產生超簡短的 VPS 一鍵部署命令 [1]。
+  - **雙層智慧探測校正**：VPS 部署時自動檢測本地連接埠與 TLS 加密，智慧避免 Proxy Protocol / TLS 握手衝突，並自動重寫 Host Header 與 TLS SNI [3.2]。
 - 📊 **流量與到期日智慧透傳** - 自動從上游多個機場擷取並**加總多個訂閱的流量（上傳、下載、總量），並自動計算最近的到期時間**，透過標準 `subscription-userinfo` 標頭透傳，完美點亮客戶端的流量條 [1, 2]！
-- ⚡ **標準 SubConverter 後端支援** - 內建 **`/sub`** 和 **`/version`** API 路由，回傳標準的 `v0.9.9-cd74f4d` 標記並全面支援跨域 (CORS)。可直接做為任何第三方訂閱前端網頁（如 `sub-web`）的自定義後端 [1, 3.4.4]。
+- ⚡ **標準 SubConverter 後端支援** - 內建 **`/sub`** 和 **`/version`** API 路由，回傳與您專案版本和網域動態對齊的標準格式（如 `subconverter v2.5.0 <your-worker-domain> backend`）並全面支援跨域 (CORS) [1, 3.4.4]。這使其可以直接做為任何第三方訂閱前端網頁（如 `sub-web`）的自定義後端 [1]。
 - 🔍 **智慧過濾與替換** - 
   - **節點篩選**：支援「僅保留」與「排除」雙向過濾（使用 `|` 隔開，如 `HK|TW` 或 `5x`）。後端內建字元智慧相容技術，自動將 `x`、`X`、全形 `ｘ` 與數學乘號 `×` 進行互通匹配。
   - **名稱替換**：支援極簡統一的替換與刪除語法。刪除請用 `DEL-關鍵字`，替換請用 `尋找-替換`，多組規則使用 `|` 隔開（例如：`DEL-[69云]|移动优化-專線|DEL-永久`）。
-- 🚩 **自動國旗與萬國標註** - 內建智慧辨識系統，自動為節點名稱補上對應的國家國旗 Emoji (如 🇹🇼、🇭🇰、🇯🇵、🇲🇴、🇰🇭、🇬🇷、🇵🇱 等 40+ 國家與常用機場縮寫)。**若遇到無對應國家的節點（如流量提示、機場官網），自動補上 🇺🇳 (聯合國國旗)**，達成 100% 完美工整排版。
+- 🚩 **自動國旗與萬國標註** - 內建智慧辨識系統，自動為節點名稱補上對應的國家國旗 Emoji (如 🇹🇼、🇭🇰、🇯🇵、🇲🇴、🇰🇭、🇬🇷、🇵🇱 等 40+ 國家與常用機場縮寫)。**若遇到無對應國家的節點（如流量提示、機場官網），自動補上 🇺🇳 (聯合國國旗)**，達成 100% 工整排版。
 - 🔌 **全協議支援** - 完美解析 `Trojan`, `VLESS`, `VMess`, `Shadowsocks`, `Hysteria2 (hy2)`, `TUIC`, `AnyTLS` 等主流與新興協議。
 - 🚀 **極速路由與 DNS** - 轉換出的配置檔內建頂級路由規則：
   - **Clash Meta**：流量嗅探 (Sniffer)、Fake-IP、TProxy 軟路由最佳化、中外 DNS 智慧解析。
@@ -25,7 +29,7 @@
 
 點擊上方的 **Deploy to Cloudflare Workers** 按鈕，依照畫面指示登入 Cloudflare 帳號即可自動完成部署。
 
-*(⚠️ 注意：一鍵部署後，請務必至 Cloudflare 儀表板為該 Worker 綁定一個名為 `SUB_CACHE` 的 KV 命名空間，否則「收藏配置」與「短連結」功能將無法使用)*
+*(⚠️ 注意：一鍵部署後，請務必至 Cloudflare 儀表板為該 Worker 綁定一個名為 `SUB_CACHE` 的 KV 命名空間，否則「收藏配置」、「短連結」與「Argo 一鍵指令快取」功能將無法使用)*
 
 ### 方法二：手動部署 (Wrangler CLI)
 
@@ -35,18 +39,21 @@
    cd cf-sub-converter
    ```
 
-2. **安裝依賴**
+2. **上傳 `argo.sh` 腳本**
+   將專案根目錄的 `argo.sh` 上傳到您的 GitHub 專案 `sammy0101/cf-sub-converter` 的 `main`（或 `master`）分支。
+
+3. **安裝依賴**
    ```bash
    npm install
    ```
 
-3. **創建 KV 命名空間**
+5. **創建 KV 命名空間**
    ```bash
    wrangler kv:namespace create SUB_CACHE
    ```
    *執行後，終端機會回傳一段配置代碼，請將其複製並貼上到你的 `wrangler.toml` 檔案中。*
 
-4. **部署到 Cloudflare**
+5. **部署到 Cloudflare**
    ```bash
    wrangler deploy
    ```
@@ -57,6 +64,15 @@
 
 ### 面板功能
 - **資料來源設定**：支援貼上機場訂閱連結、Base64 字串，或直接貼上多行節點 URI。支援多個訂閱地址換行輸入，系統將保持原始順序進行合併。
+- **Argo 隧道一鍵生成**：
+  1. 在資料來源貼入您的機場訂閱或明文連結。
+  2. 點選「解析並載入目前輸入的 VLESS / VMess 節點」，介面會自動拉出節點列表 [1]。
+  3. 勾選您要轉換的節點，系統會自動在下方同步該節點的原生埠號 [1]。
+  4. 設定 VPS 本地對接連接埠，點選「一鍵生成 Argo 節點與一鍵部署腳本」。
+  5. 複製產生的簡短 `curl` 或 `wget` 指令至您的 VPS 上執行 [1]。
+  6. 腳本成功執行後：
+     * **臨時域名模式**：請在您的 VPS 終端機內直接複製最終生成、連通的 VLESS/VMess 節點。
+     * **固定域名模式**：新生成的 Argo 節點（原節點名末尾加 `_Argo` 後綴）會直接顯示在網頁下方的明文列表框中，方便拷貝。
 - **過濾與替換**：
   - **僅保留關鍵字**：只留下符合關鍵字的節點。例如輸入 `HK|TW`。
   - **排除關鍵字**：過濾掉垃圾或高倍率節點。例如輸入 `5x`（系統會自動相容 `5×` 乘號）。
@@ -66,7 +82,7 @@
 ### API 調用與外部前端對接 [1]
 
 #### 1. 當作標準 SubConverter 後端使用
-本專案內建對應 `/sub` 與 `/version` 端點。你可以打開任何一個開源的 `sub-web` 網頁（例如：`sub.id9.cc` 或其他的轉換前端），並在**「後端地址 (Backend URL)」**中，填入你的 Cloudflare Workers 網址 [1]：
+本專案內建對應 `/sub` 與 `/version` 端點。你可以打開 any 一個開源的 `sub-web` 網頁（例如：`sub.id9.cc` 或其他的轉換前端），並在**「後端地址 (Backend URL)」**中，填入你的 Cloudflare Workers 網址 [1]：
 ```text
 https://your-worker.workers.dev
 ```
@@ -92,7 +108,7 @@ https://your-worker.workers.dev/<自訂短連結名稱>?target=clash
 | ⚡ | 自動選擇 | 基於 URL Test 自動測速切換延遲最低的節點 |
 | 💬 | AI 服務 | ChatGPT / Gemini / Claude / Copilot 專屬分流 |
 | 🍎 | 蘋果服務 | Apple 相關服務直連或代理 (自動依據網路環境切換最快 CDN) |
-| Ⓜ️ | 微軟服務 | Microsoft 服務直連或代理 |
+| Ⓜ️ | 微軟服務 | Microsoft 服務直連 or 代理 |
 | 🎮 | 遊戲平台 | Steam / Epic / EA / Ubisoft / Blizzard |
 | 🌐 | 非中國 | 全球主流網站 (Google, Telegram 等) |
 | 🇨🇳 | 國內服務 | 中國大陸 IP 與網域自動直連 (精準 IP 解析) |
@@ -106,11 +122,12 @@ https://your-worker.workers.dev/<自訂短連結名稱>?target=clash
 cf-sub-converter/
 ├── src/
 │   ├── index.ts          # Worker 主入口路由、並發請求控制、智慧過濾、雲端配置同步與 /version 後端模擬
-│   ├── constants.ts      # 專業版 HTML 視圖模板與遠端規則常數 (含過濾與收藏 UI)
+│   ├── constants.ts      # 專業版 HTML 視圖模板與遠端規則常數 (含過濾、收藏與 Argo 隧道 UI)
 │   ├── parser.ts         # 節點解析器 (支援 Trojan, AnyTLS, TUIC, Hy2 等)
-│   ├── generator.ts      # 格式生成器 (映射為 Sing-Box / Clash Meta / Base64)
+│   ├── generator.ts      # 格式生成器 (映射為 Sing-Box / Clash Meta / Base64 / 原始連結明文導出)
 │   ├── utils.ts          # Base64 淨化與智慧國旗自動標註系統 (豪華全球版 + 萬國 🇺🇳 對齊)
 │   └── types.ts          # TypeScript 類型定義
+├── argo.sh               # 上傳至 GitHub 倉庫的一鍵 VPS 隧道部署通用腳本
 ├── Sing-Box_Rules.JSON   # 遠端 Sing-Box 路由規則範本 (極速混合堆疊版)
 ├── Clash_Rules.YAML      # 遠端 Clash Meta 路由規則範本 (軟路由透明代理版)
 └── wrangler.toml         # Cloudflare Workers 設定檔
@@ -118,4 +135,4 @@ cf-sub-converter/
 
 ## ⚠️ 免責聲明
 
-本專案僅供技術交流與網路安全學習研究使用，不提供任何節點服務。請使用者務必遵守當地法律法規，勿將其用於任何違法用途，開發者對使用者的行為不承擔任何責任。
+本專案僅供技術交流與網路安全學習研究使用，不提供 any 節點服務。請使用者務必遵守當地法律法規，勿將其用於 any 違法用途，開發者對使用者的行為不承擔 any 責任。
