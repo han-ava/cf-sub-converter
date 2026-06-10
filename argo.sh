@@ -80,12 +80,12 @@ if [ -n "$TUNNEL_TOKEN" ]; then
     echo -e "\n${GREEN}=== 部署成功 【固定域名模式】 ===${NC}"
     echo -e "原節點名稱: $NODE_NAME"
     echo -e "轉發連接埠: $DETECTED_PORT"
-    echo -e "綁定自訂域名: $CUSTOM_DOMAIN" [1]
+    echo -e "綁定自訂域名: $CUSTOM_DOMAIN"
     
     if [ "$NODE_TYPE" = "vless" ]; then
         FINAL_LINK="vless://$VLESS_UUID@$CUSTOM_DOMAIN:443?encryption=none&security=tls&type=$VLESS_TYPE&host=$CUSTOM_DOMAIN"
         if [ "$VLESS_TYPE" = "ws" ]; then
-            FINAL_LINK="$FINAL_LINK&path=$(echo -n "$VLESS_PATH" | jq -s -R -r @uri 2>/dev/null || echo -n "$VLESS_PATH")"
+            FINAL_LINK="$FINAL_LINK&path=$VLESS_PATH"
         fi
         FINAL_LINK="$FINAL_LINK#$NODE_NAME"
     else
@@ -126,7 +126,6 @@ EOF
     TEMP_DOMAIN=""
     for i in {1..15}; do
         sleep 1
-        # 💥 修正：完美加入點號匹配，保證 100% 抓取臨時域名！ [2]
         TEMP_DOMAIN=$(grep -o 'https://[a-zA-Z0-9-]*\.trycloudflare\.com' /var/log/cloudflared-argo-${SAFE_NODE_NAME}.log | head -n 1 | cut -d'/' -f3)
         if [ -n "$TEMP_DOMAIN" ]; then
             break
@@ -138,7 +137,7 @@ EOF
         if [ "$NODE_TYPE" = "vless" ]; then
             FINAL_LINK="vless://$VLESS_UUID@$TEMP_DOMAIN:443?encryption=none&security=tls&type=$VLESS_TYPE&host=$TEMP_DOMAIN"
             if [ "$VLESS_TYPE" = "ws" ]; then
-                FINAL_LINK="$FINAL_LINK&path=\$(echo -n "$VLESS_PATH" | jq -s -R -r @uri 2>/dev/null || echo -n "$VLESS_PATH")"
+                FINAL_LINK="$FINAL_LINK&path=$VLESS_PATH"
             fi
             FINAL_LINK="$FINAL_LINK#$NODE_NAME"
         else
@@ -150,7 +149,7 @@ EOF
         echo -e "\n${GREEN}=== 部署成功 【臨時域名模式】 ===${NC}"
         echo -e "原節點名稱: $NODE_NAME"
         echo -e "轉發連接埠: $DETECTED_PORT"
-        echo -e "分配的臨時域名: $TEMP_DOMAIN" [1]
+        echo -e "分配的臨時域名: $TEMP_DOMAIN"
         echo -e "您的臨時 Argo 節點 $NODE_TYPE 連結為 (注意：VPS 重啟或重開服務後域名會刷新):"
         echo -e "${GREEN}$FINAL_LINK${NC}\n"
     else
