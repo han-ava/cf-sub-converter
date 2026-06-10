@@ -4,8 +4,8 @@ import { Env, ProxyNode } from './types';
 import { HTML_PAGE } from './constants';
 import { parseContent } from './parser';
 import { toSingBoxWithTemplate, toClashWithTemplate, toBase64 } from './generator';
-// 💥 引入極簡同家歸類演算法
-import { deduplicateNodeNames, groupNodesByProvider } from './utils';
+// 💥 引入國旗智慧分群排序演算法
+import { deduplicateNodeNames, groupNodesByFlag } from './utils';
 
 const version = packageJson.version || '2.5.0';
 
@@ -538,7 +538,7 @@ if (filteredNodes.length === 0) {
   });
 }
 
-// 💥 修改：對篩選過後的節點先進行「極簡域名反轉同家排序歸類」，再進行「去重複命名自動補國旗」
+// 💥 智慧分群：對節點先進行「極簡域名反轉同家排序歸類」，再進行「去重複命名自動補國旗」
 const groupedNodes = groupNodesByProvider(filteredNodes);
 const uniqueNodes = deduplicateNodeNames(groupedNodes);
 
