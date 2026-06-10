@@ -1,6 +1,6 @@
 # ⚡ CF Sub Converter Pro
 
-基於 Cloudflare Workers 的 Serverless 訂閱轉換工具。擁有全新專業級的無廣告深色 UI，內建智慧過濾、替換、智慧國旗萬國對齊系統，以及 **Argo 隧道一鍵生成器**。一鍵將訂閱或節點轉換為 Sing-Box / Clash Meta (Mihomo) / Base64 格式，亦可直接作為第三方轉換網頁（如 `sub-web`）的自定義後端 [1]。
+基於 Cloudflare Workers 的 Serverless 訂閱轉換工具。擁有全新專業級的無廣告深色 UI，內建智慧過濾、替換、智慧國旗萬國對齊系統，以及 **Argo 隧道一鍵生成器**。一鍵將雜亂的訂閱或節點轉換為 Sing-Box / Clash Meta (Mihomo) / Base64 格式，亦可直接作為第三方轉換網頁（如 `sub-web`）的自定義後端。
 
 [![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/sammy0101/cf-sub-converter)
 
@@ -9,13 +9,13 @@
 - 🎨 **專業級 UI** - 全新深色主題設計 (Slate/Zinc)，無廣告、純淨排版，搭配流暢的互動動畫與一鍵掃碼功能。
 - 🌀 **Argo 隧道一鍵生成器** - 
   - **自動化克隆轉換**：一鍵載入貼入的節點，勾選 VLESS 或 VMess 節點，系統自動拷貝並轉換為對應的 Argo 隧道節點。
-  - **超簡短一鍵 VPS 命令**：結合 Cloudflare KV 雲端動態腳本快取技術與 `curl | bash` 機制，產生超簡短的 VPS 一鍵部署命令 [1]。
-  - **雙層智慧探測校正**：VPS 部署時自動檢測本地連接埠與 TLS 加密，智慧避免 Proxy Protocol / TLS 握手衝突，並自動重寫 Host Header 與 TLS SNI [3.2]。
-- 📊 **流量與到期日智慧透傳** - 自動從上游多個機場擷取並**加總多個訂閱的流量（上傳、下載、總量），並自動計算最近的到期時間**，透過標準 `subscription-userinfo` 標頭透傳，完美點亮客戶端的流量條 [1, 2]！
-- ⚡ **標準 SubConverter 後端支援** - 內建 **`/sub`** 和 **`/version`** API 路由，回傳與您專案版本和網域動態對齊的標準格式（如 `subconverter v2.5.0 <your-worker-domain> backend`）並全面支援跨域 (CORS) [1, 3.4.4]。這使其可以直接做為任何第三方訂閱前端網頁（如 `sub-web`）的自定義後端 [1]。
+  - **超簡短一鍵 VPS 命令**：結合 Cloudflare KV 雲端動態腳本快取技術與 `curl | bash` 機制，產生超簡短的 VPS 一鍵部署命令。
+  - **雙層智慧探測校正**：VPS 部署時自動檢測本地連接埠與 TLS 加密，智慧避免 Proxy Protocol / TLS 握手衝突，並自動重寫 Host Header 與 TLS SNI。
+- 📊 **流量與到期日智慧透傳** - 自動從上游多個機場擷取並**加總多個訂閱的流量（上傳、下載、總量），並自動計算最近的到期時間**，透過標準 `subscription-userinfo` 標頭透傳，完美點亮客戶端的流量條！
+- ⚡ **標準 SubConverter 後端支援** - 內建 **`/sub`** 和 **`/version`** API 路由，回傳與您專案版本和網域動態對齊的標準格式（如 `subconverter v2.5.0 <your-worker-domain> backend`）並全面支援跨域 (CORS)。這使其可以直接做為任何第三方訂閱前端網頁（如 `sub-web`）的自定義後端。
 - 🔍 **智慧過濾與替換** - 
   - **節點篩選**：支援「僅保留」與「排除」雙向過濾（使用 `|` 隔開，如 `HK|TW` 或 `5x`）。後端內建字元智慧相容技術，自動將 `x`、`X`、全形 `ｘ` 與數學乘號 `×` 進行互通匹配。
-  - **名稱替換**：支援極簡統一的替換與刪除語法。刪除請用 `DEL-關鍵字`，替換請用 `尋找-替換`，多組規則使用 `|` 隔開（例如：`DEL-[69云]|移动优化-專線|DEL-永久`）。
+  - **名稱替換**：支援極簡統一的替換與刪除語法。刪除請用 `DEL-關鍵字`，替換請用 `尋找-替換`，多組規則請用 `|` 隔開（例如：`DEL-[69云]|移动优化-專線`）。
 - 🚩 **自動國旗與萬國標註** - 內建智慧辨識系統，自動為節點名稱補上對應的國家國旗 Emoji (如 🇹🇼、🇭🇰、🇯🇵、🇲🇴、🇰🇭、🇬🇷、🇵🇱 等 40+ 國家與常用機場縮寫)。**若遇到無對應國家的節點（如流量提示、機場官網），自動補上 🇺🇳 (聯合國國旗)**，達成 100% 工整排版。
 - 🔌 **全協議支援** - 完美解析 `Trojan`, `VLESS`, `VMess`, `Shadowsocks`, `Hysteria2 (hy2)`, `TUIC`, `AnyTLS` 等主流與新興協議。
 - 🚀 **極速路由與 DNS** - 轉換出的配置檔內建頂級路由規則：
@@ -25,13 +25,23 @@
 
 ## 🚀 部署教學
 
-### 方法一：一鍵部署 (推薦)
+### 方法一：GitHub Actions 自動部署 (推薦)
 
-點擊上方的 **Deploy to Cloudflare Workers** 按鈕，依照畫面指示登入 Cloudflare 帳號即可自動完成部署。
+當您將專案 Fork 到您的帳號或 Push 至您的 GitHub 倉庫時，可以透過工作流自動編譯並部署至 Cloudflare Workers。
 
-*(⚠️ 注意：一鍵部署後，請務必至 Cloudflare 儀表板為該 Worker 綁定一個名為 `SUB_CACHE` 的 KV 命名空間，否則「收藏配置」、「短連結」與「Argo 一鍵指令快取」功能將無法使用)*
+#### 🔑 設定 GitHub Repository Secrets：
+請前往您的 GitHub 專案頁面，依次點擊 **`Settings`** -> **`Secrets and variables`** -> **`Actions`** -> **`New repository secret`**，並添加以下三個密鑰：
 
-### 方法二：手動部署 (Wrangler CLI)
+* **`CF_API_TOKEN`**：您的 Cloudflare API 令牌（Token）。
+  * *獲取方式*：前往 Cloudflare 帳戶 -> 我的個人資料 -> API 令牌 -> 建立具有「編輯 Cloudflare Workers 與 KV」權限的權杖。
+* **`CF_ACCOUNT_ID`**：您的 Cloudflare 帳戶 ID。
+  * *獲取方式*：可在 Cloudflare 儀表板首頁右側或 Worker 頁面右側找到。
+* **`CF_KV_ID`**：您在 Cloudflare 上為此專案建立的 KV 空間 ID (SUB_CACHE)。
+  * *獲取方式*：可在 Cloudflare 儀表板 -> 網域與組織 -> 鍵值儲存 (KV) 中建立一個命名空間（例如 `SUB_CACHE`），並複製其 ID。
+
+設定完成後，每次推送到 `main` 或 `master` 分支，GitHub Actions 將會自動替換專案中的 KV 佔位符，並將最新代碼安全部署。
+
+### 方法二：本地手動部署 (Wrangler CLI)
 
 1. **克隆倉庫**
    ```bash
@@ -40,18 +50,18 @@
    ```
 
 2. **上傳 `argo.sh` 腳本**
-   將專案根目錄的 `argo.sh` 上傳到您的 GitHub 專案 `sammy0101/cf-sub-converter` 的 `main`（或 `master`）分支。
+   將專案根目錄的 `argo.sh` 上傳到您的 GitHub 專案 `sammy0101/cf-sub-converter` 的 `main` 分支。
 
 3. **安裝依賴**
    ```bash
    npm install
    ```
 
-5. **創建 KV 命名空間**
+4. **創建 KV 命名空間**
    ```bash
    wrangler kv:namespace create SUB_CACHE
    ```
-   *執行後，終端機會回傳一段配置代碼，請將其複製並貼上到你的 `wrangler.toml` 檔案中。*
+   *執行後，終端機會回傳一段配置代碼，請將其複製並貼上取代您 `wrangler.toml` 中的 `KV_ID_PLACEHOLDER`。*
 
 5. **部署到 Cloudflare**
    ```bash
@@ -66,10 +76,10 @@
 - **資料來源設定**：支援貼上機場訂閱連結、Base64 字串，或直接貼上多行節點 URI。支援多個訂閱地址換行輸入，系統將保持原始順序進行合併。
 - **Argo 隧道一鍵生成**：
   1. 在資料來源貼入您的機場訂閱或明文連結。
-  2. 點選「解析並載入目前輸入的 VLESS / VMess 節點」，介面會自動拉出節點列表 [1]。
-  3. 勾選您要轉換的節點，系統會自動在下方同步該節點的原生埠號 [1]。
+  2. 點選「解析並載入目前輸入的 VLESS / VMess 節點」，介面會自動拉出節點列表。
+  3. 勾選您要轉換的節點，系統會自動在下方同步該節點的原生埠號。
   4. 設定 VPS 本地對接連接埠，點選「一鍵生成 Argo 節點與一鍵部署腳本」。
-  5. 複製產生的簡短 `curl` 或 `wget` 指令至您的 VPS 上執行 [1]。
+  5. 複製產生的簡短 `curl` 或 `wget` 指令至您的 VPS 上執行。
   6. 腳本成功執行後：
      * **臨時域名模式**：請在您的 VPS 終端機內直接複製最終生成、連通的 VLESS/VMess 節點。
      * **固定域名模式**：新生成的 Argo 節點（原節點名末尾加 `_Argo` 後綴）會直接顯示在網頁下方的明文列表框中，方便拷貝。
@@ -79,10 +89,10 @@
   - **節點名稱替換**：刪除寫 `DEL-關鍵字`，替換寫 `尋找-替換`，多組規則用 `|` 隔開。例如輸入 `DEL-[69云]|移动优化-專線`。
 - **配置收藏**：常用的節點與過濾替換規則可以儲存到「已儲存的配置」區塊。卡片上會直觀地以綠色 `保`、紅色 `排` 和藍色 `替` 標籤顯示你所設定的規則，點擊卡片即可自動載入所有設定。
 
-### API 調用與外部前端對接 [1]
+### API 調用與外部前端對接
 
 #### 1. 當作標準 SubConverter 後端使用
-本專案內建對應 `/sub` 與 `/version` 端點。你可以打開 any 一個開源的 `sub-web` 網頁（例如：`sub.id9.cc` 或其他的轉換前端），並在**「後端地址 (Backend URL)」**中，填入你的 Cloudflare Workers 網址 [1]：
+本專案內建對應 `/sub` 與 `/version` 端點。你可以打開 any 一個開源的 `sub-web` 網頁（例如：`sub.id9.cc` 或其他的轉換前端），並在**「後端地址 (Backend URL)」**中，填入你的 Cloudflare Workers 網址：
 ```text
 https://your-worker.workers.dev
 ```
