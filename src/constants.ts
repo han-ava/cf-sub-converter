@@ -247,10 +247,11 @@ export const HTML_PAGE = `
           <button class="btn btn-ghost" onclick="copyText('argoVpsScript')" style="margin-top: 0.5rem; width: 100%; justify-content: center;">複製腳本代碼</button>
         </div>
 
+        <!-- 💥 已更新：第二步欄位改為明文連結，移除 Base64 -->
         <div class="form-group" style="margin-top: 1.5rem;">
-          <label style="color: var(--text-main); font-weight: 600;">🔗 第二步：複製混合訂閱結果 (含有您原本的所有節點 + 新複製的 Argo 節點 Base64)：</label>
-          <textarea id="argoBase64Sub" readonly style="min-height: 120px; font-size: 0.8rem; font-family: 'JetBrains Mono', monospace; word-break: break-all;"></textarea>
-          <button class="btn btn-ghost" onclick="copyText('argoBase64Sub')" style="margin-top: 0.5rem; width: 100%; justify-content: center;">複製整合訂閱 (Base64 格式)</button>
+          <label style="color: var(--text-main); font-weight: 600;">🔗 第二步：複製混合訂閱結果 (原節點連結 + 新複製的 Argo 節點 - 明文列表)：</label>
+          <textarea id="argoBase64Sub" placeholder="自動加上原節點與新生成之明文連結..." readonly style="min-height: 140px; font-size: 0.8rem; font-family: 'JetBrains Mono', monospace; line-height:1.6;"></textarea>
+          <button class="btn btn-ghost" onclick="copyText('argoBase64Sub')" style="margin-top: 0.5rem; width: 100%; justify-content: center;">複製整合訂閱 (明文列表)</button>
         </div>
       </div>
     </section>
@@ -319,7 +320,7 @@ export const HTML_PAGE = `
       </div>
       
       <div id="favGrid" class="fav-grid">
-        <div class="empty-state">目前尚未儲存任何配置</div>
+        <div class="empty-state">目前尚未儲存 any 配置</div>
       </div>
     </section>
   </div>
@@ -591,7 +592,7 @@ export const HTML_PAGE = `
       }
     }
 
-    // ⚡ Argo 隧道一鍵生成
+    // ⚡ Argo 隧道一鍵生成 (返回明文連結)
     async function generateArgo() {
       const raw = document.getElementById('urlInput').value.trim();
       const checkboxes = document.querySelectorAll('.vless-chk:checked');
@@ -607,7 +608,7 @@ export const HTML_PAGE = `
       const btn = document.getElementById('generateArgoBtn');
       const originalText = btn.textContent;
       btn.disabled = true;
-      btn.textContent = '正在與後端生成 Argo 一鍵腳本與訂閱...';
+      btn.textContent = '正在與後端生成 Argo 一鍵腳本與明文訂閱...';
       
       try {
         const resp = await fetch('/api/argo-generate', {
@@ -624,10 +625,10 @@ export const HTML_PAGE = `
         const res = await resp.json();
         
         document.getElementById('argoVpsScript').value = res.script;
-        document.getElementById('argoBase64Sub').value = res.base64;
+        document.getElementById('argoBase64Sub').value = res.links; // 💥 更新為明文連結
         
         document.getElementById('argoResults').classList.add('show');
-        showToast('Argo 隧道部署腳本與訂閱生成成功！');
+        showToast('Argo 隧道部署腳本與明文訂閱生成成功！');
         document.getElementById('argoResults').scrollIntoView({ behavior: 'smooth' });
       } catch(e) {
         showToast('生成失敗: ' + e.message, false);
@@ -673,7 +674,7 @@ export const HTML_PAGE = `
           }, 100);
         <\\/script>
         </body></html>
-      \ tablet\` );
+      \` );
     }
     
     function showToast(msg, isSuccess = true) {
