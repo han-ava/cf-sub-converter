@@ -52,10 +52,10 @@ if command -v ss &> /dev/null; then
     fi
 fi
 
-# 💥 智慧探測：自動探測 VPS 本地目標連接埠是否啟動了 TLS 加密，徹底解決 530 握手錯誤！
+# 💥 智慧探測：自動探測目標連接埠是否啟用 TLS 加密，徹底解決明文/密文與 530 握手錯誤！
 DETECTED_TLS="false"
 if curl -s -k --connect-timeout 2 "https://127.0.0.1:$DETECTED_PORT" &>/dev/null; then
-    echo "偵測到本地轉發埠 $DETECTED_PORT 為 TLS 加密連接埠，自動開啟 HTTPS 轉發模式。"
+    echo "偵測到本地轉發埠 $DETECTED_PORT 為 TLS 加密連接埠，自動開啟 HTTPS 轉發與 SNI 對齊模式。"
     DETECTED_TLS="true"
 else
     echo "偵測到本地轉發埠 $DETECTED_PORT 為明文連接埠，自動開啟 HTTP 轉發模式。"
@@ -68,10 +68,14 @@ if [ "$DETECTED_TLS" = "true" ]; then
     EXTRA_ARGS="--no-tls-verify"
 fi
 
-# 3. 重寫 Host Header 以對齊 VPS 上的 Nginx / Xray 站點域名配置！
+# 💥 重寫 Host Header 與 TLS SNI，完美解決 Sing-box 的 530 安全拒絕連線！
 if [ -n "$ORIGIN_HOST" ]; then
     echo "已自動啟用 HTTP 主機頭部重寫 (Host Header 重寫為: $ORIGIN_HOST)"
     EXTRA_ARGS="$EXTRA_ARGS --http-host-header $ORIGIN_HOST"
+    if [ "$DETECTED_TLS" = "true" ]; then
+        echo "已自動啟用 TLS SNI 重寫為: $ORIGIN_HOST"
+        EXTRA_ARGS="$EXTRA_ARGS --origin-server-name $ORIGIN_HOST"
+    fi
 fi
 
 # 4. 判斷並執行部署
