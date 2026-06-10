@@ -5,7 +5,7 @@
   "scripts": {
     "deploy": "wrangler deploy",
     "dev": "wrangler dev",
-    "start": "wrangler dev"
+    "start": "wrangler dev",
     "argo": "tsx scripts/argo-converter.ts"
   },
   "dependencies": {
@@ -14,6 +14,7 @@
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20240208.0",
     "@types/js-yaml": "^4.0.9",
+    "tsx": "^4.7.1",
     "typescript": "^5.3.3",
     "wrangler": "^3.28.1"
   }
