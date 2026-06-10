@@ -16,7 +16,7 @@ NODE_NAME="{{NODE_NAME}}"
 TUNNEL_TOKEN="{{TUNNEL_TOKEN}}"
 CUSTOM_DOMAIN="{{CUSTOM_DOMAIN}}"
 VLESS_TLS="{{VLESS_TLS}}"
-ORIGIN_HOST="{{ORIGIN_HOST}}" # 💥 新增變數：原主機真實域名
+ORIGIN_HOST="{{ORIGIN_HOST}}"
 
 echo -e "${GREEN}=== 開始部署 Cloudflare Argo 隧道 (${NODE_NAME}) ===${NC}"
 
@@ -41,7 +41,6 @@ DETECTED_PORT="$VLESS_PORT"
 DETECTED_TLS="$VLESS_TLS"
 
 if command -v ss &> /dev/null; then
-    # 💥 修正：改用精準正則過濾 \s 確保在多空格/Tab 排版下 100% 成功偵測監聽埠
     if ! ss -tln | grep -qE ":$VLESS_PORT([[:space:]]|$)"; then
         echo -e "${RED}警告: 本地轉發埠 $VLESS_PORT 似乎未在本地監聽。正在探測常用埠...${NC}"
         if ss -tln | grep -qE ":443([[:space:]]|$)"; then
@@ -63,7 +62,7 @@ if [ "$DETECTED_TLS" = "true" ]; then
     EXTRA_ARGS="--no-tls-verify"
 fi
 
-# 💥 3. 重寫 Host Header 以對齊 VPS 上的 Nginx / Xray 站點域名配置！
+# 3. 重寫 Host Header 以對齊 VPS 上的 Nginx / Xray 站點域名配置！
 if [ -n "$ORIGIN_HOST" ]; then
     echo "已自動啟用 HTTP 主機頭部重寫 (Host Header 重寫為: $ORIGIN_HOST)"
     EXTRA_ARGS="$EXTRA_ARGS --http-host-header $ORIGIN_HOST"
@@ -78,7 +77,6 @@ if [ -n "$TUNNEL_TOKEN" ]; then
     systemctl enable cloudflared
     systemctl restart cloudflared
     
-    # 💥 新增：固定域名模式部署成功看板 (加入自訂域名顯示與乾淨後置命名) [1]
     echo -e "\n${GREEN}=== 部署成功 【固定域名模式】 ===${NC}"
     echo -e "原節點名稱: $NODE_NAME"
     echo -e "轉發連接埠: $DETECTED_PORT"
@@ -128,7 +126,8 @@ EOF
     TEMP_DOMAIN=""
     for i in {1..15}; do
         sleep 1
-        TEMP_DOMAIN=$(grep -oE 'https://[a-zA-Z0-9-]+\\.trycloudflare\\.com' /var/log/cloudflared-argo-${SAFE_NODE_NAME}.log | head -n 1 | sed 's/https:\\/\\///')
+        # 💥 修正：改用 100% 避開反斜線的 cut 工具提取臨時域名 [2]
+        TEMP_DOMAIN=$(grep -oE 'https://[a-zA-Z0-9-]+\\.trycloudflare\\.com' /var/log/cloudflared-argo-${SAFE_NODE_NAME}.log | head -n 1 | cut -d'/' -f3)
         if [ -n "$TEMP_DOMAIN" ]; then
             break
         fi
@@ -148,7 +147,6 @@ EOF
             FINAL_LINK="vmess://$VMESS_B64"
         fi
         
-        # 💥 新增：臨時域名模式部署成功看板 (加入分配臨時域名顯示與乾淨後置命名) [1]
         echo -e "\n${GREEN}=== 部署成功 【臨時域名模式】 ===${NC}"
         echo -e "原節點名稱: $NODE_NAME"
         echo -e "轉發連接埠: $DETECTED_PORT"
