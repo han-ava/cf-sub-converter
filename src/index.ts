@@ -60,7 +60,7 @@ function safeBtoa(str: string): string {
   }
 }
 
-// 動態從 GitHub 獲取模板腳本並進行變數置換 (💥 升級：網址增加動態時間戳，消除 Cloudflare 緩存) [1]
+// 動態從 GitHub 獲取模板腳本並進行變數置換 (💥 網址增加動態時間戳，消除 Cloudflare 緩存) [1]
 async function getArgoScriptFromGithub(node: ProxyNode, port: string, token: string, domain: string): Promise<string> {
   const GITHUB_TEMPLATE_URL = `https://raw.githubusercontent.com/sammy0101/cf-sub-converter/main/argo.sh?t=${Date.now()}`;
   let template = "";
@@ -73,7 +73,7 @@ async function getArgoScriptFromGithub(node: ProxyNode, port: string, token: str
       throw new Error("GitHub Fetch Failed");
     }
   } catch(e) {
-    // 降級備用本地極簡模板 (💥 同步更換為帶點號之 cut 處理) [2]
+    // 降級備用本地極簡模板
     template = `#!/bin/bash
 echo "警告: 無法從 GitHub 獲取最新 argo.sh 模板，正在使用降級極簡部署..."
 if ! command -v cloudflared &> /dev/null; then
