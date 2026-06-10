@@ -52,7 +52,7 @@ export function addFlag(name: string): string {
 
   if (isMatch('HK|HKG', '香港|深港|HONGKONG|HONG KONG')) return "🇭🇰 " + name;
   if (isMatch('TW|TWN|TPE', '台灣|台湾|台北|新北|彰化')) return "🇹🇼 " + name;
-  if (isMatch('JP|JPN|TYO|OSA|NRT|HND|KIX', '日本|东京|大阪|埼玉|沪日|川日|JAPAN')) return "🇯🇵 " + name;
+  if (isMatch('JP|JPN|TYO|OSA|NRT|HND|KIX', '日本|东京|大阪|埼玉|慢日|川日|JAPAN')) return "🇯🇵 " + name;
   if (isMatch('SG|SGP|SIN', '新加坡|狮城|SINGAPORE')) return "🇸🇬 " + name;
   if (isMatch('US|USA|LAX|SFO|SJC|SEA|NYC|JFK|EWR', '美国|美利堅|洛杉矶|圣何塞|硅谷|波特兰|西雅图|AMERICA|UNITED STATES')) return "🇺🇸 " + name;
   if (isMatch('KR|KOR|ICN|SEL', '韩国|首尔|KOREA')) return "🇰🇷 " + name;
@@ -62,7 +62,6 @@ export function addFlag(name: string): string {
   if (isMatch('EG|EGY|CAI', '埃及|开罗|開羅|EGYPT')) return "🇪🇬 " + name;
   if (isMatch('VN|VNM|HAN|SGN', '越南|河内|河內|西贡|VIETNAM')) return "🇻🇳 " + name;
   
-  // 澳門、柬埔寨、希臘、波蘭國旗補完
   if (isMatch('MO|MAC|MFM', '澳門|澳门')) return "🇲🇴 " + name;
   if (isMatch('KH|KHM|PNH', '柬埔寨|金边|金邊|CAMBODIA')) return "🇰🇭 " + name;
   if (isMatch('GR|GRC|ATH', '希腊|希臘|雅典|GREECE')) return "🇬🇷 " + name;
@@ -78,11 +77,11 @@ export function addFlag(name: string): string {
   if (isMatch('NO|NOR|OSL', '挪威|奥斯陆|NORWAY')) return "🇳🇴 " + name;
   if (isMatch('FI|FIN|HEL', '芬兰|芬蘭|赫尔辛基|FINLAND')) return "🇫🇮 " + name;
   if (isMatch('DK|DNK|CPH', '丹麦|丹麥|哥本哈根|DENMARK')) return "🇩🇰 " + name;
-  if (isMatch('IE|IRL|DUB', '爱尔兰|愛爾蘭|都柏林|IRELAND')) return "🇮🇪 " + name;
+  if (isMatch('IE|IRL|DUB', '爱玩|愛爾蘭|都柏林|IRELAND')) return "🇮🇪 " + name;
   if (isMatch('PT|PRT|LIS', '葡萄牙|里斯本|PORTUGAL')) return "🇵🇹 " + name;
   if (isMatch('TH|THA|BKK', '泰国|泰國|曼谷|THAILAND')) return "🇹🇭 " + name;
   if (isMatch('MY|MYS|KUL', '马来西亚|馬來西亞|吉隆坡|MALAYSIA')) return "🇲🇾 " + name;
-  if (isMatch('PH|PHL|MNL', '物理宾|菲律賓|马尼拉|PHILIPPINES')) return "🇵🇭 " + name;
+  if (isMatch('PH|PHL|MNL', '物理宾|物理賓|马尼拉|PHILIPPINES')) return "🇵🇭 " + name;
   if (isMatch('ID|IDN|CGK', '印度尼西亚|印尼|雅加达|INDONESIA')) return "🇮🇩 " + name;
   if (isMatch('TR|TUR|IST', '土耳其|伊斯坦堡|TURKEY')) return "🇹🇷 " + name;
   if (isMatch('IN|IND|BOM', '印度|孟买|INDIA')) return "🇮🇳 " + name;
@@ -97,8 +96,46 @@ export function addFlag(name: string): string {
   if (isMatch('PK|PAK', '巴基斯坦|PAKISTAN')) return "🇵🇰 " + name;
   if (isMatch('ZA|ZAF|CPT', '南非|开普敦|SOUTH AFRICA')) return "🇿🇦 " + name;
 
-  // 預設加上 🇺🇳 聯合國國旗
   return "🇺🇳 " + name;
+}
+
+// 💥 提取主網域（判斷同家歸類使用）
+function getBaseDomain(server: string): string {
+  if (!server) return '';
+  if (/^[0-9.]+$/.test(server) || server.includes(':')) {
+    return server; // IP 地址直接作為組標識
+  }
+  const parts = server.toLowerCase().split('.');
+  if (parts.length <= 2) return server;
+  
+  const tld2 = parts[parts.length - 2] + '.' + parts[parts.length - 1];
+  const multiPartTlds = ['com.cn', 'net.cn', 'org.cn', 'gov.cn', 'pp.ua', 'co.uk', 'org.uk', 'me.uk', 'com.tw', 'org.tw', 'net.tw', 'idv.tw'];
+  
+  if (multiPartTlds.includes(tld2) && parts.length >= 3) {
+    return parts.slice(-3).join('.');
+  }
+  return parts.slice(-2).join('.');
+}
+
+// 💥 新增：智慧同家歸類排序演算法（保留機場各自內部的原生優化順序）
+export function groupNodesByProvider(nodes: ProxyNode[]): ProxyNode[] {
+  const groups = new Map<string, ProxyNode[]>();
+  const providerOrder: string[] = [];
+  
+  for (const node of nodes) {
+    const provider = getBaseDomain(node.server);
+    if (!groups.has(provider)) {
+      groups.set(provider, []);
+      providerOrder.push(provider);
+    }
+    groups.get(provider)!.push(node);
+  }
+  
+  const result: ProxyNode[] = [];
+  for (const provider of providerOrder) {
+    result.push(...groups.get(provider)!);
+  }
+  return result;
 }
 
 // --- 去重複命名與還原機場預設排序 ---
@@ -106,7 +143,6 @@ export function deduplicateNodeNames(nodes: ProxyNode[]): ProxyNode[] {
   const seenKey = new Set<string>();
   const nameCount = new Map<string, number>();
 
-  // 直接使用 filter 保留機場原本最優化、最習慣的原始節點順序
   return nodes.filter(node => {
     const key = `${node.server}:${node.port}:${node.uuid || node.password || ''}`;
 
@@ -114,8 +150,6 @@ export function deduplicateNodeNames(nodes: ProxyNode[]): ProxyNode[] {
     seenKey.add(key);
 
     let baseName = node.name || 'node';
-    
-    // 自動補上國旗或 🇺🇳 聯合國國旗，達成完美對齊
     baseName = addFlag(baseName);
 
     if (!nameCount.has(baseName)) {
