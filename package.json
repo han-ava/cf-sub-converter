@@ -6,6 +6,7 @@
     "deploy": "wrangler deploy",
     "dev": "wrangler dev",
     "start": "wrangler dev"
+    "argo": "tsx scripts/argo-converter.ts"
   },
   "dependencies": {
     "js-yaml": "^4.1.0"
