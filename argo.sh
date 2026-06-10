@@ -38,21 +38,27 @@ SAFE_NODE_NAME=$(echo "$NODE_NAME" | sed 's/[^a-zA-Z0-9]/_/g')
 
 # 2. 雙重保險：VPS 本地執行期自動檢測並修正連接埠與 TLS 加密衝突
 DETECTED_PORT="$VLESS_PORT"
-DETECTED_TLS="$VLESS_TLS"
 
 if command -v ss &> /dev/null; then
     if ! ss -tln | grep -qE ":$VLESS_PORT([[:space:]]|$)"; then
         echo -e "${RED}警告: 本地轉發埠 $VLESS_PORT 似乎未在本地監聽。正在探測常用埠...${NC}"
         if ss -tln | grep -qE ":443([[:space:]]|$)"; then
-            echo -e "${GREEN}自動修正成功：偵測到 VPS 本地 Nginx/443 埠正在運行！已將轉發目標自動修正為: 443 (TLS) 埠。${NC}"
+            echo -e "${GREEN}自動修正成功：偵測到 VPS 本地 Nginx/443 埠正在運行！已將轉發目標自動修正為: 443 埠。${NC}"
             DETECTED_PORT="443"
-            DETECTED_TLS="true"
         elif ss -tln | grep -qE ":80([[:space:]]|$)"; then
             echo -e "${GREEN}自動修正成功：偵測到 VPS 本地 80 埠正在運行！已將轉發目標自動修正為: 80 埠。${NC}"
             DETECTED_PORT="80"
-            DETECTED_TLS="false"
         fi
     fi
+fi
+
+# 💥 智慧探測：自動探測 VPS 本地目標連接埠是否啟動了 TLS 加密，徹底解決 530 握手錯誤！
+DETECTED_TLS="false"
+if curl -s -k --connect-timeout 2 "https://127.0.0.1:$DETECTED_PORT" &>/dev/null; then
+    echo "偵測到本地轉發埠 $DETECTED_PORT 為 TLS 加密連接埠，自動開啟 HTTPS 轉發模式。"
+    DETECTED_TLS="true"
+else
+    echo "偵測到本地轉發埠 $DETECTED_PORT 為明文連接埠，自動開啟 HTTP 轉發模式。"
 fi
 
 LOCAL_URL="http://127.0.0.1:$DETECTED_PORT"
