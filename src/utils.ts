@@ -86,7 +86,7 @@ export function addFlag(name: string): string {
   if (isMatch('TR|TUR|IST', '土耳其|伊斯坦堡|TURKEY')) return "🇹🇷 " + name;
   if (isMatch('IN|IND|BOM', '印度|孟买|INDIA')) return "🇮🇳 " + name;
   if (isMatch('CA|CAN|YVR|YYZ', '加拿大|多伦多|温哥华|CANADA')) return "🇨🇦 " + name;
-  if (isMatch('AU|AUS|SYD|MEL', '澳大利亚|澳洲|悉尼|墨尔本|AUSTRALIA')) return "🇦🇺 " + name;
+  if (isMatch('AU|AUS|SYD|MEL', '澳大利亚|澳洲|悉尼|墨本|AUSTRALIA')) return "🇦🇺 " + name;
   if (isMatch('CN|CHN', '中国|回国|国内|北京|上海|廣州|深圳|CHINA')) return "🇨🇳 " + name;
   if (isMatch('NZ|NZL|AKL', '新西兰|紐西蘭|奥克兰|NEW ZEALAND')) return "🇳🇿 " + name;
   if (isMatch('AE|ARE|DXB', '阿联酋|迪拜|杜拜|UAE')) return "🇦🇪 " + name;
@@ -99,43 +99,14 @@ export function addFlag(name: string): string {
   return "🇺🇳 " + name;
 }
 
-// 💥 提取主網域（判斷同家歸類使用）
-function getBaseDomain(server: string): string {
-  if (!server) return '';
-  if (/^[0-9.]+$/.test(server) || server.includes(':')) {
-    return server; // IP 地址直接作為組標識
-  }
-  const parts = server.toLowerCase().split('.');
-  if (parts.length <= 2) return server;
-  
-  const tld2 = parts[parts.length - 2] + '.' + parts[parts.length - 1];
-  const multiPartTlds = ['com.cn', 'net.cn', 'org.cn', 'gov.cn', 'pp.ua', 'co.uk', 'org.uk', 'me.uk', 'com.tw', 'org.tw', 'net.tw', 'idv.tw'];
-  
-  if (multiPartTlds.includes(tld2) && parts.length >= 3) {
-    return parts.slice(-3).join('.');
-  }
-  return parts.slice(-2).join('.');
-}
-
-// 💥 新增：智慧同家歸類排序演算法（保留機場各自內部的原生優化順序）
+// 💥 修正：不用任何機場識別邏輯，單純對伺服器域名（Domain）倒序排列後進行字母排序。
+// 這能讓所有同域名（同家）的節點自然而然、100% 完美且緊密地排列在一起！
 export function groupNodesByProvider(nodes: ProxyNode[]): ProxyNode[] {
-  const groups = new Map<string, ProxyNode[]>();
-  const providerOrder: string[] = [];
-  
-  for (const node of nodes) {
-    const provider = getBaseDomain(node.server);
-    if (!groups.has(provider)) {
-      groups.set(provider, []);
-      providerOrder.push(provider);
-    }
-    groups.get(provider)!.push(node);
-  }
-  
-  const result: ProxyNode[] = [];
-  for (const provider of providerOrder) {
-    result.push(...groups.get(provider)!);
-  }
-  return result;
+  return [...nodes].sort((a, b) => {
+    const revA = (a.server || '').toLowerCase().split('.').reverse().join('.');
+    const revB = (b.server || '').toLowerCase().split('.').reverse().join('.');
+    return revA.localeCompare(revB);
+  });
 }
 
 // --- 去重複命名與還原機場預設排序 ---
