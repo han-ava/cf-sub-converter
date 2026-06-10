@@ -8,7 +8,7 @@ import { deduplicateNodeNames } from './utils';
 
 const version = packageJson.version || '2.5.0';
 
-// 💥 修正：改用 for...of 順序執行，確保 API 解析出的節點順序與原輸入 100% 相同！
+// 輔助載入與解析節點（不含流量統計，專供 API 使用）
 async function loadNodes(urlParam: string): Promise<ProxyNode[]> {
   const inputs = urlParam.split(/[\n\r|]+/); 
   const allNodes: ProxyNode[] = [];
@@ -110,7 +110,6 @@ const url = new URL(request.url);
 if (request.method === 'OPTIONS') {
   return new Response(null, {
     headers: {
-      'Access-Control-Origin': '*',
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type',
@@ -383,7 +382,7 @@ if (!urlParam || urlParam.trim() === '') {
   return new Response(dynamicHtml, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
 }
 
-// 4. 解析並下載 (支援流量資訊透傳與合併 - 💥 修正：改用 for...of 同步循序下載，100% 鎖定原始訂閱順序！)
+// 4. 解析並下載 
 const inputs = urlParam.split(/[\n\r|]+/); 
 const allNodes: ProxyNode[] = [];
 const errors: string[] = [];
