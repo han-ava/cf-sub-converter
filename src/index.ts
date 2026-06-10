@@ -4,7 +4,7 @@ import { Env, ProxyNode } from './types';
 import { HTML_PAGE } from './constants';
 import { parseContent } from './parser';
 import { toSingBoxWithTemplate, toClashWithTemplate, toBase64 } from './generator';
-// 💥 引入國旗智慧分群排序演算法
+// 💥 修正：精確匯入並套用 groupNodesByFlag
 import { deduplicateNodeNames, groupNodesByFlag } from './utils';
 
 const version = packageJson.version || '2.5.0';
@@ -61,7 +61,7 @@ function safeBtoa(str: string): string {
   }
 }
 
-// 動態從 GitHub 獲取模板腳本並進行變數置換 (網址增加動態時間戳，消除 Cloudflare 緩存) [1]
+// 動態從 GitHub 獲取模板腳本並進行變數置換 (網址增加動態時間戳，消除 Cloudflare 緩存)
 async function getArgoScriptFromGithub(node: ProxyNode, port: string, token: string, domain: string): Promise<string> {
   const GITHUB_TEMPLATE_URL = `https://raw.githubusercontent.com/sammy0101/cf-sub-converter/main/argo.sh?t=${Date.now()}`;
   let template = "";
@@ -93,7 +93,7 @@ cloudflared tunnel --url http://127.0.0.1:{{VLESS_PORT}}
   const isTls = node.tls ? "true" : "false";
   const realHost = node.wsHeaders?.Host || node.sni || node.server; 
 
-  // 替換模板中的自訂佔位符 [1]
+  // 替換模板中的自訂佔位符
   return template
     .replace("{{NODE_TYPE}}", node.type)
     .replace("{{VLESS_UUID}}", node.uuid || '')
@@ -538,9 +538,9 @@ if (filteredNodes.length === 0) {
   });
 }
 
-// 💥 智慧分群：對節點先進行「極簡域名反轉同家排序歸類」，再進行「去重複命名自動補國旗」
-const groupedNodes = groupNodesByProvider(filteredNodes);
-const uniqueNodes = deduplicateNodeNames(groupedNodes);
+// 💥 對齊：對篩選過後的節點先進行「極簡國旗智慧排序歸類」，再進行「去重複命名自動補國旗」
+const sortedNodes = groupNodesByFlag(filteredNodes);
+const uniqueNodes = deduplicateNodeNames(sortedNodes);
 
 const target = url.searchParams.get('target');
 
