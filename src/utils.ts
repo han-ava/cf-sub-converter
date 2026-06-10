@@ -77,7 +77,7 @@ export function addFlag(name: string): string {
   if (isMatch('NO|NOR|OSL', '挪威|奥斯陆|NORWAY')) return "🇳🇴 " + name;
   if (isMatch('FI|FIN|HEL', '芬兰|芬蘭|赫尔辛基|FINLAND')) return "🇫🇮 " + name;
   if (isMatch('DK|DNK|CPH', '丹麦|丹麥|哥本哈根|DENMARK')) return "🇩🇰 " + name;
-  if (isMatch('IE|IRL|DUB', '爱玩|愛爾蘭|都柏林|IRELAND')) return "🇮🇪 " + name;
+  if (isMatch('IE|IRL|DUB', '愛爾蘭|都柏林|IRELAND')) return "🇮🇪 " + name;
   if (isMatch('PT|PRT|LIS', '葡萄牙|里斯本|PORTUGAL')) return "🇵🇹 " + name;
   if (isMatch('TH|THA|BKK', '泰国|泰國|曼谷|THAILAND')) return "🇹🇭 " + name;
   if (isMatch('MY|MYS|KUL', '马来西亚|馬來西亞|吉隆坡|MALAYSIA')) return "🇲🇾 " + name;
@@ -99,14 +99,53 @@ export function addFlag(name: string): string {
   return "🇺🇳 " + name;
 }
 
-// 💥 修正：不用任何機場識別邏輯，單純對伺服器域名（Domain）倒序排列後進行字母排序。
-// 這能讓所有同域名（同家）的節點自然而然、100% 完美且緊密地排列在一起！
-export function groupNodesByProvider(nodes: ProxyNode[]): ProxyNode[] {
-  return [...nodes].sort((a, b) => {
-    const revA = (a.server || '').toLowerCase().split('.').reverse().join('.');
-    const revB = (b.server || '').toLowerCase().split('.').reverse().join('.');
-    return revA.localeCompare(revB);
+// 💥 新增：按國旗進行歸類與黃金順序排序（100% 保留各機場內部原生排序，並自動將 UN 佔位符置底）
+export function groupNodesByFlag(nodes: ProxyNode[]): ProxyNode[] {
+  const groups = new Map<string, ProxyNode[]>();
+  const flagOrder: string[] = [];
+  
+  for (const node of nodes) {
+    const flaggedName = addFlag(node.name || 'node');
+    
+    // 提取國旗 Emoji (包含 surrogate pairs)
+    let flag = '';
+    const match = flaggedName.match(/^([\uD83C][\uDDE6-\uDDFF][\uD83C][\uDDE6-\uDDFF])/);
+    if (match) {
+      flag = match[1];
+    } else {
+      flag = '🇺🇳';
+    }
+    
+    if (!groups.has(flag)) {
+      groups.set(flag, []);
+      flagOrder.push(flag);
+    }
+    groups.get(flag)!.push(node);
+  }
+  
+  // 黃金排序國家順序
+  const standardOrder = ['🇭🇰', '🇹🇼', '🇯🇵', '🇸🇬', '🇺🇸', '🇰🇷', '🇨🇳'];
+  
+  // 進行國旗與置底排序
+  flagOrder.sort((a, b) => {
+    if (a === '🇺🇳' && b !== '🇺🇳') return 1;
+    if (b === '🇺🇳' && a !== '🇺🇳') return -1;
+    
+    const idxA = standardOrder.indexOf(a);
+    const idxB = standardOrder.indexOf(b);
+    
+    if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+    if (idxA !== -1) return -1;
+    if (idxB !== -1) return 1;
+    
+    return a.localeCompare(b);
   });
+  
+  const result: ProxyNode[] = [];
+  for (const flag of flagOrder) {
+    result.push(...groups.get(flag)!);
+  }
+  return result;
 }
 
 // --- 去重複命名與還原機場預設排序 ---
