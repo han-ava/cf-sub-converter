@@ -581,8 +581,8 @@ export const HTML_PAGE = `
         
         listEl.innerHTML = nodes.map(n => \`
           <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.05);">
-            <input type="checkbox" class="vless-chk" value="\s\${n.index}" data-port="\s\${n.port}" checked style="width: auto; height: auto; cursor: pointer;" onchange="syncDefaultPort()">
-            <span style="font-size: 0.9rem; color: var(--text-main);">\s\${n.name} <span style="color: var(--text-muted); font-size: 0.8rem;">(\s\${n.server}:\s\${n.port} - \s\${n.type.toUpperCase()})</span></span>
+            <input type="checkbox" class="vless-chk" value="\${n.index}" data-port="\${n.port}" checked style="width: auto; height: auto; cursor: pointer;" onchange="syncDefaultPort()">
+            <span style="font-size: 0.9rem; color: var(--text-main);">\${n.name} <span style="color: var(--text-muted); font-size: 0.8rem;">(\${n.server}:\${n.port} - \${n.type.toUpperCase()})</span></span>
           </label>
         \`).join('');
         
@@ -590,7 +590,7 @@ export const HTML_PAGE = `
         
         syncDefaultPort();
         
-        showToast(\`解析完成，成功載入 \s\${nodes.length} 個 VLESS/VMess 節點！\`);
+        showToast(\`解析完成，成功載入 \${nodes.length} 個 VLESS/VMess 節點！\`);
       } catch(e) {
         showToast('解析出錯: ' + e.message, false);
       } finally {
@@ -643,7 +643,7 @@ export const HTML_PAGE = `
         const res = await resp.json();
         const host = window.location.origin;
 
-        // 💥 1. 簡短化一鍵部署命令：透過 KV 腳本快取路由讀取
+        // 💥 1. 簡短化一鍵部署命令：透過 KV 腳本快取路由讀取 [1]
         const hasKv = res.scriptId && res.scriptId.trim() !== '';
         if (hasKv) {
           document.getElementById('argoCurlCmd').value = \`curl -sSL \${host}/argo/sh/\${res.scriptId} | bash\`;
@@ -654,7 +654,7 @@ export const HTML_PAGE = `
           document.getElementById('argoWgetCmd').value = "或在 wrangler.toml 中設定並部署。";
         }
 
-        // 💥 2. 自動插入至最上方 urlInput 輸入框對應節點下方，不影響其他內容，免去複製貼上
+        // 💥 2. 自動插入至最上方 urlInput 輸入框對應節點下方，不影響其他內容，免去複製貼上 [1]
         const lines = raw.split('\\n');
         const newLines = [];
         const argoNodesMap = {};
@@ -670,7 +670,7 @@ export const HTML_PAGE = `
           newLines.push(line);
           
           if (trimmed.startsWith('vless://') || trimmed.startsWith('vmess://')) {
-            // 如果該節點是被勾選轉換的，自動在其下方貼上 Argo 節點（原節點與原輸入不受破壞）
+            // 如果該節點是被勾選轉換的，自動在其下方貼上 Argo 節點（原節點與原輸入不受破壞） [1]
             if (argoNodesMap[compatCount] !== undefined) {
               newLines.push(argoNodesMap[compatCount]);
             }
