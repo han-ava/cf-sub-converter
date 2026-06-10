@@ -77,7 +77,7 @@ export function addFlag(name: string): string {
   if (isMatch('NO|NOR|OSL', '挪威|奥斯陆|NORWAY')) return "🇳🇴 " + name;
   if (isMatch('FI|FIN|HEL', '芬兰|芬蘭|赫尔辛基|FINLAND')) return "🇫🇮 " + name;
   if (isMatch('DK|DNK|CPH', '丹麦|丹麥|哥本哈根|DENMARK')) return "🇩🇰 " + name;
-  if (isMatch('IE|IRL|DUB', '愛爾蘭|都柏林|IRELAND')) return "🇮🇪 " + name;
+  if (isMatch('IE|IRL|DUB', '爱玩|愛爾蘭|都柏林|IRELAND')) return "🇮🇪 " + name;
   if (isMatch('PT|PRT|LIS', '葡萄牙|里斯本|PORTUGAL')) return "🇵🇹 " + name;
   if (isMatch('TH|THA|BKK', '泰国|泰國|曼谷|THAILAND')) return "🇹🇭 " + name;
   if (isMatch('MY|MYS|KUL', '马来西亚|馬來西亞|吉隆坡|MALAYSIA')) return "🇲🇾 " + name;
@@ -99,7 +99,7 @@ export function addFlag(name: string): string {
   return "🇺🇳 " + name;
 }
 
-// 💥 新增：按國旗進行歸類與黃金順序排序（100% 保留各機場內部原生排序，並自動將 UN 佔位符置底）
+// 💥 修改：按 22 國多梯隊黃金國旗順序進行排序（保留各機場內部原生排序，並自動將 UN 佔位符置底）
 export function groupNodesByFlag(nodes: ProxyNode[]): ProxyNode[] {
   const groups = new Map<string, ProxyNode[]>();
   const flagOrder: string[] = [];
@@ -107,7 +107,6 @@ export function groupNodesByFlag(nodes: ProxyNode[]): ProxyNode[] {
   for (const node of nodes) {
     const flaggedName = addFlag(node.name || 'node');
     
-    // 提取國旗 Emoji (包含 surrogate pairs)
     let flag = '';
     const match = flaggedName.match(/^([\uD83C][\uDDE6-\uDDFF][\uD83C][\uDDE6-\uDDFF])/);
     if (match) {
@@ -123,10 +122,14 @@ export function groupNodesByFlag(nodes: ProxyNode[]): ProxyNode[] {
     groups.get(flag)!.push(node);
   }
   
-  // 黃金排序國家順序
-  const standardOrder = ['🇭🇰', '🇹🇼', '🇯🇵', '🇸🇬', '🇺🇸', '🇰🇷', '🇨🇳'];
+  // 💥 22 國精細分群黃金排序：亞太一線 ➔ 歐美二線 ➔ 東南亞/特區 ➔ 歐洲與全球主流
+  const standardOrder = [
+    '🇭🇰', '🇹🇼', '🇯🇵', '🇸🇬', '🇰🇷',  // 1. 亞太一線核心
+    '🇺🇸', '🇬🇧', '🇨🇦', '🇦🇺',        // 2. 歐美主流大戶
+    '🇲🇴', '🇨🇳', '🇹🇭', '🇻🇳', '🇲🇾', '🇵🇭', '🇮🇩', // 3. 特區與東南亞
+    '🇩🇪', '🇫🇷', '🇳🇱', '🇷🇺', '🇮🇳', '🇹🇷'  // 4. 歐洲與全球主流
+  ];
   
-  // 進行國旗與置底排序
   flagOrder.sort((a, b) => {
     if (a === '🇺🇳' && b !== '🇺🇳') return 1;
     if (b === '🇺🇳' && a !== '🇺🇳') return -1;
