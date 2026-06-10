@@ -51,9 +51,9 @@ if [ -n "$TUNNEL_TOKEN" ]; then
         if [ "$VLESS_TYPE" = "ws" ]; then
             FINAL_LINK="$FINAL_LINK&path=$(echo -n "$VLESS_PATH" | jq -s -R -r @uri 2>/dev/null || echo -n "$VLESS_PATH")"
         fi
-        FINAL_LINK="$FINAL_LINK#Argo-$NODE_NAME"
+        FINAL_LINK="$FINAL_LINK#$NODE_NAME"
     else
-        VMESS_JSON="{\"v\":\"2\",\"ps\":\"Argo-$NODE_NAME\",\"add\":\"$CUSTOM_DOMAIN\",\"port\":443,\"id\":\"$VLESS_UUID\",\"aid\":0,\"scy\":\"auto\",\"net\":\"$VLESS_TYPE\",\"type\":\"none\",\"host\":\"$CUSTOM_DOMAIN\",\"path\":\"$VLESS_PATH\",\"tls\":\"tls\",\"sni\":\"$CUSTOM_DOMAIN\"}"
+        VMESS_JSON="{\"v\":\"2\",\"ps\":\"$NODE_NAME\",\"add\":\"$CUSTOM_DOMAIN\",\"port\":443,\"id\":\"$VLESS_UUID\",\"aid\":0,\"scy\":\"auto\",\"net\":\"$VLESS_TYPE\",\"type\":\"none\",\"host\":\"$CUSTOM_DOMAIN\",\"path\":\"$VLESS_PATH\",\"tls\":\"tls\",\"sni\":\"$CUSTOM_DOMAIN\"}"
         VMESS_B64=$(echo -n "$VMESS_JSON" | base64 | tr -d '\n')
         FINAL_LINK="vmess://$VMESS_B64"
     fi
@@ -103,9 +103,9 @@ EOF
             if [ "$VLESS_TYPE" = "ws" ]; then
                 FINAL_LINK="$FINAL_LINK&path=$(echo -n "$VLESS_PATH" | jq -s -R -r @uri 2>/dev/null || echo -n "$VLESS_PATH")"
             fi
-            FINAL_LINK="$FINAL_LINK#Argo-Temp-$NODE_NAME"
+            FINAL_LINK="$FINAL_LINK#$NODE_NAME"
         else
-            VMESS_JSON="{\"v\":\"2\",\"ps\":\"Argo-Temp-$NODE_NAME\",\"add\":\"$TEMP_DOMAIN\",\"port\":443,\"id\":\"$VLESS_UUID\",\"aid\":0,\"scy\":\"auto\",\"net\":\"$VLESS_TYPE\",\"type\":\"none\",\"host\":\"$TEMP_DOMAIN\",\"path\":\"$VLESS_PATH\",\"tls\":\"tls\",\"sni\":\"$TEMP_DOMAIN\"}"
+            VMESS_JSON="{\"v\":\"2\",\"ps\":\"$NODE_NAME\",\"add\":\"$TEMP_DOMAIN\",\"port\":443,\"id\":\"$VLESS_UUID\",\"aid\":0,\"scy\":\"auto\",\"net\":\"$VLESS_TYPE\",\"type\":\"none\",\"host\":\"$TEMP_DOMAIN\",\"path\":\"$VLESS_PATH\",\"tls\":\"tls\",\"sni\":\"$TEMP_DOMAIN\"}"
             VMESS_B64=$(echo -n "$VMESS_JSON" | base64 | tr -d '\n')
             FINAL_LINK="vmess://$VMESS_B64"
         fi
