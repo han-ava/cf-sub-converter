@@ -49,8 +49,9 @@ async function loadNodes(urlParam: string): Promise<ProxyNode[]> {
   return allNodes;
 }
 
-// 生成一鍵部署 bash 腳本
+// 生成一鍵部署 bash 腳本 (相容 VLESS 與 VMess)
 function makeVpsScript(node: ProxyNode, port: string, token: string, domain: string): string {
+  const nodeType = node.type; // 'vless' 或 'vmess'
   const vlessType = node.network || 'ws';
   const vlessPath = node.wsPath || '/';
   const safeNodeName = node.name.replace(/[^a-zA-Z0-9]/g, '_');
@@ -70,6 +71,7 @@ if [ "$EUID" -ne 0 ]; then
   exit 1
 fi
 
+NODE_TYPE="${nodeType}"
 VLESS_UUID="${node.uuid || ''}"
 VLESS_PATH="${vlessPath}"
 VLESS_TYPE="${vlessType}"
@@ -98,45 +100,52 @@ if [ -n "$TUNNEL_TOKEN" ]; then
     echo -e "\${GREEN}部署成功！\${NC}"
     echo "請確保已在 Cloudflare Dashboard 中將網域 '$CUSTOM_DOMAIN' 指向本地 'http://localhost:$VLESS_PORT'"
     
-    FINAL_LINK="vless://$VLESS_UUID@$CUSTOM_DOMAIN:443?encryption=none&security=tls&type=$VLESS_TYPE&host=$CUSTOM_DOMAIN"
-    if [ "$VLESS_TYPE" = "ws" ]; then
-        FINAL_LINK="\$FINAL_LINK&path=\$(echo -n "$VLESS_PATH" | jq -s -R -r @uri 2>/dev/null || echo -n "$VLESS_PATH")"
+    if [ "\$NODE_TYPE" = "vless" ]; then
+        FINAL_LINK="vless://\$VLESS_UUID@\$CUSTOM_DOMAIN:443?encryption=none&security=tls&type=\$VLESS_TYPE&host=\$CUSTOM_DOMAIN"
+        if [ "\$VLESS_TYPE" = "ws" ]; then
+            FINAL_LINK="\$FINAL_LINK&path=\$(echo -n "\$VLESS_PATH" | jq -s -R -r @uri 2>/dev/null || echo -n "$VLESS_PATH")"
+        fi
+        FINAL_LINK="\$FINAL_LINK#Argo-\$NODE_NAME"
+    else
+        # VMess Base64 節點結構
+        VMESS_JSON="{\\"v\\":\\"2\\",\\"ps\\":\\"Argo-\$NODE_NAME\\",\\"add\\":\\"\$CUSTOM_DOMAIN\\",\\"port\\":443,\\"id\\":\\"\$VLESS_UUID\\",\\"aid\\":0,\\"scy\\":\\"auto\\",\\"net\\":\\"\$VLESS_TYPE\\",\\"type\\":\\"none\\",\\"host\\":\\"\$CUSTOM_DOMAIN\\",\\"path\\":\\"\$VLESS_PATH\\",\\"tls\\":\\"tls\\",\\"sni\\":\\"\$CUSTOM_DOMAIN\\"}"
+        VMESS_B64=\$(echo -n "\$VMESS_JSON" | base64 | tr -d '\\n')
+        FINAL_LINK="vmess://\$VMESS_B64"
     fi
-    FINAL_LINK="\$FINAL_LINK#Argo-$NODE_NAME"
-    echo -e "\\n\${GREEN}您的 Argo VLESS 訂閱連結為:\${NC}"
-    echo -e "\${GREEN}$FINAL_LINK\${NC}\\n"
+    echo -e "\\n\${GREEN}您的 Argo \$NODE_TYPE 訂閱連結為:\${NC}"
+    echo -e "\${GREEN}\$FINAL_LINK\${NC}\\n"
 else
     echo -e "\${GREEN}【臨時隧道模式】正在啟動 Quick Tunnel...\${NC}"
-    systemctl stop cloudflared-argo-${safeNodeName} &> /dev/null
+    systemctl stop cloudflared-argo-\${safeNodeName} &> /dev/null
     
-    cat <<EOF > /etc/systemd/system/cloudflared-argo-${safeNodeName}.service
+    cat <<EOF > /etc/systemd/system/cloudflared-argo-\${safeNodeName}.service
 [Unit]
-Description=Cloudflare Argo Temporary Tunnel for ${node.name}
+Description=Cloudflare Argo Temporary Tunnel for \${NODE_NAME}
 After=network.target
 
 [Service]
 Type=simple
 User=root
-ExecStart=/usr/local/bin/cloudflared tunnel --url http://127.0.0.1:$VLESS_PORT
+ExecStart=/usr/local/bin/cloudflared tunnel --url http://127.0.0.1:\$VLESS_PORT
 Restart=always
 RestartSec=5
-StandardOutput=file:/var/log/cloudflared-argo-${safeNodeName}.log
-StandardError=file:/var/log/cloudflared-argo-${safeNodeName}.log
+StandardOutput=file:/var/log/cloudflared-argo-\${safeNodeName}.log
+StandardError=file:/var/log/cloudflared-argo-\${safeNodeName}.log
 
 [Install]
 WantedBy=multi-user.target
 EOF
 
-    touch /var/log/cloudflared-argo-${safeNodeName}.log
+    touch /var/log/cloudflared-argo-\${safeNodeName}.log
     systemctl daemon-reload
-    systemctl enable cloudflared-argo-${safeNodeName}
-    systemctl start cloudflared-argo-${safeNodeName}
+    systemctl enable cloudflared-argo-\${safeNodeName}
+    systemctl start cloudflared-argo-\${safeNodeName}
     
     echo "正在等待 Cloudflare 分配臨時域名 (約需 10-15 秒)..."
     TEMP_DOMAIN=""
     for i in {1..15}; do
         sleep 1
-        TEMP_DOMAIN=\$(grep -oE 'https://[a-zA-Z0-9-]+\\.trycloudflare\\.com' /var/log/cloudflared-argo-${safeNodeName}.log | head -n 1 | sed 's/https:\\/\\///')
+        TEMP_DOMAIN=\$(grep -oE 'https://[a-zA-Z0-9-]+\\.trycloudflare\\.com' /var/log/cloudflared-argo-\${safeNodeName}.log | head -n 1 | sed 's/https:\\/\\///')
         if [ -n "\$TEMP_DOMAIN" ]; then
             break
         fi
@@ -144,19 +153,25 @@ EOF
     
     if [ -n "\$TEMP_DOMAIN" ]; then
         echo -e "\${GREEN}獲取域名成功: \$TEMP_DOMAIN\${NC}"
-        FINAL_LINK="vless://$VLESS_UUID@\$TEMP_DOMAIN:443?encryption=none&security=tls&type=$VLESS_TYPE&host=\$TEMP_DOMAIN"
-        if [ "$VLESS_TYPE" = "ws" ]; then
-            FINAL_LINK="\$FINAL_LINK&path=\$(echo -n "$VLESS_PATH" | jq -s -R -r @uri 2>/dev/null || echo -n "$VLESS_PATH")"
+        if [ "\$NODE_TYPE" = "vless" ]; then
+            FINAL_LINK="vless://\$VLESS_UUID@\$TEMP_DOMAIN:443?encryption=none&security=tls&type=\$VLESS_TYPE&host=\$TEMP_DOMAIN"
+            if [ "\$VLESS_TYPE" = "ws" ]; then
+                FINAL_LINK="\$FINAL_LINK&path=\$(echo -n "\$VLESS_PATH" | jq -s -R -r @uri 2>/dev/null || echo -n "\$VLESS_PATH")"
+            fi
+            FINAL_LINK="\$FINAL_LINK#Argo-Temp-\$NODE_NAME"
+        else
+            VMESS_JSON="{\\"v\\":\\"2\\",\\"ps\\":\\"Argo-Temp-\$NODE_NAME\\",\\"add\\":\\"\$TEMP_DOMAIN\\",\\"port\\":443,\\"id\\":\\"\$VLESS_UUID\\",\\"aid\\":0,\\"scy\\":\\"auto\\",\\"net\\":\\"\$VLESS_TYPE\\",\\"type\\":\\"none\\",\\"host\\":\\"\$TEMP_DOMAIN\\",\\"path\\":\\"\$VLESS_PATH\\",\\"tls\\":\\"tls\\",\\"sni\\":\\"\$TEMP_DOMAIN\\"}"
+            VMESS_B64=\$(echo -n "\$VMESS_JSON" | base64 | tr -d '\\n')
+            FINAL_LINK="vmess://\$VMESS_B64"
         fi
-        FINAL_LINK="\$FINAL_LINK#Argo-Temp-$NODE_NAME"
         
         echo -e "\\n\${GREEN}=== 部署成功 ===\${NC}"
-        echo -e "原節點名稱: $NODE_NAME"
-        echo -e "轉發連接埠: $VLESS_PORT"
-        echo -e "您的臨時 Argo 節點 VLESS 連結為 (注意：VPS 重啟或重開服務後域名會刷新):"
+        echo -e "原節點名稱: \$NODE_NAME"
+        echo -e "轉發連接埠: \$VLESS_PORT"
+        echo -e "您的臨時 Argo 節點 \$NODE_TYPE 連結為 (注意：VPS 重啟或重開服務後域名會刷新):"
         echo -e "\${GREEN}\$FINAL_LINK\${NC}\\n"
     else
-        echo -e "\${RED}錯誤: 獲取臨時域名超時！請執行 'cat /var/log/cloudflared-argo-${safeNodeName}.log' 檢查日誌。\${NC}"
+        echo -e "\${RED}錯誤: 獲取臨時域名超時！請執行 'cat /var/log/cloudflared-argo-\${safeNodeName}.log' 檢查日誌。\${NC}"
     fi
 fi
 `;
@@ -177,8 +192,8 @@ if (request.method === 'OPTIONS') {
   });
 }
 
-// 💥 1. POST /api/parse-vless (解析傳入內容的 VLESS 節點)
-if (request.method === 'POST' && url.pathname === '/api/parse-vless') {
+// 💥 1. POST /api/parse-vless (同時解析並篩選 VLESS 和 VMess 節點)
+if (request.method === 'POST' && (url.pathname === '/api/parse-vless' || url.pathname === '/api/parse-argo')) {
   try {
     const body: any = await request.json();
     const rawUrl = body.url || '';
@@ -190,15 +205,16 @@ if (request.method === 'POST' && url.pathname === '/api/parse-vless') {
     }
 
     const allNodes = await loadNodes(rawUrl);
-    const vlessNodes = allNodes.filter(n => n.type === 'vless').map((n, idx) => ({
+    // 篩選 VLESS & VMess
+    const argoCompatibleNodes = allNodes.filter(n => n.type === 'vless' || n.type === 'vmess').map((n, idx) => ({
       index: idx,
       name: n.name,
       server: n.server,
       port: n.port,
-      type: n.network || 'tcp'
+      type: n.type
     }));
 
-    return new Response(JSON.stringify(vlessNodes), {
+    return new Response(JSON.stringify(argoCompatibleNodes), {
       headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
     });
   } catch (e: any) {
@@ -209,7 +225,7 @@ if (request.method === 'POST' && url.pathname === '/api/parse-vless') {
   }
 }
 
-// 💥 2. POST /api/argo-generate (生成 VPS 腳本及整合訂閱 - 智慧就近插入邏輯)
+// 💥 2. POST /api/argo-generate (生成 VPS 腳本與整合訂閱 - 支援就近插入)
 if (request.method === 'POST' && url.pathname === '/api/argo-generate') {
   try {
     const body: any = await request.json();
@@ -227,12 +243,12 @@ if (request.method === 'POST' && url.pathname === '/api/argo-generate') {
     }
 
     const allNodes = await loadNodes(rawUrl);
-    const vlessNodes = allNodes.filter(n => n.type === 'vless');
+    const compatibleNodes = allNodes.filter(n => n.type === 'vless' || n.type === 'vmess');
     
-    // 獲取被選定要轉換的原始節點物件引用
-    const selectedVlessObjects = selectedIndices.map(idx => vlessNodes[idx]).filter(Boolean);
+    // 獲取被選定的原始節點物件引用
+    const selectedObjects = selectedIndices.map(idx => compatibleNodes[idx]).filter(Boolean);
 
-    if (selectedVlessObjects.length === 0) {
+    if (selectedObjects.length === 0) {
       return new Response(JSON.stringify({ error: '選擇的節點不存在' }), { 
         status: 400, 
         headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } 
@@ -246,15 +262,14 @@ if (request.method === 'POST' && url.pathname === '/api/argo-generate') {
     for (const node of allNodes) {
       combinedNodes.push(node); // 保留並加入原始節點
       
-      // 如果目前掃描的節點就是被選中要進行轉換的，立即生成 Argo 並插入其正下方
-      if (selectedVlessObjects.includes(node)) {
+      if (selectedObjects.includes(node)) {
         // 串接一鍵 VPS 部署腳本
         scripts += makeVpsScript(node, port, token, domain) + '\n\n';
 
-        // 複製並產生成對的新 Argo 節點（若是固定隧道模式）
+        // 複製並產生成對的新 Argo 節點（僅在固定隧道模式下生成）
         if (token.trim() && domain.trim()) {
           const argoNode: ProxyNode = {
-            type: 'vless',
+            type: node.type, // vless 或 vmess
             name: `Argo-${node.name}`,
             server: domain.trim(),
             port: 443,
@@ -267,17 +282,28 @@ if (request.method === 'POST' && url.pathname === '/api/argo-generate') {
             skipCertVerify: true
           };
 
-          // 配接 Sing-box / Clash 物件結構
-          const sb: any = { tag: argoNode.name, type: 'vless', server: argoNode.server, server_port: argoNode.port, uuid: argoNode.uuid };
-          sb.tls = { enabled: true, server_name: argoNode.sni, insecure: true, utls: { enabled: true, fingerprint: 'chrome' }};
-          if(argoNode.network === 'ws') sb.transport = { type: 'ws', path: argoNode.wsPath, headers: argoNode.wsHeaders };
-          argoNode.singboxObj = sb;
+          if (node.type === 'vless') {
+            const sb: any = { tag: argoNode.name, type: 'vless', server: argoNode.server, server_port: argoNode.port, uuid: argoNode.uuid };
+            sb.tls = { enabled: true, server_name: argoNode.sni, insecure: true, utls: { enabled: true, fingerprint: 'chrome' }};
+            if(argoNode.network === 'ws') sb.transport = { type: 'ws', path: argoNode.wsPath, headers: argoNode.wsHeaders };
+            argoNode.singboxObj = sb;
 
-          const cl: any = { name: argoNode.name, type: 'vless', server: argoNode.server, port: argoNode.port, uuid: argoNode.uuid, udp: true, tls: true, servername: argoNode.sni, 'skip-cert-verify': true, 'client-fingerprint': 'chrome' };
-          if(argoNode.network === 'ws') { cl.network = 'ws'; cl['ws-opts'] = { path: argoNode.wsPath, headers: argoNode.wsHeaders }; }
-          argoNode.clashObj = cl;
+            const cl: any = { name: argoNode.name, type: 'vless', server: argoNode.server, port: argoNode.port, uuid: argoNode.uuid, udp: true, tls: true, servername: argoNode.sni, 'skip-cert-verify': true, 'client-fingerprint': 'chrome' };
+            if(argoNode.network === 'ws') { cl.network = 'ws'; cl['ws-opts'] = { path: argoNode.wsPath, headers: argoNode.wsHeaders }; }
+            argoNode.clashObj = cl;
+          } else {
+            // VMess 配接
+            const sb: any = { tag: argoNode.name, type: 'vmess', server: argoNode.server, server_port: argoNode.port, uuid: argoNode.uuid, security: 'auto' };
+            sb.tls = { enabled: true, server_name: argoNode.sni, insecure: true };
+            if(argoNode.network === 'ws') sb.transport = { type: 'ws', path: argoNode.wsPath, headers: argoNode.wsHeaders };
+            argoNode.singboxObj = sb;
 
-          combinedNodes.push(argoNode); // 直接插入原 VLESS 節點正下方
+            const cl: any = { name: argoNode.name, type: 'vmess', server: argoNode.server, port: argoNode.port, uuid: argoNode.uuid, alterId: 0, cipher: 'auto', udp: true, tls: true, servername: argoNode.sni, network: argoNode.network };
+            if(argoNode.network === 'ws') { cl['ws-opts'] = { path: argoNode.wsPath, headers: argoNode.wsHeaders }; }
+            argoNode.clashObj = cl;
+          }
+
+          combinedNodes.push(argoNode); // 直接插入原節點正下方
         }
       }
     }
