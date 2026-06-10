@@ -241,17 +241,36 @@ export const HTML_PAGE = `
           </h2>
         </div>
         
+        <!-- 💥 優化：第一步：顯示超簡短一鍵極速部署指令 -->
         <div class="form-group" style="margin-top: 1.25rem;">
-          <label style="color: var(--text-main); font-weight: 600;">📋 第一步：請在您的 VPS 上執行以下一鍵安裝腳本 (以 root 權限)：</label>
-          <textarea id="argoVpsScript" readonly style="min-height: 220px; font-size: 0.8rem; font-family: 'JetBrains Mono', monospace;"></textarea>
-          <button class="btn btn-ghost" onclick="copyText('argoVpsScript')" style="margin-top: 0.5rem; width: 100%; justify-content: center;">複製腳本代碼</button>
+          <label style="color: var(--text-main); font-weight: 600;">📋 第一步：請在您的 VPS 上執行以下「一鍵極速安裝指令」 (以 root 權限)：</label>
+          
+          <!-- curl 方案 -->
+          <div style="display: flex; gap: 8px; margin-bottom: 10px; margin-top: 5px;">
+            <input type="text" id="argoCurlCmd" readonly style="font-family: monospace; font-size: 0.85rem; padding: 0.6rem 0.8rem; background: var(--bg-input);">
+            <button class="btn btn-ghost" onclick="copyText('argoCurlCmd')" style="padding: 0 1rem; font-size: 0.85rem;">複製 curl 指令</button>
+          </div>
+          
+          <!-- wget 方案 -->
+          <div style="display: flex; gap: 8px; margin-bottom: 10px;">
+            <input type="text" id="argoWgetCmd" readonly style="font-family: monospace; font-size: 0.85rem; padding: 0.6rem 0.8rem; background: var(--bg-input);">
+            <button class="btn btn-ghost" onclick="copyText('argoWgetCmd')" style="padding: 0 1rem; font-size: 0.85rem;">複製 wget 指令</button>
+          </div>
+          
+          <div class="hint" style="margin-top: 5px;">
+            <svg viewBox="0 0 24 24" style="width:14px;height:14px;color: var(--success);"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+            VPS 將自動下載服務配置、啟動隧道。臨時隧道模式將在部署成功後直接於 VPS 終端機顯示最終 active 的節點連結！
+          </div>
         </div>
 
-        <!-- 💥 已更新：第二步欄位改為明文連結，移除 Base64 -->
+        <!-- 💥 優化：第二步：提示已自動插入最上方 -->
         <div class="form-group" style="margin-top: 1.5rem;">
-          <label style="color: var(--text-main); font-weight: 600;">🔗 第二步：複製混合訂閱結果 (原節點連結 + 新複製的 Argo 節點 - 明文列表)：</label>
-          <textarea id="argoBase64Sub" placeholder="自動加上原節點與新生成之明文連結..." readonly style="min-height: 140px; font-size: 0.8rem; font-family: 'JetBrains Mono', monospace; line-height:1.6;"></textarea>
-          <button class="btn btn-ghost" onclick="copyText('argoBase64Sub')" style="margin-top: 0.5rem; width: 100%; justify-content: center;">複製整合訂閱 (明文列表)</button>
+          <label style="color: var(--text-main); font-weight: 600;">🔗 第二步：Argo 節點已成功直接插入最上方輸入框中：</label>
+          <div style="background: rgba(16, 185, 129, 0.1); border: 1px dashed var(--success); padding: 1rem; border-radius: var(--radius-md); font-size: 0.9rem; color: #f8fafc; line-height: 1.6;">
+            💡 <b>無須任何複製貼上動作！</b>新生成的 Argo 節點（臨時域名佔位連結）已經<b>自動、且不影響任何舊有節點</b>地精確貼入到上方最主要的「資料來源設定」輸入框中了。
+            <br><br>
+            您現在可以直接滑到最上方點擊綠色的 <b>「執行轉換」</b> 按鈕，一鍵生成最新的 Sing-box、Clash 訂閱配置！
+          </div>
         </div>
       </div>
     </section>
@@ -562,17 +581,16 @@ export const HTML_PAGE = `
         
         listEl.innerHTML = nodes.map(n => \`
           <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.05);">
-            <input type="checkbox" class="vless-chk" value="\${n.index}" data-port="\${n.port}" checked style="width: auto; height: auto; cursor: pointer;" onchange="syncDefaultPort()">
-            <span style="font-size: 0.9rem; color: var(--text-main);">\${n.name} <span style="color: var(--text-muted); font-size: 0.8rem;">(\${n.server}:\s\${n.port} - \${n.type.toUpperCase()})</span></span>
+            <input type="checkbox" class="vless-chk" value="\s\${n.index}" data-port="\s\${n.port}" checked style="width: auto; height: auto; cursor: pointer;" onchange="syncDefaultPort()">
+            <span style="font-size: 0.9rem; color: var(--text-main);">\s\${n.name} <span style="color: var(--text-muted); font-size: 0.8rem;">(\s\${n.server}:\s\${n.port} - \s\${n.type.toUpperCase()})</span></span>
           </label>
         \`).join('');
         
         document.getElementById('vlessSelectorWrapper').style.display = 'block';
         
-        // 載入完成時，預設自動同步第一個勾選節點的原生埠
         syncDefaultPort();
         
-        showToast(\`解析完成，成功載入 \${nodes.length} 個 VLESS/VMess 節點！\`);
+        showToast(\`解析完成，成功載入 \s\${nodes.length} 個 VLESS/VMess 節點！\`);
       } catch(e) {
         showToast('解析出錯: ' + e.message, false);
       } finally {
@@ -592,7 +610,7 @@ export const HTML_PAGE = `
       }
     }
 
-    // ⚡ Argo 隧道一鍵生成 (返回明文連結)
+    // ⚡ Argo 隧道一鍵生成 (優化：實現就近自動插入 urlInput，VPS 指令極速簡短化)
     async function generateArgo() {
       const raw = document.getElementById('urlInput').value.trim();
       const checkboxes = document.querySelectorAll('.vless-chk:checked');
@@ -608,7 +626,7 @@ export const HTML_PAGE = `
       const btn = document.getElementById('generateArgoBtn');
       const originalText = btn.textContent;
       btn.disabled = true;
-      btn.textContent = '正在與後端生成 Argo 一鍵腳本與明文訂閱...';
+      btn.textContent = '正在生成中...';
       
       try {
         const resp = await fetch('/api/argo-generate', {
@@ -623,12 +641,52 @@ export const HTML_PAGE = `
         }
         
         const res = await resp.json();
+        const host = window.location.origin;
+
+        // 💥 1. 簡短化一鍵部署命令：透過 KV 腳本快取路由讀取
+        const hasKv = res.scriptId && res.scriptId.trim() !== '';
+        if (hasKv) {
+          document.getElementById('argoCurlCmd').value = \`curl -sSL \${host}/argo/sh/\${res.scriptId} | bash\`;
+          document.getElementById('argoWgetCmd').value = \`wget -qO- \${host}/argo/sh/\${res.scriptId} | bash\`;
+        } else {
+          // 若無 KV 綁定，則降級為本地複製（提示用戶）
+          document.getElementById('argoCurlCmd').value = "請綁定 KV 命名空間以解鎖極簡一鍵命令";
+          document.getElementById('argoWgetCmd').value = "或在 wrangler.toml 中設定並部署。";
+        }
+
+        // 💥 2. 自動插入至最上方 urlInput 輸入框對應節點下方，不影響其他內容，免去複製貼上
+        const lines = raw.split('\\n');
+        const newLines = [];
+        const argoNodesMap = {};
         
-        document.getElementById('argoVpsScript').value = res.script;
-        document.getElementById('argoBase64Sub').value = res.links; // 💥 更新為明文連結
-        
+        // 將後端傳回的 argoNodes 整理成映射
+        res.argoNodes.forEach(item => {
+          argoNodesMap[item.originalIndex] = item.link;
+        });
+
+        let compatCount = 0;
+        for (let line of lines) {
+          const trimmed = line.trim();
+          newLines.push(line);
+          
+          if (trimmed.startsWith('vless://') || trimmed.startsWith('vmess://')) {
+            // 如果該節點是被勾選轉換的，自動在其下方貼上 Argo 節點（原節點與原輸入不受破壞）
+            if (argoNodesMap[compatCount] !== undefined) {
+              newLines.push(argoNodesMap[compatCount]);
+            }
+            compatCount++;
+          }
+        }
+
+        // 更新最上方資料來源輸入框的值
+        document.getElementById('urlInput').value = newLines.join('\\n');
+
+        // 將明文列表也同步渲染進 argoBase64Sub 看板，方便需要的人手動備份
+        const argoPlainLinks = res.argoNodes.map(x => x.link).join('\\n');
+        document.getElementById('argoBase64Sub').value = argoPlainLinks;
+
         document.getElementById('argoResults').classList.add('show');
-        showToast('Argo 隧道部署腳本與明文訂閱生成成功！');
+        showToast('🎉 Argo 節點已精確插入至最上方，VPS 一鍵命令生成成功！');
         document.getElementById('argoResults').scrollIntoView({ behavior: 'smooth' });
       } catch(e) {
         showToast('生成失敗: ' + e.message, false);
@@ -647,7 +705,7 @@ export const HTML_PAGE = `
     function copyText(id) {
       const el = document.getElementById(id);
       el.select();
-      navigator.clipboard.writeText(el.value).then(() => showToast('已成功複製到剪貼簿！'));
+      navigator.clipboard.writeText(el.value).then(() => showToast('已成功複製一鍵安裝指令！'));
     }
 
     function showQr(id) {
