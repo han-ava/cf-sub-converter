@@ -90,7 +90,7 @@ if [ -n "$TUNNEL_TOKEN" ]; then
     echo -e "\n${GREEN}=== 部署成功 【固定域名模式】 ===${NC}"
     echo -e "原節點名稱: $NODE_NAME"
     echo -e "轉發連接埠: $DETECTED_PORT"
-    echo -e "綁定自訂域名: $CUSTOM_DOMAIN" [1]
+    echo -e "綁定自訂域名: $CUSTOM_DOMAIN"
     
     if [ "$NODE_TYPE" = "vless" ]; then
         FINAL_LINK="vless://$VLESS_UUID@$CUSTOM_DOMAIN:443?encryption=none&security=tls&type=$VLESS_TYPE&host=$CUSTOM_DOMAIN"
@@ -120,14 +120,13 @@ User=root
 ExecStart=/usr/local/bin/cloudflared tunnel --url $LOCAL_URL $EXTRA_ARGS
 Restart=always
 RestartSec=5
-StandardOutput=file:/var/log/cloudflared-argo-${SAFE_NODE_NAME}.log
-StandardError=file:/var/log/cloudflared-argo-${SAFE_NODE_NAME}.log
+StandardOutput=journal
+StandardError=journal
 
 [Install]
 WantedBy=multi-user.target
 EOF
 
-    touch /var/log/cloudflared-argo-${SAFE_NODE_NAME}.log
     systemctl daemon-reload
     systemctl enable cloudflared-argo-${SAFE_NODE_NAME}
     systemctl start cloudflared-argo-${SAFE_NODE_NAME}
@@ -136,8 +135,8 @@ EOF
     TEMP_DOMAIN=""
     for i in {1..15}; do
         sleep 1
-        # 💥 引入甬哥 (yonggekkk) 穩定性 100% 的極簡管道提取算法！
-        TEMP_DOMAIN=$(grep -a 'trycloudflare.com' /var/log/cloudflared-argo-${SAFE_NODE_NAME}.log 2>/dev/null | awk 'NR==2' | awk -F// '{print $2}' | awk '{print $1}')
+        # 💥 核心修正：改用系統級 journalctl 探測，並搭配 tail -n 1 永遠提取最新活著的網域，徹底解決 530 緩存！
+        TEMP_DOMAIN=$(journalctl -u cloudflared-argo-${SAFE_NODE_NAME} -n 50 --no-pager 2>/dev/null | grep -o 'https://[a-zA-Z0-9-]*\.trycloudflare\.com' | tail -n 1 | cut -d'/' -f3)
         if [ -n "$TEMP_DOMAIN" ]; then
             break
         fi
@@ -164,6 +163,6 @@ EOF
         echo -e "您的臨時 Argo 節點 $NODE_TYPE 連結為 (注意：VPS 重啟或重開服務後域名會刷新):"
         echo -e "${GREEN}$FINAL_LINK${NC}\n"
     else
-        echo -e "${RED}錯誤: 獲取臨時域名超時！請執行 'cat /var/log/cloudflared-argo-${SAFE_NODE_NAME}.log' 檢查日誌。${NC}"
+        echo -e "${RED}錯誤: 獲取臨時域名超時！請執行 'journalctl -u cloudflared-argo-${SAFE_NODE_NAME} -n 30' 檢查日誌。${NC}"
     fi
 fi
