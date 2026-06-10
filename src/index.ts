@@ -3,7 +3,7 @@ import packageJson from '../package.json';
 import { Env, ProxyNode } from './types';
 import { HTML_PAGE } from './constants';
 import { parseContent } from './parser';
-import { toSingBoxWithTemplate, toClashWithTemplate, toBase64, toRawLinks } from './generator';
+import { toSingBoxWithTemplate, toClashWithTemplate, toBase64 } from './generator';
 import { deduplicateNodeNames } from './utils';
 
 const version = packageJson.version || '2.5.0';
@@ -60,7 +60,7 @@ function safeBtoa(str: string): string {
   }
 }
 
-// 動態從 GitHub 獲取模板腳本並進行變數置換 (💥 升級：自動判定與替換 {{VLESS_TLS}} 參數) [1]
+// 動態從 GitHub 獲取模板腳本並進行變數置換
 async function getArgoScriptFromGithub(node: ProxyNode, port: string, token: string, domain: string): Promise<string> {
   const GITHUB_TEMPLATE_URL = "https://raw.githubusercontent.com/sammy0101/cf-sub-converter/main/argo.sh";
   let template = "";
@@ -91,7 +91,7 @@ cloudflared tunnel --url http://127.0.0.1:{{VLESS_PORT}}
   const argoNodeName = `${node.name}_Argo`;
   const isTls = node.tls ? "true" : "false";
 
-  // 替換模板中的自訂佔位符 [1]
+  // 替換模板中的自訂佔位符
   return template
     .replace("{{NODE_TYPE}}", node.type)
     .replace("{{VLESS_UUID}}", node.uuid || '')
@@ -139,7 +139,7 @@ if (request.method === 'GET' && url.pathname.startsWith('/argo/sh/')) {
   });
 }
 
-// POST /api/parse-argo (同時解析並篩選 VLESS 和 VMess 節點)
+// POST /api/parse-argo (同時解析並篩選 VLESS 和 VMess 節點 - 💥 新增：返回 host 欄位供前端做 CDN 預測)
 if (request.method === 'POST' && (url.pathname === '/api/parse-vless' || url.pathname === '/api/parse-argo')) {
   try {
     const body: any = await request.json();
@@ -152,13 +152,14 @@ if (request.method === 'POST' && (url.pathname === '/api/parse-vless' || url.pat
     }
 
     const allNodes = await loadNodes(rawUrl);
-    // 篩選 VLESS & VMess
+    // 篩選 VLESS & VMess 
     const argoCompatibleNodes = allNodes.filter(n => n.type === 'vless' || n.type === 'vmess').map((n, idx) => ({
       index: idx,
       name: n.name,
       server: n.server,
       port: n.port,
-      type: n.type
+      type: n.type,
+      host: n.wsHeaders?.Host || n.sni || n.server // 💥 返回實際的 Host / SNI
     }));
 
     return new Response(JSON.stringify(argoCompatibleNodes), {
