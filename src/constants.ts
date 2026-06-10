@@ -267,12 +267,12 @@ export const HTML_PAGE = `
 
         <!-- 第二步：顯示與複製整合後的明文列表 -->
         <div class="form-group" style="margin-top: 1.5rem;">
-          <label style="color: var(--text-main); font-weight: 600;">🔗 第二步：新複製的 Argo 節點明文連結列表：</label>
-          <textarea id="argoBase64Sub" placeholder="自動加上原節點與新生成之明文連結..." readonly style="min-height: 140px; font-size: 0.8rem; font-family: 'JetBrains Mono', monospace; line-height:1.6;"></textarea>
-          <button class="btn btn-ghost" onclick="copyText('argoBase64Sub')" style="margin-top: 0.5rem; width: 100%; justify-content: center;">複製 Argo 節點明文列表</button>
+          <label style="color: var(--text-main); font-weight: 600;">🔗 第二步：新產生的 Argo 明文節點連結列表 (僅固定域名模式生效，臨時域名模式請直接在 VPS 複製)：</label>
+          <textarea id="argoBase64Sub" placeholder="臨時域名具有動態性，一鍵指令部署成功後請直接於您 VPS 的終端機內進行拷貝..." readonly style="min-height: 140px; font-size: 0.8rem; font-family: 'JetBrains Mono', monospace; line-height:1.6;"></textarea>
+          <button class="btn btn-ghost" onclick="copyText('argoBase64Sub')" style="margin-top: 0.5rem; width: 100%; justify-content: center;">複製明文節點列表</button>
           <div class="hint" style="margin-top: 8px; color: var(--success);">
             <svg viewBox="0 0 24 24" style="width:14px;height:14px;color: var(--success);"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
-            💡 提示：新產生的 Argo 節點已自動貼入上方輸入框最底 [1]。您現在可以直接在上方執行轉換！
+            💡 提示：請複製第一步的指令至您的 VPS 執行。如果是臨時隧道，運行成功後請直接在您 VPS 終端機複製最終連線連結！
           </div>
         </div>
       </div>
@@ -602,25 +602,16 @@ export const HTML_PAGE = `
       }
     }
 
-    // ⚡ 當勾選狀態改變時，自動將監聽連接埠替換成所選節點的埠 (💥 加入 CDN / 優選 IP 智慧辨識，自動預填為 443 埠)
+    // ⚡ 當勾選狀態改變時，100% 精確同步為所選節點之原生連接埠（無任何 CDN 智慧改寫覆蓋）
     function syncDefaultPort() {
       const checkedInput = document.querySelector('.vless-chk:checked');
       if (checkedInput) {
         const port = checkedInput.getAttribute('data-port');
-        const server = checkedInput.getAttribute('data-server') || "";
-        const host = checkedInput.getAttribute('data-host') || "";
-        
-        // 智慧辨識 CDN/優選節點。此類節點本機 Nginx 多數監聽於標準的安全連接埠 443 [1]
-        const cdnPorts = ["8443", "2096", "2053", "2087", "2083"];
-        if (server !== host && cdnPorts.includes(port)) {
-          document.getElementById('argoLocalPort').value = "443";
-        } else {
-          document.getElementById('argoLocalPort').value = port;
-        }
+        document.getElementById('argoLocalPort').value = port;
       }
     }
 
-    // ⚡ Argo 隧道一鍵生成 (修正：1. 明示二選一，2. 解決貼入 HTTPS 網址時，Argo 明文追加到末尾的 Bug) [1]
+    // ⚡ Argo 隧道一鍵生成 (修正：不重寫 urlInput、第二步只顯示新生成的 Argo 連結) [1]
     async function generateArgo() {
       const raw = document.getElementById('urlInput').value.trim();
       const checkboxes = document.querySelectorAll('.vless-chk:checked');
@@ -653,7 +644,7 @@ export const HTML_PAGE = `
         const res = await resp.json();
         const host = window.location.origin;
 
-        // 1. 填入一鍵指令 [1]
+        // 1. 填入極簡一鍵指令 [1]
         const hasKv = res.scriptId && res.scriptId.trim() !== '';
         if (hasKv) {
           document.getElementById('argoCurlCmd').value = \`curl -sSL \${host}/argo/sh/\${res.scriptId} | bash\`;
@@ -663,18 +654,12 @@ export const HTML_PAGE = `
           document.getElementById('argoWgetCmd').value = "或在 wrangler.toml 中設定並部署。";
         }
 
-        // 2. 自動插入邏輯：精準「換行追加貼到」原內容的最底部 [1]
+        // 2. 修正：下方明文文字框只顯示新產生的 Argo 節點，供手動備份複製
         const argoPlainLinks = res.argoNodes.map(x => x.link).join('\\n');
-        
-        // 追加置底，不破壞任何既有內容 [1]
-        const combinedText = raw + '\\n' + argoPlainLinks;
-        document.getElementById('urlInput').value = combinedText;
-
-        // 3. 修正：下方文字框「只顯示新產生的 Argo 節點」 [1]
         document.getElementById('argoBase64Sub').value = argoPlainLinks;
 
         document.getElementById('argoResults').classList.add('show');
-        showToast('🎉 Argo 節點已插入上方最底，一鍵命令生成成功！');
+        showToast('🎉 Argo 隧道部署指令已成功生成！');
         document.getElementById('argoResults').scrollIntoView({ behavior: 'smooth' });
       } catch(e) {
         showToast('生成失敗: ' + e.message, false);
@@ -693,7 +678,7 @@ export const HTML_PAGE = `
     function copyText(id) {
       const el = document.getElementById(id);
       el.select();
-      navigator.clipboard.writeText(el.value).then(() => showToast('已複製指令！'));
+      navigator.clipboard.writeText(el.value).then(() => showToast('已成功複製！'));
     }
 
     function showQr(id) {
