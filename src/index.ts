@@ -1,5 +1,4 @@
 // @ts-ignore
-// 🔑 智慧同步：引入專案根目錄的 package.json
 import packageJson from '../package.json';
 import { Env, ProxyNode } from './types';
 import { HTML_PAGE } from './constants';
@@ -7,14 +6,288 @@ import { parseContent } from './parser';
 import { toSingBoxWithTemplate, toClashWithTemplate, toBase64 } from './generator';
 import { deduplicateNodeNames } from './utils';
 
-// 動態獲取 package.json 中的版本號，若找不到則使用 v2.5.0 兜底
 const version = packageJson.version || '2.5.0';
+
+// 輔助載入與解析節點（不含流量統計，專供 API 使用）
+async function loadNodes(urlParam: string): Promise<ProxyNode[]> {
+  const inputs = urlParam.split(/[\n\r|]+/); 
+  const allNodes: ProxyNode[] = [];
+
+  await Promise.all(inputs.map(async (input) => { 
+    const trimmed = input.trim(); 
+    if (!trimmed) return;
+    
+    if (trimmed.startsWith('http')) { 
+      try { 
+        const separator = trimmed.includes('?') ? '&' : '?';
+        const fetchUrl = `${trimmed}${separator}t=${Date.now()}`;
+        
+        const resp = await fetch(fetchUrl, { 
+          headers: { 
+            'User-Agent': 'v2rayNG/1.8.5',
+            'Accept': '*/*'
+          } 
+        }); 
+        
+        if (resp.ok) { 
+          const text = await resp.text(); 
+          if (!text.trim().startsWith('<')) {
+             try {
+               const parsed = await parseContent(text);
+               allNodes.push(...parsed);
+             } catch(err) {}
+          }
+        }
+      } catch (e) {} 
+    } else { 
+      try {
+        const parsed = await parseContent(trimmed);
+        allNodes.push(...parsed); 
+      } catch(err) {}
+    }
+  }));
+  return allNodes;
+}
+
+// 生成一鍵部署 bash 腳本
+function makeVpsScript(node: ProxyNode, port: string, token: string, domain: string): string {
+  const vlessType = node.network || 'ws';
+  const vlessPath = node.wsPath || '/';
+  const safeNodeName = node.name.replace(/[^a-zA-Z0-9]/g, '_');
+  
+  return `#!/bin/bash
+# Cloudflare Argo Tunnel 一鍵部署腳本 (由 cf-sub-converter 自動生成)
+# 適用於已使用 mack-a v2ray-agent 部署之 Xray/Sing-box 環境
+
+GREEN='\\033[0;32m'
+RED='\\033[0;31m'
+NC='\\033[0m'
+
+echo -e "\${GREEN}=== 開始部署 Cloudflare Argo 隧道 (\${NODE_NAME}) ===\${NC}"
+
+if [ "$EUID" -ne 0 ]; then
+  echo -e "\${RED}錯誤: 請使用 root 權限執行此腳本！\${NC}"
+  exit 1
+fi
+
+VLESS_UUID="${node.uuid || ''}"
+VLESS_PATH="${vlessPath}"
+VLESS_TYPE="${vlessType}"
+VLESS_PORT="${port}"
+NODE_NAME="${node.name}"
+TUNNEL_TOKEN="${token.trim()}"
+CUSTOM_DOMAIN="${domain.trim()}"
+
+# 下載安裝 cloudflared
+if ! command -v cloudflared &> /dev/null; then
+    echo "正在下載安裝 cloudflared..."
+    curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o /usr/local/bin/cloudflared
+    chmod +x /usr/local/bin/cloudflared
+else
+    echo "cloudflared 已存在，跳過安裝。"
+fi
+
+if [ -n "$TUNNEL_TOKEN" ]; then
+    echo -e "\${GREEN}【固定隧道模式】正在配置服務...\${NC}"
+    cloudflared service uninstall &> /dev/null
+    cloudflared service install "$TUNNEL_TOKEN"
+    systemctl daemon-reload
+    systemctl enable cloudflared
+    systemctl restart cloudflared
+    
+    echo -e "\${GREEN}部署成功！\${NC}"
+    echo "請確保已在 Cloudflare Dashboard 中將網域 '$CUSTOM_DOMAIN' 指向本地 'http://localhost:$VLESS_PORT'"
+    
+    FINAL_LINK="vless://$VLESS_UUID@$CUSTOM_DOMAIN:443?encryption=none&security=tls&type=$VLESS_TYPE&host=$CUSTOM_DOMAIN"
+    if [ "$VLESS_TYPE" = "ws" ]; then
+        FINAL_LINK="\$FINAL_LINK&path=\$(echo -n "$VLESS_PATH" | jq -s -R -r @uri 2>/dev/null || echo -n "$VLESS_PATH")"
+    fi
+    FINAL_LINK="\$FINAL_LINK#Argo-$NODE_NAME"
+    echo -e "\\n\${GREEN}您的 Argo VLESS 訂閱連結為:\${NC}"
+    echo -e "\${GREEN}$FINAL_LINK\${NC}\\n"
+else
+    echo -e "\${GREEN}【臨時隧道模式】正在啟動 Quick Tunnel...\${NC}"
+    systemctl stop cloudflared-argo-${safeNodeName} &> /dev/null
+    
+    cat <<EOF > /etc/systemd/system/cloudflared-argo-${safeNodeName}.service
+[Unit]
+Description=Cloudflare Argo Temporary Tunnel for ${node.name}
+After=network.target
+
+[Service]
+Type=simple
+User=root
+ExecStart=/usr/local/bin/cloudflared tunnel --url http://127.0.0.1:$VLESS_PORT
+Restart=always
+RestartSec=5
+StandardOutput=file:/var/log/cloudflared-argo-${safeNodeName}.log
+StandardError=file:/var/log/cloudflared-argo-${safeNodeName}.log
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    touch /var/log/cloudflared-argo-${safeNodeName}.log
+    systemctl daemon-reload
+    systemctl enable cloudflared-argo-${safeNodeName}
+    systemctl start cloudflared-argo-${safeNodeName}
+    
+    echo "正在等待 Cloudflare 分配臨時域名 (約需 10-15 秒)..."
+    TEMP_DOMAIN=""
+    for i in {1..15}; do
+        sleep 1
+        TEMP_DOMAIN=\$(grep -oE 'https://[a-zA-Z0-9-]+\\.trycloudflare\\.com' /var/log/cloudflared-argo-${safeNodeName}.log | head -n 1 | sed 's/https:\\/\\///')
+        if [ -n "\$TEMP_DOMAIN" ]; then
+            break
+        fi
+    done
+    
+    if [ -n "\$TEMP_DOMAIN" ]; then
+        echo -e "\${GREEN}獲取域名成功: \$TEMP_DOMAIN\${NC}"
+        FINAL_LINK="vless://$VLESS_UUID@\$TEMP_DOMAIN:443?encryption=none&security=tls&type=$VLESS_TYPE&host=\$TEMP_DOMAIN"
+        if [ "$VLESS_TYPE" = "ws" ]; then
+            FINAL_LINK="\$FINAL_LINK&path=\$(echo -n "$VLESS_PATH" | jq -s -R -r @uri 2>/dev/null || echo -n "$VLESS_PATH")"
+        fi
+        FINAL_LINK="\$FINAL_LINK#Argo-Temp-$NODE_NAME"
+        
+        echo -e "\\n\${GREEN}=== 部署成功 ===\${NC}"
+        echo -e "原節點名稱: $NODE_NAME"
+        echo -e "轉發連接埠: $VLESS_PORT"
+        echo -e "您的臨時 Argo 節點 VLESS 連結為 (注意：VPS 重啟或重開服務後域名會刷新):"
+        echo -e "\${GREEN}\$FINAL_LINK\${NC}\\n"
+    else
+        echo -e "\${RED}錯誤: 獲取臨時域名超時！請執行 'cat /var/log/cloudflared-argo-${safeNodeName}.log' 檢查日誌。\${NC}"
+    fi
+fi
+`;
+}
 
 export default {
 async fetch(request: Request, env: Env, ctx: any): Promise<Response> {
 const url = new URL(request.url);
 
-// 💥 0. GET /version (標準 SubConverter 檢測端點，動態讀取專案 package.json 版本與網域)
+// 跨域預檢
+if (request.method === 'OPTIONS') {
+  return new Response(null, {
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type',
+    }
+  });
+}
+
+// 💥 1. POST /api/parse-vless (解析傳入內容的 VLESS 節點)
+if (request.method === 'POST' && url.pathname === '/api/parse-vless') {
+  try {
+    const body: any = await request.json();
+    const rawUrl = body.url || '';
+    if (!rawUrl.trim()) {
+      return new Response(JSON.stringify({ error: '請輸入有效的節點內容' }), { 
+        status: 400, 
+        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } 
+      });
+    }
+
+    const allNodes = await loadNodes(rawUrl);
+    const vlessNodes = allNodes.filter(n => n.type === 'vless').map((n, idx) => ({
+      index: idx,
+      name: n.name,
+      server: n.server,
+      port: n.port,
+      type: n.network || 'tcp'
+    }));
+
+    return new Response(JSON.stringify(vlessNodes), {
+      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+    });
+  } catch (e: any) {
+    return new Response(JSON.stringify({ error: e.message }), { 
+      status: 500, 
+      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } 
+    });
+  }
+}
+
+// 💥 2. POST /api/argo-generate (生成 VPS 腳本及整合訂閱)
+if (request.method === 'POST' && url.pathname === '/api/argo-generate') {
+  try {
+    const body: any = await request.json();
+    const rawUrl = body.url || '';
+    const selectedIndices: number[] = body.indices || [];
+    const port = body.port || '8080';
+    const token = body.token || '';
+    const domain = body.domain || '';
+
+    if (!rawUrl.trim() || selectedIndices.length === 0) {
+      return new Response(JSON.stringify({ error: '無效的參數或未選擇任何節點' }), { 
+        status: 400, 
+        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } 
+      });
+    }
+
+    const allNodes = await loadNodes(rawUrl);
+    const vlessNodes = allNodes.filter(n => n.type === 'vless');
+    const selectedNodes = selectedIndices.map(idx => vlessNodes[idx]).filter(Boolean);
+
+    if (selectedNodes.length === 0) {
+      return new Response(JSON.stringify({ error: '選擇的節點不存在' }), { 
+        status: 400, 
+        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } 
+      });
+    }
+
+    const combinedNodes = [...allNodes];
+    let scripts = '';
+
+    for (const node of selectedNodes) {
+      // 串接一鍵 VPS 部署腳本
+      scripts += makeVpsScript(node, port, token, domain) + '\n\n';
+
+      // 複製並產生成對的新 Argo 節點（若是固定隧道模式）
+      if (token.trim() && domain.trim()) {
+        const argoNode: ProxyNode = {
+          type: 'vless',
+          name: `Argo-${node.name}`,
+          server: domain.trim(),
+          port: 443,
+          uuid: node.uuid,
+          tls: true,
+          network: node.network || 'ws',
+          wsPath: node.wsPath || '/',
+          wsHeaders: { Host: domain.trim() },
+          sni: domain.trim(),
+          skipCertVerify: true
+        };
+
+        // 配接 Sing-box / Clash 物件結構
+        const sb: any = { tag: argoNode.name, type: 'vless', server: argoNode.server, server_port: argoNode.port, uuid: argoNode.uuid };
+        sb.tls = { enabled: true, server_name: argoNode.sni, insecure: true, utls: { enabled: true, fingerprint: 'chrome' }};
+        if(argoNode.network === 'ws') sb.transport = { type: 'ws', path: argoNode.wsPath, headers: argoNode.wsHeaders };
+        argoNode.singboxObj = sb;
+
+        const cl: any = { name: argoNode.name, type: 'vless', server: argoNode.server, port: argoNode.port, uuid: argoNode.uuid, udp: true, tls: true, servername: argoNode.sni, 'skip-cert-verify': true, 'client-fingerprint': 'chrome' };
+        if(argoNode.network === 'ws') { cl.network = 'ws'; cl['ws-opts'] = { path: argoNode.wsPath, headers: argoNode.wsHeaders }; }
+        argoNode.clashObj = cl;
+
+        combinedNodes.push(argoNode);
+      }
+    }
+
+    const base64Sub = toBase64(combinedNodes);
+
+    return new Response(JSON.stringify({ script: scripts, base64: base64Sub }), {
+      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+    });
+  } catch (e: any) {
+    return new Response(JSON.stringify({ error: e.message }), { 
+      status: 500, 
+      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } 
+    });
+  }
+}
+
+// 0. GET /version 
 if (request.method === 'GET' && url.pathname === '/version') {
   return new Response(`subconverter v${version} ${url.host} backend\n`, {
     headers: { 
@@ -25,13 +298,12 @@ if (request.method === 'GET' && url.pathname === '/version') {
   });
 }
 
-// 1. POST /save (儲存短連結到 KV，智慧儲存過濾與重命名規則)
+// 1. POST /save 
 if (request.method === 'POST' && url.pathname === '/save') {
   try {
     const body: any = await request.json();
     if (!body.path || !body.content) return new Response('Missing path or content', { status: 400 });
     
-    // 儲存完整配置 (資料來源 + 保留 + 排除 + 重命名)
     const saveData = {
       content: body.content,
       include: body.include || '',
@@ -40,7 +312,6 @@ if (request.method === 'POST' && url.pathname === '/save') {
     };
     await env.SUB_CACHE.put(body.path, JSON.stringify(saveData));
     
-    // 儲存成功後，自動重定向到結果頁面
     const redirectUrl = `/?url=${encodeURIComponent(body.content)}&target=singbox&include=${encodeURIComponent(body.include || '')}&exclude=${encodeURIComponent(body.exclude || '')}&rename=${encodeURIComponent(body.rename || '')}`;
     return new Response(null, { 
       status: 302, 
@@ -49,7 +320,7 @@ if (request.method === 'POST' && url.pathname === '/save') {
   } catch (e) { return new Response('Error saving profile', { status: 500 }); }
 }
 
-// 2. KV 收藏 API (支援 include、exclude 與 rename 欄位)
+// 2. KV 收藏 API
 const FAVS_KEY = 'favorites';
 
 async function getFavs(): Promise<any[]> {
@@ -61,7 +332,6 @@ async function saveFavs(favs: any[]): Promise<void> {
   await env.SUB_CACHE.put(FAVS_KEY, JSON.stringify(favs));
 }
 
-// GET /favs (讀取收藏)
 if (request.method === 'GET' && url.pathname === '/favs') {
   const favs = await getFavs();
   return new Response(JSON.stringify(favs), { 
@@ -69,7 +339,6 @@ if (request.method === 'GET' && url.pathname === '/favs') {
   });
 }
 
-// POST /favs (新增收藏 - 支援過濾與重命名)
 if (request.method === 'POST' && url.pathname === '/favs') {
   try {
     const body: any = await request.json();
@@ -87,7 +356,6 @@ if (request.method === 'POST' && url.pathname === '/favs') {
   } catch (e) { return new Response('Error saving favorite', { status: 500 }); }
 }
 
-// PUT /favs (更新收藏 - 支援過濾與重命名)
 if (request.method === 'PUT' && url.pathname === '/favs') {
   try {
     const body: any = await request.json();
@@ -107,7 +375,6 @@ if (request.method === 'PUT' && url.pathname === '/favs') {
   } catch (e) { return new Response('Error updating favorite', { status: 500 }); }
 }
 
-// DELETE /favs (刪除收藏)
 if (request.method === 'DELETE' && url.pathname === '/favs') {
   try {
     const body: any = await request.json();
@@ -121,7 +388,7 @@ if (request.method === 'DELETE' && url.pathname === '/favs') {
   } catch (e) { return new Response('Error deleting favorite', { status: 500 }); }
 }
 
-// 3. GET /path (讀取短連結，同時取得對應規則)
+// 3. GET /path (讀取短連結或一般轉換)
 let urlParam = url.searchParams.get('url') || '';
 let includeParam = url.searchParams.get('include') || '';
 let excludeParam = url.searchParams.get('exclude') || '';
@@ -129,7 +396,6 @@ let renameParam = url.searchParams.get('rename') || '';
 
 const path = decodeURIComponent(url.pathname.slice(1)); 
 
-// 智慧相容：如果路徑是 'sub'，這是標準 SubConverter 的 API 端點，我們跳過 KV 查詢，直接視為普通轉換！
 if (path && path !== 'sub' && path !== 'favicon.ico' && path !== '') {
   const stored = await env.SUB_CACHE.get(path);
   if (stored) { 
@@ -142,19 +408,15 @@ if (path && path !== 'sub' && path !== 'favicon.ico' && path !== '') {
         if (!renameParam) renameParam = parsed.rename || '';
       }
     } catch (e) {
-      // 相容舊版純文字短連結
       urlParam = stored; 
     }
   }
 }
 
-// 顯示首頁或回傳 API 錯誤
 if (!urlParam || urlParam.trim() === '') {
-  // 如果請求的是 /sub，卻沒有帶 url 參數，回傳標準 API 400 錯誤而非 HTML 首頁
   if (path === 'sub') {
     return new Response('Error: Missing parameter "url"', { status: 400, headers: { 'Access-Control-Allow-Origin': '*' } });
   }
-  // 💥 智慧同步：將前端 UI 寫死的 "v2.5.0" 動態替換為 package.json 中的最新版本號！
   const dynamicHtml = HTML_PAGE.replace('v2.5.0', `v${version}`);
   return new Response(dynamicHtml, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
 }
@@ -164,7 +426,6 @@ const inputs = urlParam.split(/[\n\r|]+/);
 const allNodes: ProxyNode[] = [];
 const errors: string[] = [];
 
-// 流量資訊累加變數
 let totalUpload = 0;
 let totalDownload = 0;
 let totalTotal = 0;
@@ -190,7 +451,6 @@ await Promise.all(inputs.map(async (input) => {
       if (resp.ok) { 
         const text = await resp.text(); 
         
-        // 機場流量資訊 (subscription-userinfo) 解析與累加
         const userInfo = resp.headers.get('subscription-userinfo');
         if (userInfo) {
           hasTrafficInfo = true;
@@ -206,7 +466,7 @@ await Promise.all(inputs.map(async (input) => {
           const expireVal = expireMatch ? parseInt(expireMatch[1]) : 0;
           if (expireVal > 0) {
             if (minExpire === 0 || expireVal < minExpire) {
-              minExpire = expireVal; // 取多個訂閱中最先到期的時間
+              minExpire = expireVal; 
             }
           }
         }
@@ -245,10 +505,8 @@ if (allNodes.length === 0) {
   });
 }
 
-// 智慧節點與過濾
 let filteredNodes = allNodes;
 
-// 1. 節點名稱智慧替換 (支援 DEL- 與 - 分隔)
 if (renameParam) {
   try {
     const rules = renameParam.split('|');
@@ -257,8 +515,7 @@ if (renameParam) {
       if (!trimmedRule) continue;
 
       if (trimmedRule.startsWith('DEL-')) {
-        // 刪除模式：例如 DEL-[69云] -> 直接將 "[69云]" 刪除
-        const search = trimmedRule.substring(4); // 取得 "DEL-" 後面的關鍵字
+        const search = trimmedRule.substring(4); 
         if (search) {
           filteredNodes.forEach(node => {
             if (node.name) {
@@ -267,7 +524,6 @@ if (renameParam) {
           });
         }
       } else if (trimmedRule.includes('-')) {
-        // 替換模式：例如 移动优化-專線 -> 將 "移动优化" 替換為 "專線"
         const index = trimmedRule.indexOf('-');
         const search = trimmedRule.substring(0, index).trim();
         const replace = trimmedRule.substring(index + 1).trim();
@@ -285,13 +541,11 @@ if (renameParam) {
   }
 }
 
-// 2. 智慧保留與排除過濾
 const buildFilterRegex = (param: string): RegExp => {
   const safePattern = param.replace(/[xXｘＸ]/g, '[xXｘＸ×]').replace(/×/g, '[xXｘＸ×]');
   return new RegExp(safePattern, 'i');
 };
 
-// 僅保留關鍵字
 if (includeParam) {
   try {
     const includeRegex = buildFilterRegex(includeParam);
@@ -301,7 +555,6 @@ if (includeParam) {
   }
 }
 
-// 排除關鍵字
 if (excludeParam) {
   try {
     const excludeRegex = buildFilterRegex(excludeParam);
@@ -318,9 +571,7 @@ if (filteredNodes.length === 0) {
   });
 }
 
-// 對篩選過後的節點進行 去重複命名與自動補國旗
 const uniqueNodes = deduplicateNodeNames(filteredNodes);
-
 const target = url.searchParams.get('target');
 
 if (!target) {
@@ -392,7 +643,6 @@ if (target === 'clash') {
 
 const filename = `subscription${fileExt}`;
 
-// 組裝最終的 Header 物件 (包含流量透傳)
 const responseHeaders: Record<string, string> = {
   'Content-Type': `${contentType}; charset=utf-8`, 
   'Access-Control-Allow-Origin': '*', 
@@ -403,7 +653,6 @@ const responseHeaders: Record<string, string> = {
   'Profile-Update-Interval': '3600',
 };
 
-// 如果有機場回傳流量資訊，進行透傳，點亮客戶端流量面板
 if (hasTrafficInfo) {
   let userInfoHeader = `upload=${totalUpload}; download=${totalDownload}; total=${totalTotal}`;
   if (minExpire > 0) {
