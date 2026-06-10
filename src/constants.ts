@@ -246,15 +246,20 @@ export const HTML_PAGE = `
           <label style="color: var(--text-main); font-weight: 600;">📋 第一步：請在您的 VPS 上執行以下「一鍵極速安裝指令」 (以 root 權限)：</label>
           
           <!-- curl 方案 -->
-          <div style="display: flex; gap: 8px; margin-bottom: 10px; margin-top: 5px;">
+          <div style="display: flex; gap: 8px; margin-top: 5px;">
             <input type="text" id="argoCurlCmd" readonly style="font-family: monospace; font-size: 0.85rem; padding: 0.6rem 0.8rem; background: var(--bg-input);">
-            <button class="btn btn-ghost" onclick="copyText('argoCurlCmd')" style="padding: 0 1rem; font-size: 0.85rem;">複製 curl 指令</button>
+            <button class="btn btn-ghost" onclick="copyText('argoCurlCmd')" style="padding: 0 1rem; font-size: 0.85rem; min-width: 130px;">複製 curl 指令</button>
+          </div>
+          
+          <!-- 💥 修正：明示此為「二選一」選項，消除雙指令困惑 -->
+          <div style="text-align: center; margin: 8px 0; font-size: 0.8rem; color: var(--text-muted); font-weight: bold; letter-spacing: 1px;">
+            — 或 (OR) —【二選一，效果完全相同】
           </div>
           
           <!-- wget 方案 -->
           <div style="display: flex; gap: 8px; margin-bottom: 10px;">
             <input type="text" id="argoWgetCmd" readonly style="font-family: monospace; font-size: 0.85rem; padding: 0.6rem 0.8rem; background: var(--bg-input);">
-            <button class="btn btn-ghost" onclick="copyText('argoWgetCmd')" style="padding: 0 1rem; font-size: 0.85rem;">複製 wget 指令</button>
+            <button class="btn btn-ghost" onclick="copyText('argoWgetCmd')" style="padding: 0 1rem; font-size: 0.85rem; min-width: 130px;">複製 wget 指令</button>
           </div>
           
           <div class="hint" style="margin-top: 5px;">
@@ -263,7 +268,7 @@ export const HTML_PAGE = `
           </div>
         </div>
 
-        <!-- 💥 已修復：補回被移除的 argoBase64Sub 看板，並填充完整混合明文連結 -->
+        <!-- 第二步：顯示與複製整合後的明文列表 -->
         <div class="form-group" style="margin-top: 1.5rem;">
           <label style="color: var(--text-main); font-weight: 600;">🔗 第二步：複製混合訂閱結果 (含有您原本的所有節點 + 新複製的 Argo 節點 - 明文列表)：</label>
           <textarea id="argoBase64Sub" placeholder="自動加上原節點與新生成之明文連結..." readonly style="min-height: 140px; font-size: 0.8rem; font-family: 'JetBrains Mono', monospace; line-height:1.6;"></textarea>
@@ -414,6 +419,7 @@ export const HTML_PAGE = `
             <div style="display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px;">
               \${includeBadge}
               \${excludeBadge}
+              \hydrating
               \${renameBadge}
             </div>
             <div class="fav-actions">
@@ -582,7 +588,7 @@ export const HTML_PAGE = `
         
         listEl.innerHTML = nodes.map(n => \`
           <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.05);">
-            <input type="checkbox" class="vless-chk" value="\${n.index}" data-port="\s\${n.port}" checked style="width: auto; height: auto; cursor: pointer;" onchange="syncDefaultPort()">
+            <input type="checkbox" class="vless-chk" value="\${n.index}" data-port="\${n.port}" checked style="width: auto; height: auto; cursor: pointer;" onchange="syncDefaultPort()">
             <span style="font-size: 0.9rem; color: var(--text-main);">\${n.name} <span style="color: var(--text-muted); font-size: 0.8rem;">(\${n.server}:\${n.port} - \${n.type.toUpperCase()})</span></span>
           </label>
         \`).join('');
@@ -611,7 +617,7 @@ export const HTML_PAGE = `
       }
     }
 
-    // ⚡ Argo 隧道一鍵生成 (修復 Bug：已在 HTML 補回 argoBase64Sub 看板並自動填充整合明文連結) [1]
+    // ⚡ Argo 隧道一鍵生成 (修復：1. 明示二選一，2. 解決貼入 HTTPS 網址時，Argo 明文追加到末尾的 Bug) [1]
     async function generateArgo() {
       const raw = document.getElementById('urlInput').value.trim();
       const checkboxes = document.querySelectorAll('.vless-chk:checked');
@@ -644,51 +650,60 @@ export const HTML_PAGE = `
         const res = await resp.json();
         const host = window.location.origin;
 
-        // 1. 簡短化一鍵部署命令：透過 KV 腳本快取路由讀取 [1]
+        // 1. 填入極簡一鍵指令 [1]
         const hasKv = res.scriptId && res.scriptId.trim() !== '';
         if (hasKv) {
           document.getElementById('argoCurlCmd').value = \`curl -sSL \${host}/argo/sh/\${res.scriptId} | bash\`;
           document.getElementById('argoWgetCmd').value = \`wget -qO- \${host}/argo/sh/\${res.scriptId} | bash\`;
         } else {
-          // 若無 KV 綁定，則降級為本地複製（提示用戶）
           document.getElementById('argoCurlCmd').value = "請綁定 KV 命名空間以解鎖極簡一鍵命令";
           document.getElementById('argoWgetCmd').value = "或在 wrangler.toml 中設定並部署。";
         }
 
-        // 2. 自動插入至最上方 urlInput 輸入框對應節點下方，不影響其他內容 [1]
+        // 2. 自動插入邏輯：完美解決輸入為 HTTPS 機場網域連結而無法就近插入的盲點 [1]
         const lines = raw.split('\\n');
         const newLines = [];
         const argoNodesMap = {};
         
-        // 將後端傳回的 argoNodes 整理成映射
         res.argoNodes.forEach(item => {
           argoNodesMap[item.originalIndex] = item.link;
         });
 
         let compatCount = 0;
+        let matchedCount = 0; // 記錄明文節點被成功匹配插入的數量
+
         for (let line of lines) {
           const trimmed = line.trim();
           newLines.push(line);
           
           if (trimmed.startsWith('vless://') || trimmed.startsWith('vmess://')) {
-            // 如果該節點是被勾選轉換的，自動在其下方貼上 Argo 節點（原節點與原輸入不受破壞） [1]
             if (argoNodesMap[compatCount] !== undefined) {
               newLines.push(argoNodesMap[compatCount]);
+              matchedCount++;
             }
             compatCount++;
           }
         }
 
-        // 💥 完美填充：將「原節點 + 複製產生的新 Argo 節點」之完整組合連結明文
-        // 同步寫入最上方的輸入框 (urlInput) 
+        // 💥 【核心修復】：如果使用者輸入的是機場訂閱連結 (HTTPS 開頭而非明文)，
+        // 則代表 matchedCount 為 0。此時，我們直接將所有新生成的 Argo 節點追加貼到最下方！ [1]
+        if (matchedCount === 0) {
+          res.argoNodes.forEach(item => {
+            newLines.push(item.link);
+          });
+        }
+
+        // 整合後的結果 (原網址 + 新增的 Argo 節點連結) [1]
         const combinedText = newLines.join('\\n');
+        
+        // 自動更新最上方的「資料來源設定」輸入框 [1]
         document.getElementById('urlInput').value = combinedText;
 
-        // 💥 同步寫入第二步的明文文字框 (argoBase64Sub) 以供手動複製與驗證 [1]
+        // 同步寫入第二步的明文展示欄位，以便手動核對複製 [1]
         document.getElementById('argoBase64Sub').value = combinedText;
 
         document.getElementById('argoResults').classList.add('show');
-        showToast('🎉 Argo 節點已精確插入至最上方，VPS 一鍵命令生成成功！');
+        showToast('🎉 Argo 節點已插入上方，VPS 一鍵安裝命令生成成功！');
         document.getElementById('argoResults').scrollIntoView({ behavior: 'smooth' });
       } catch(e) {
         showToast('生成失敗: ' + e.message, false);
@@ -707,7 +722,7 @@ export const HTML_PAGE = `
     function copyText(id) {
       const el = document.getElementById(id);
       el.select();
-      navigator.clipboard.writeText(el.value).then(() => showToast('已成功複製到剪貼簿！'));
+      navigator.clipboard.writeText(el.value).then(() => showToast('已複製指令！'));
     }
 
     function showQr(id) {
