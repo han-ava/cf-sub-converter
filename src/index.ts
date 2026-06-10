@@ -3,7 +3,7 @@ import packageJson from '../package.json';
 import { Env, ProxyNode } from './types';
 import { HTML_PAGE } from './constants';
 import { parseContent } from './parser';
-import { toSingBoxWithTemplate, toClashWithTemplate, toBase64 } from './generator';
+import { toSingBoxWithTemplate, toClashWithTemplate, toBase64, toRawLinks } from './generator';
 import { deduplicateNodeNames } from './utils';
 
 const version = packageJson.version || '2.5.0';
@@ -60,7 +60,7 @@ function safeBtoa(str: string): string {
   }
 }
 
-// 動態從 GitHub 獲取模板腳本並進行變數置換
+// 動態從 GitHub 獲取模板腳本並進行變數置換 (💥 升級：自動判定與替換 {{VLESS_TLS}} 參數) [1]
 async function getArgoScriptFromGithub(node: ProxyNode, port: string, token: string, domain: string): Promise<string> {
   const GITHUB_TEMPLATE_URL = "https://raw.githubusercontent.com/sammy0101/cf-sub-converter/main/argo.sh";
   let template = "";
@@ -89,8 +89,9 @@ cloudflared tunnel --url http://127.0.0.1:{{VLESS_PORT}}
   
   // 統一節點名稱格式為：[原節點名]_Argo
   const argoNodeName = `${node.name}_Argo`;
+  const isTls = node.tls ? "true" : "false";
 
-  // 替換模板中的自訂佔位符
+  // 替換模板中的自訂佔位符 [1]
   return template
     .replace("{{NODE_TYPE}}", node.type)
     .replace("{{VLESS_UUID}}", node.uuid || '')
@@ -99,7 +100,8 @@ cloudflared tunnel --url http://127.0.0.1:{{VLESS_PORT}}
     .replace("{{VLESS_PORT}}", port)
     .replace("{{NODE_NAME}}", argoNodeName)
     .replace("{{TUNNEL_TOKEN}}", token.trim())
-    .replace("{{CUSTOM_DOMAIN}}", domain.trim());
+    .replace("{{CUSTOM_DOMAIN}}", domain.trim())
+    .replace("{{VLESS_TLS}}", isTls);
 }
 
 export default {
