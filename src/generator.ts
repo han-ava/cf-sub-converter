@@ -3,7 +3,8 @@ import { ProxyNode } from './types';
 import { REMOTE_CONFIG } from './constants';
 import { utf8ToBase64 } from './utils';
 
-export function toBase64(nodes: ProxyNode[]) {
+// 💥 新增：導出明文連結列表（一列一條節點，多筆換行）
+export function toRawLinks(nodes: ProxyNode[]): string {
   const links = nodes.map(node => {
     try {
       if (node.type === 'vless') {
@@ -75,7 +76,6 @@ export function toBase64(nodes: ProxyNode[]) {
         params.set('type', 'tcp'); 
         return `anytls://${node.password}@${node.server}:${node.port}?${params.toString()}#${encodeURIComponent(node.name)}`;
       }
-      // 💥 【全新：Trojan 鏈接拼接邏輯】
       if (node.type === 'trojan') {
         const params = new URLSearchParams();
         if (node.sni) params.set('sni', node.sni);
@@ -85,7 +85,13 @@ export function toBase64(nodes: ProxyNode[]) {
       return null;
     } catch { return null; }
   }).filter(l => l !== null);
-  return utf8ToBase64(links.join('\n'));
+  return links.join('\n');
+}
+
+// 導出 Base64 訂閱
+export function toBase64(nodes: ProxyNode[]) {
+  const rawLinks = toRawLinks(nodes);
+  return utf8ToBase64(rawLinks);
 }
 
 async function fetchWithUA(url: string) {
