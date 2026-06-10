@@ -73,7 +73,7 @@ async function getArgoScriptFromGithub(node: ProxyNode, port: string, token: str
       throw new Error("GitHub Fetch Failed");
     }
   } catch(e) {
-    // 降級備用本地極簡模板
+    // 降級備用本地極簡模板 
     template = `#!/bin/bash
 echo "警告: 無法從 GitHub 獲取最新 argo.sh 模板，正在使用降級極簡部署..."
 if ! command -v cloudflared &> /dev/null; then
