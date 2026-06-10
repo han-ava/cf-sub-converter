@@ -60,7 +60,7 @@ function safeBtoa(str: string): string {
   }
 }
 
-// 動態從 GitHub 獲取模板腳本並進行變數置換 (💥 升級：自動判定與替換 {{ORIGIN_HOST}} 參數)
+// 動態從 GitHub 獲取模板腳本並進行變數置換
 async function getArgoScriptFromGithub(node: ProxyNode, port: string, token: string, domain: string): Promise<string> {
   const GITHUB_TEMPLATE_URL = "https://raw.githubusercontent.com/sammy0101/cf-sub-converter/main/argo.sh";
   let template = "";
@@ -73,7 +73,7 @@ async function getArgoScriptFromGithub(node: ProxyNode, port: string, token: str
       throw new Error("GitHub Fetch Failed");
     }
   } catch(e) {
-    // 降級備用本地極簡模板
+    // 降級備用本地極簡模板 (💥 同步更換為 cut 處理)
     template = `#!/bin/bash
 echo "警告: 無法從 GitHub 獲取最新 argo.sh 模板，正在使用降級極簡部署..."
 if ! command -v cloudflared &> /dev/null; then
@@ -90,7 +90,7 @@ cloudflared tunnel --url http://127.0.0.1:{{VLESS_PORT}}
   // 統一節點名稱格式為：[原節點名]_Argo
   const argoNodeName = `${node.name}_Argo`;
   const isTls = node.tls ? "true" : "false";
-  const realHost = node.wsHeaders?.Host || node.sni || node.server; // 💥 新增對應的主機 Host 頭部重寫屬性
+  const realHost = node.wsHeaders?.Host || node.sni || node.server; 
 
   // 替換模板中的自訂佔位符 [1]
   return template
@@ -103,7 +103,7 @@ cloudflared tunnel --url http://127.0.0.1:{{VLESS_PORT}}
     .replace("{{TUNNEL_TOKEN}}", token.trim())
     .replace("{{CUSTOM_DOMAIN}}", domain.trim())
     .replace("{{VLESS_TLS}}", isTls)
-    .replace("{{ORIGIN_HOST}}", realHost); // 💥 新增
+    .replace("{{ORIGIN_HOST}}", realHost);
 }
 
 export default {
@@ -186,7 +186,7 @@ if (request.method === 'POST' && url.pathname === '/api/argo-generate') {
     const domain = body.domain || '';
 
     if (!rawUrl.trim() || selectedIndices.length === 0) {
-      return new Response(JSON.stringify({ error: '無效的參數或未選擇任何節點' }), { 
+      return new Response(JSON.stringify({ error: '無效的參數或未選擇 any 節點' }), { 
         status: 400, 
         headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } 
       });
