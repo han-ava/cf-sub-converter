@@ -126,8 +126,8 @@ EOF
     TEMP_DOMAIN=""
     for i in {1..15}; do
         sleep 1
-        # 💥 修正：改用 100% 避開反斜線的 cut 工具提取臨時域名 [2]
-        TEMP_DOMAIN=$(grep -oE 'https://[a-zA-Z0-9-]+\\.trycloudflare\\.com' /var/log/cloudflared-argo-${SAFE_NODE_NAME}.log | head -n 1 | cut -d'/' -f3)
+        # 💥 修正：改用 100% 避開轉義的基礎 grep 語法
+        TEMP_DOMAIN=$(grep -o 'https://[a-zA-Z0-9-]*trycloudflare.com' /var/log/cloudflared-argo-${SAFE_NODE_NAME}.log | head -n 1 | cut -d'/' -f3)
         if [ -n "$TEMP_DOMAIN" ]; then
             break
         fi
