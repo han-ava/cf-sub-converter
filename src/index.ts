@@ -3,7 +3,7 @@ import packageJson from '../package.json';
 import { Env, ProxyNode } from './types';
 import { HTML_PAGE } from './constants';
 import { parseContent } from './parser';
-import { toSingBoxWithTemplate, toClashWithTemplate, toBase64 } from './generator';
+import { toSingBoxWithTemplate, toClashWithTemplate, toBase64, toRawLinks } from './generator';
 import { deduplicateNodeNames } from './utils';
 
 const version = packageJson.version || '2.5.0';
@@ -109,7 +109,7 @@ if [ -n "$TUNNEL_TOKEN" ]; then
     else
         # VMess Base64 節點結構
         VMESS_JSON="{\\"v\\":\\"2\\",\\"ps\\":\\"Argo-\$NODE_NAME\\",\\"add\\":\\"\$CUSTOM_DOMAIN\\",\\"port\\":443,\\"id\\":\\"\$VLESS_UUID\\",\\"aid\\":0,\\"scy\\":\\"auto\\",\\"net\\":\\"\$VLESS_TYPE\\",\\"type\\":\\"none\\",\\"host\\":\\"\$CUSTOM_DOMAIN\\",\\"path\\":\\"\$VLESS_PATH\\",\\"tls\\":\\"tls\\",\\"sni\\":\\"\$CUSTOM_DOMAIN\\"}"
-        VMESS_B64=\$(echo -n "\$VMESS_JSON" | base64 | tr -d '\\n')
+        VMESS_B64=\$(echo -n "$VMESS_JSON" | base64 | tr -d '\\n')
         FINAL_LINK="vmess://\$VMESS_B64"
     fi
     echo -e "\\n\${GREEN}您的 Argo \$NODE_TYPE 訂閱連結為:\${NC}"
@@ -161,7 +161,7 @@ EOF
             FINAL_LINK="\$FINAL_LINK#Argo-Temp-\$NODE_NAME"
         else
             VMESS_JSON="{\\"v\\":\\"2\\",\\"ps\\":\\"Argo-Temp-\$NODE_NAME\\",\\"add\\":\\"\$TEMP_DOMAIN\\",\\"port\\":443,\\"id\\":\\"\$VLESS_UUID\\",\\"aid\\":0,\\"scy\\":\\"auto\\",\\"net\\":\\"\$VLESS_TYPE\\",\\"type\\":\\"none\\",\\"host\\":\\"\$TEMP_DOMAIN\\",\\"path\\":\\"\$VLESS_PATH\\",\\"tls\\":\\"tls\\",\\"sni\\":\\"\$TEMP_DOMAIN\\"}"
-            VMESS_B64=\$(echo -n "\$VMESS_JSON" | base64 | tr -d '\\n')
+            VMESS_B64=\$(echo -n "$VMESS_JSON" | base64 | tr -d '\\n')
             FINAL_LINK="vmess://\$VMESS_B64"
         fi
         
@@ -225,7 +225,7 @@ if (request.method === 'POST' && (url.pathname === '/api/parse-vless' || url.pat
   }
 }
 
-// 💥 2. POST /api/argo-generate (生成 VPS 腳本與整合訂閱 - 支援就近插入)
+// 💥 2. POST /api/argo-generate (生成 VPS 腳本與整合訂閱 - 支援就近插入明文連結)
 if (request.method === 'POST' && url.pathname === '/api/argo-generate') {
   try {
     const body: any = await request.json();
@@ -245,7 +245,6 @@ if (request.method === 'POST' && url.pathname === '/api/argo-generate') {
     const allNodes = await loadNodes(rawUrl);
     const compatibleNodes = allNodes.filter(n => n.type === 'vless' || n.type === 'vmess');
     
-    // 獲取被選定的原始節點物件引用
     const selectedObjects = selectedIndices.map(idx => compatibleNodes[idx]).filter(Boolean);
 
     if (selectedObjects.length === 0) {
@@ -258,15 +257,12 @@ if (request.method === 'POST' && url.pathname === '/api/argo-generate') {
     const combinedNodes: ProxyNode[] = [];
     let scripts = '';
 
-    // 循序掃描原始列表，將複製出來的 Argo 節點精準插入到原節點下方
     for (const node of allNodes) {
       combinedNodes.push(node); // 保留並加入原始節點
       
       if (selectedObjects.includes(node)) {
-        // 串接一鍵 VPS 部署腳本
         scripts += makeVpsScript(node, port, token, domain) + '\n\n';
 
-        // 複製並產生成對的新 Argo 節點（僅在固定隧道模式下生成）
         if (token.trim() && domain.trim()) {
           const argoNode: ProxyNode = {
             type: node.type, // vless 或 vmess
@@ -292,7 +288,6 @@ if (request.method === 'POST' && url.pathname === '/api/argo-generate') {
             if(argoNode.network === 'ws') { cl.network = 'ws'; cl['ws-opts'] = { path: argoNode.wsPath, headers: argoNode.wsHeaders }; }
             argoNode.clashObj = cl;
           } else {
-            // VMess 配接
             const sb: any = { tag: argoNode.name, type: 'vmess', server: argoNode.server, server_port: argoNode.port, uuid: argoNode.uuid, security: 'auto' };
             sb.tls = { enabled: true, server_name: argoNode.sni, insecure: true };
             if(argoNode.network === 'ws') sb.transport = { type: 'ws', path: argoNode.wsPath, headers: argoNode.wsHeaders };
@@ -308,9 +303,11 @@ if (request.method === 'POST' && url.pathname === '/api/argo-generate') {
       }
     }
 
+    // 生成明文連結列表（多行）
+    const rawLinks = toRawLinks(combinedNodes);
     const base64Sub = toBase64(combinedNodes);
 
-    return new Response(JSON.stringify({ script: scripts, base64: base64Sub }), {
+    return new Response(JSON.stringify({ script: scripts, links: rawLinks, base64: base64Sub }), {
       headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
     });
   } catch (e: any) {
