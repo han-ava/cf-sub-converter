@@ -4,7 +4,7 @@ import { Env, ProxyNode } from './types';
 import { HTML_PAGE } from './constants';
 import { parseContent } from './parser';
 import { toSingBoxWithTemplate, toClashWithTemplate, toBase64 } from './generator';
-// 💥 修正：精確匯入並套用 groupNodesByFlag
+// 引入最新的國旗智慧分群與去重演算法
 import { deduplicateNodeNames, groupNodesByFlag } from './utils';
 
 const version = packageJson.version || '2.5.0';
