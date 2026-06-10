@@ -60,131 +60,43 @@ function safeBtoa(str: string): string {
   }
 }
 
-// 生成一鍵部署 bash 腳本 (相容 VLESS 與 VMess)
-function makeVpsScript(node: ProxyNode, port: string, token: string, domain: string): string {
-  const nodeType = node.type; // 'vless' 或 'vmess'
+// 動態從 GitHub 獲取模板腳本並進行變數置換
+async function getArgoScriptFromGithub(node: ProxyNode, port: string, token: string, domain: string): Promise<string> {
+  const GITHUB_TEMPLATE_URL = "https://raw.githubusercontent.com/sammy0101/cf-sub-converter/main/argo.sh";
+  let template = "";
+  
+  try {
+    const res = await fetch(GITHUB_TEMPLATE_URL, { headers: { 'User-Agent': 'v2rayNG/1.8.5' } });
+    if (res.ok) {
+      template = await res.text();
+    } else {
+      throw new Error("GitHub Fetch Failed");
+    }
+  } catch(e) {
+    // 降級備用本地極簡模板（防範 GitHub 被阻擋或尚未上傳檔案之情況）
+    template = `#!/bin/bash
+echo "警告: 無法從 GitHub 獲取最新 argo.sh 模板，正在使用降級極簡部署..."
+if ! command -v cloudflared &> /dev/null; then
+  curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o /usr/local/bin/cloudflared
+  chmod +x /usr/local/bin/cloudflared
+fi
+cloudflared tunnel --url http://127.0.0.1:{{VLESS_PORT}}
+`;
+  }
+
   const vlessType = node.network || 'ws';
   const vlessPath = node.wsPath || '/';
-  const safeNodeName = node.name.replace(/[^a-zA-Z0-9]/g, '_');
-  
-  return `#!/bin/bash
-# Cloudflare Argo Tunnel 一鍵部署腳本 (由 cf-sub-converter 自動生成)
-# 適用於已使用 mack-a v2ray-agent 部署之 Xray/Sing-box 環境
 
-GREEN='\\033[0;32m'
-RED='\\033[0;31m'
-NC='\\033[0m'
-
-echo -e "\${GREEN}=== 開始部署 Cloudflare Argo 隧道 (\${NODE_NAME}) ===\${NC}"
-
-if [ "$EUID" -ne 0 ]; then
-  echo -e "\${RED}錯誤: 請使用 root 權限執行此腳本！\${NC}"
-  exit 1
-fi
-
-NODE_TYPE="${nodeType}"
-VLESS_UUID="${node.uuid || ''}"
-VLESS_PATH="${vlessPath}"
-VLESS_TYPE="${vlessType}"
-VLESS_PORT="${port}"
-NODE_NAME="${node.name}"
-TUNNEL_TOKEN="${token.trim()}"
-CUSTOM_DOMAIN="${domain.trim()}"
-
-# 下載安裝 cloudflared
-if ! command -v cloudflared &> /dev/null; then
-    echo "正在下載安裝 cloudflared..."
-    curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o /usr/local/bin/cloudflared
-    chmod +x /usr/local/bin/cloudflared
-else
-    echo "cloudflared 已存在，跳過安裝。"
-fi
-
-if [ -n "$TUNNEL_TOKEN" ]; then
-    echo -e "\${GREEN}【固定隧道模式】正在配置服務...\${NC}"
-    cloudflared service uninstall &> /dev/null
-    cloudflared service install "$TUNNEL_TOKEN"
-    systemctl daemon-reload
-    systemctl enable cloudflared
-    systemctl restart cloudflared
-    
-    echo -e "\${GREEN}部署成功！\${NC}"
-    echo "請確保已在 Cloudflare Dashboard 中將網域 '$CUSTOM_DOMAIN' 指向本地 'http://localhost:$VLESS_PORT'"
-    
-    if [ "\$NODE_TYPE" = "vless" ]; then
-        FINAL_LINK="vless://\$VLESS_UUID@\$CUSTOM_DOMAIN:443?encryption=none&security=tls&type=\$VLESS_TYPE&host=\$CUSTOM_DOMAIN"
-        if [ "\$VLESS_TYPE" = "ws" ]; then
-            FINAL_LINK="\$FINAL_LINK&path=\$(echo -n "\$VLESS_PATH" | jq -s -R -r @uri 2>/dev/null || echo -n "$VLESS_PATH")"
-        fi
-        FINAL_LINK="\$FINAL_LINK#Argo-\$NODE_NAME"
-    else
-        VMESS_JSON="{\\"v\\":\\"2\\",\\"ps\\":\\"Argo-\$NODE_NAME\\",\\"add\\":\\"\$CUSTOM_DOMAIN\\",\\"port\\":443,\\"id\\":\\"\$VLESS_UUID\\",\\"aid\\":0,\\"scy\\":\\"auto\\",\\"net\\":\\"\$VLESS_TYPE\\",\\"type\\":\\"none\\",\\"host\\":\\"\$CUSTOM_DOMAIN\\",\\"path\\":\\"\$VLESS_PATH\\",\\"tls\\":\\"tls\\",\\"sni\\":\\"\$CUSTOM_DOMAIN\\"}"
-        VMESS_B64=\$(echo -n "\$VMESS_JSON" | base64 | tr -d '\\n')
-        FINAL_LINK="vmess://\$VMESS_B64"
-    fi
-    echo -e "\\n\${GREEN}您的 Argo \$NODE_TYPE 訂閱連結為:\${NC}"
-    echo -e "\${GREEN}\$FINAL_LINK\${NC}\\n"
-else
-    echo -e "\${GREEN}【臨時隧道模式】正在啟動 Quick Tunnel...\${NC}"
-    systemctl stop cloudflared-argo-\${safeNodeName} &> /dev/null
-    
-    cat <<EOF > /etc/systemd/system/cloudflared-argo-\${safeNodeName}.service
-[Unit]
-Description=Cloudflare Argo Temporary Tunnel for \${NODE_NAME}
-After=network.target
-
-[Service]
-Type=simple
-User=root
-ExecStart=/usr/local/bin/cloudflared tunnel --url http://127.0.0.1:\$VLESS_PORT
-Restart=always
-RestartSec=5
-StandardOutput=file:/var/log/cloudflared-argo-\${safeNodeName}.log
-StandardError=file:/var/log/cloudflared-argo-\${safeNodeName}.log
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-    touch /var/log/cloudflared-argo-\${safeNodeName}.log
-    systemctl daemon-reload
-    systemctl enable cloudflared-argo-\${safeNodeName}
-    systemctl start cloudflared-argo-\${safeNodeName}
-    
-    echo "正在等待 Cloudflare 分配臨時域名 (約需 10-15 秒)..."
-    TEMP_DOMAIN=""
-    for i in {1..15}; do
-        sleep 1
-        TEMP_DOMAIN=\$(grep -oE 'https://[a-zA-Z0-9-]+\\.trycloudflare\\.com' /var/log/cloudflared-argo-\${safeNodeName}.log | head -n 1 | sed 's/https:\\/\\///')
-        if [ -n "\$TEMP_DOMAIN" ]; then
-            break
-        fi
-    done
-    
-    if [ -n "\$TEMP_DOMAIN" ]; then
-        echo -e "\${GREEN}獲取域名成功: \$TEMP_DOMAIN\${NC}"
-        if [ "\$NODE_TYPE" = "vless" ]; then
-            FINAL_LINK="vless://\$VLESS_UUID@\$TEMP_DOMAIN:443?encryption=none&security=tls&type=\$VLESS_TYPE&host=\$TEMP_DOMAIN"
-            if [ "\$VLESS_TYPE" = "ws" ]; then
-                FINAL_LINK="\$FINAL_LINK&path=\$(echo -n "\$VLESS_PATH" | jq -s -R -r @uri 2>/dev/null || echo -n "\$VLESS_PATH")"
-            fi
-            FINAL_LINK="\$FINAL_LINK#Argo-Temp-\$NODE_NAME"
-        else
-            VMESS_JSON="{\\"v\\":\\"2\\",\\"ps\\":\\"Argo-Temp-\$NODE_NAME\\",\\"add\\":\\"\$TEMP_DOMAIN\\",\\"port\\":443,\\"id\\":\\"\$VLESS_UUID\\",\\"aid\\":0,\\"scy\\":\\"auto\\",\\"net\\":\\"\$VLESS_TYPE\\",\\"type\\":\\"none\\",\\"host\\":\\"\$TEMP_DOMAIN\\",\\"path\\":\\"\$VLESS_PATH\\",\\"tls\\":\\"tls\\",\\"sni\\":\\"\$TEMP_DOMAIN\\"}"
-            VMESS_B64=\$(echo -n "\$VMESS_JSON" | base64 | tr -d '\\n')
-            FINAL_LINK="vmess://\$VMESS_B64"
-        fi
-        
-        echo -e "\\n\${GREEN}=== 部署成功 ===\${NC}"
-        echo -e "原節點名稱: \$NODE_NAME"
-        echo -e "轉發連接埠: \$VLESS_PORT"
-        echo -e "您的臨時 Argo 節點 \$NODE_TYPE 連結為 (注意：VPS 重啟或重開服務後域名會刷新):"
-        echo -e "\${GREEN}\$FINAL_LINK\${NC}\\n"
-    else
-        echo -e "\${RED}錯誤: 獲取臨時域名超時！請執行 'cat /var/log/cloudflared-argo-\${safeNodeName}.log' 檢查日誌。\${NC}"
-    fi
-fi
-`;
+  // 替換模板中的自訂佔位符
+  return template
+    .replace("{{NODE_TYPE}}", node.type)
+    .replace("{{VLESS_UUID}}", node.uuid || '')
+    .replace("{{VLESS_PATH}}", vlessPath)
+    .replace("{{VLESS_TYPE}}", vlessType)
+    .replace("{{VLESS_PORT}}", port)
+    .replace("{{NODE_NAME}}", node.name)
+    .replace("{{TUNNEL_TOKEN}}", token.trim())
+    .replace("{{CUSTOM_DOMAIN}}", domain.trim());
 }
 
 export default {
@@ -202,7 +114,7 @@ if (request.method === 'OPTIONS') {
   });
 }
 
-// 💥 新增：GET /argo/sh/:id 路由 (供 VPS 執行 wget/curl 讀取一鍵腳本)
+// 💥 GET /argo/sh/:id 路由 (供 VPS 執行 wget/curl 讀取一鍵安裝腳本)
 if (request.method === 'GET' && url.pathname.startsWith('/argo/sh/')) {
   const scriptId = url.pathname.split('/').pop();
   if (env.SUB_CACHE && scriptId) {
@@ -216,7 +128,7 @@ if (request.method === 'GET' && url.pathname.startsWith('/argo/sh/')) {
       });
     }
   }
-  return new Response('# 錯誤: 該腳本不存在或已過期 (有效期 1 小時)，請在網頁上重新生成。\nexit 1\n', { 
+  return new Response('# 錯誤: 該腳本不存在或已過期 (有效期 1 小時)，請重新在網頁上生成。\nexit 1\n', { 
     status: 404,
     headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Access-Control-Allow-Origin': '*' }
   });
@@ -254,7 +166,7 @@ if (request.method === 'POST' && (url.pathname === '/api/parse-vless' || url.pat
   }
 }
 
-// POST /api/argo-generate (優化：返回對應節點與緩存腳本 ID)
+// POST /api/argo-generate (生成 VPS 腳本與整合訂閱 - 智慧就近插入明文連結)
 if (request.method === 'POST' && url.pathname === '/api/argo-generate') {
   try {
     const body: any = await request.json();
@@ -289,10 +201,9 @@ if (request.method === 'POST' && url.pathname === '/api/argo-generate') {
       const node = selectedObjects[i];
       const originalIndex = selectedIndices[i];
       
-      // 生成 VPS 安裝腳本
-      scripts += makeVpsScript(node, port, token, domain) + '\n\n';
+      // 💥 改由動態拉取 GitHub 模板生成 Bash 腳本
+      scripts += await getArgoScriptFromGithub(node, port, token, domain) + '\n\n';
 
-      // 判斷是否使用臨時域名，若無固定域名，則前端也插入一個明文佔位符節點
       const targetDomain = (token.trim() && domain.trim()) ? domain.trim() : "請在VPS執行一鍵安裝腳本獲取臨時域名.trycloudflare.com";
       const argoNodeName = (token.trim() && domain.trim()) ? `Argo-${node.name}` : `Argo-Temp-${node.name}`;
 
@@ -311,7 +222,7 @@ if (request.method === 'POST' && url.pathname === '/api/argo-generate') {
       generatedNodesData.push({ originalIndex, link: argoLink });
     }
 
-    // 將 Bash 腳本存入 KV 中 (保留 1 小時 = 3600 秒)
+    // 將 Bash 腳本存入 KV 中 (保留 1 小時)
     let scriptId = '';
     if (env.SUB_CACHE) {
       scriptId = crypto.randomUUID();
@@ -320,7 +231,6 @@ if (request.method === 'POST' && url.pathname === '/api/argo-generate') {
 
     return new Response(JSON.stringify({ 
       scriptId: scriptId, 
-      fullScript: scripts, // 萬一未綁定 KV 則作後備
       argoNodes: generatedNodesData 
     }), {
       headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
