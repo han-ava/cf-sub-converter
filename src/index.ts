@@ -3,7 +3,7 @@ import packageJson from '../package.json';
 import { Env, ProxyNode } from './types';
 import { HTML_PAGE } from './constants';
 import { parseContent } from './parser';
-import { toSingBoxWithTemplate, toClashWithTemplate, toBase64, toRawLinks } from './generator';
+import { toSingBoxWithTemplate, toClashWithTemplate, toBase64 } from './generator';
 import { deduplicateNodeNames } from './utils';
 
 const version = packageJson.version || '2.5.0';
@@ -47,6 +47,17 @@ async function loadNodes(urlParam: string): Promise<ProxyNode[]> {
     }
   }));
   return allNodes;
+}
+
+// 安全的 Base64 編碼，防止中文節點名解析錯誤
+function safeBtoa(str: string): string {
+  try {
+    return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, (match, p1) => {
+      return String.fromCharCode(parseInt(p1, 16));
+    }));
+  } catch (e) {
+    return btoa(str);
+  }
 }
 
 // 生成一鍵部署 bash 腳本 (相容 VLESS 與 VMess)
@@ -107,9 +118,8 @@ if [ -n "$TUNNEL_TOKEN" ]; then
         fi
         FINAL_LINK="\$FINAL_LINK#Argo-\$NODE_NAME"
     else
-        # VMess Base64 節點結構
         VMESS_JSON="{\\"v\\":\\"2\\",\\"ps\\":\\"Argo-\$NODE_NAME\\",\\"add\\":\\"\$CUSTOM_DOMAIN\\",\\"port\\":443,\\"id\\":\\"\$VLESS_UUID\\",\\"aid\\":0,\\"scy\\":\\"auto\\",\\"net\\":\\"\$VLESS_TYPE\\",\\"type\\":\\"none\\",\\"host\\":\\"\$CUSTOM_DOMAIN\\",\\"path\\":\\"\$VLESS_PATH\\",\\"tls\\":\\"tls\\",\\"sni\\":\\"\$CUSTOM_DOMAIN\\"}"
-        VMESS_B64=\$(echo -n "$VMESS_JSON" | base64 | tr -d '\\n')
+        VMESS_B64=\$(echo -n "\$VMESS_JSON" | base64 | tr -d '\\n')
         FINAL_LINK="vmess://\$VMESS_B64"
     fi
     echo -e "\\n\${GREEN}您的 Argo \$NODE_TYPE 訂閱連結為:\${NC}"
@@ -161,7 +171,7 @@ EOF
             FINAL_LINK="\$FINAL_LINK#Argo-Temp-\$NODE_NAME"
         else
             VMESS_JSON="{\\"v\\":\\"2\\",\\"ps\\":\\"Argo-Temp-\$NODE_NAME\\",\\"add\\":\\"\$TEMP_DOMAIN\\",\\"port\\":443,\\"id\\":\\"\$VLESS_UUID\\",\\"aid\\":0,\\"scy\\":\\"auto\\",\\"net\\":\\"\$VLESS_TYPE\\",\\"type\\":\\"none\\",\\"host\\":\\"\$TEMP_DOMAIN\\",\\"path\\":\\"\$VLESS_PATH\\",\\"tls\\":\\"tls\\",\\"sni\\":\\"\$TEMP_DOMAIN\\"}"
-            VMESS_B64=\$(echo -n "$VMESS_JSON" | base64 | tr -d '\\n')
+            VMESS_B64=\$(echo -n "\$VMESS_JSON" | base64 | tr -d '\\n')
             FINAL_LINK="vmess://\$VMESS_B64"
         fi
         
@@ -192,7 +202,27 @@ if (request.method === 'OPTIONS') {
   });
 }
 
-// 💥 1. POST /api/parse-vless (同時解析並篩選 VLESS 和 VMess 節點)
+// 💥 新增：GET /argo/sh/:id 路由 (供 VPS 執行 wget/curl 讀取一鍵腳本)
+if (request.method === 'GET' && url.pathname.startsWith('/argo/sh/')) {
+  const scriptId = url.pathname.split('/').pop();
+  if (env.SUB_CACHE && scriptId) {
+    const script = await env.SUB_CACHE.get(`script:${scriptId}`);
+    if (script) {
+      return new Response(script, {
+        headers: { 
+          'Content-Type': 'text/plain; charset=utf-8', 
+          'Access-Control-Allow-Origin': '*' 
+        }
+      });
+    }
+  }
+  return new Response('# 錯誤: 該腳本不存在或已過期 (有效期 1 小時)，請在網頁上重新生成。\nexit 1\n', { 
+    status: 404,
+    headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Access-Control-Allow-Origin': '*' }
+  });
+}
+
+// POST /api/parse-vless 
 if (request.method === 'POST' && (url.pathname === '/api/parse-vless' || url.pathname === '/api/parse-argo')) {
   try {
     const body: any = await request.json();
@@ -205,7 +235,6 @@ if (request.method === 'POST' && (url.pathname === '/api/parse-vless' || url.pat
     }
 
     const allNodes = await loadNodes(rawUrl);
-    // 篩選 VLESS & VMess
     const argoCompatibleNodes = allNodes.filter(n => n.type === 'vless' || n.type === 'vmess').map((n, idx) => ({
       index: idx,
       name: n.name,
@@ -225,7 +254,7 @@ if (request.method === 'POST' && (url.pathname === '/api/parse-vless' || url.pat
   }
 }
 
-// 💥 2. POST /api/argo-generate (生成 VPS 腳本與整合訂閱 - 支援就近插入明文連結)
+// POST /api/argo-generate (優化：返回對應節點與緩存腳本 ID)
 if (request.method === 'POST' && url.pathname === '/api/argo-generate') {
   try {
     const body: any = await request.json();
@@ -244,7 +273,6 @@ if (request.method === 'POST' && url.pathname === '/api/argo-generate') {
 
     const allNodes = await loadNodes(rawUrl);
     const compatibleNodes = allNodes.filter(n => n.type === 'vless' || n.type === 'vmess');
-    
     const selectedObjects = selectedIndices.map(idx => compatibleNodes[idx]).filter(Boolean);
 
     if (selectedObjects.length === 0) {
@@ -254,60 +282,47 @@ if (request.method === 'POST' && url.pathname === '/api/argo-generate') {
       });
     }
 
-    const combinedNodes: ProxyNode[] = [];
     let scripts = '';
+    const generatedNodesData: any[] = [];
 
-    for (const node of allNodes) {
-      combinedNodes.push(node); // 保留並加入原始節點
+    for (let i = 0; i < selectedObjects.length; i++) {
+      const node = selectedObjects[i];
+      const originalIndex = selectedIndices[i];
       
-      if (selectedObjects.includes(node)) {
-        scripts += makeVpsScript(node, port, token, domain) + '\n\n';
+      // 生成 VPS 安裝腳本
+      scripts += makeVpsScript(node, port, token, domain) + '\n\n';
 
-        if (token.trim() && domain.trim()) {
-          const argoNode: ProxyNode = {
-            type: node.type, // vless 或 vmess
-            name: `Argo-${node.name}`,
-            server: domain.trim(),
-            port: 443,
-            uuid: node.uuid,
-            tls: true,
-            network: node.network || 'ws',
-            wsPath: node.wsPath || '/',
-            wsHeaders: { Host: domain.trim() },
-            sni: domain.trim(),
-            skipCertVerify: true
-          };
+      // 判斷是否使用臨時域名，若無固定域名，則前端也插入一個明文佔位符節點
+      const targetDomain = (token.trim() && domain.trim()) ? domain.trim() : "請在VPS執行一鍵安裝腳本獲取臨時域名.trycloudflare.com";
+      const argoNodeName = (token.trim() && domain.trim()) ? `Argo-${node.name}` : `Argo-Temp-${node.name}`;
 
-          if (node.type === 'vless') {
-            const sb: any = { tag: argoNode.name, type: 'vless', server: argoNode.server, server_port: argoNode.port, uuid: argoNode.uuid };
-            sb.tls = { enabled: true, server_name: argoNode.sni, insecure: true, utls: { enabled: true, fingerprint: 'chrome' }};
-            if(argoNode.network === 'ws') sb.transport = { type: 'ws', path: argoNode.wsPath, headers: argoNode.wsHeaders };
-            argoNode.singboxObj = sb;
-
-            const cl: any = { name: argoNode.name, type: 'vless', server: argoNode.server, port: argoNode.port, uuid: argoNode.uuid, udp: true, tls: true, servername: argoNode.sni, 'skip-cert-verify': true, 'client-fingerprint': 'chrome' };
-            if(argoNode.network === 'ws') { cl.network = 'ws'; cl['ws-opts'] = { path: argoNode.wsPath, headers: argoNode.wsHeaders }; }
-            argoNode.clashObj = cl;
-          } else {
-            const sb: any = { tag: argoNode.name, type: 'vmess', server: argoNode.server, server_port: argoNode.port, uuid: argoNode.uuid, security: 'auto' };
-            sb.tls = { enabled: true, server_name: argoNode.sni, insecure: true };
-            if(argoNode.network === 'ws') sb.transport = { type: 'ws', path: argoNode.wsPath, headers: argoNode.wsHeaders };
-            argoNode.singboxObj = sb;
-
-            const cl: any = { name: argoNode.name, type: 'vmess', server: argoNode.server, port: argoNode.port, uuid: argoNode.uuid, alterId: 0, cipher: 'auto', udp: true, tls: true, servername: argoNode.sni, network: argoNode.network };
-            if(argoNode.network === 'ws') { cl['ws-opts'] = { path: argoNode.wsPath, headers: argoNode.wsHeaders }; }
-            argoNode.clashObj = cl;
-          }
-
-          combinedNodes.push(argoNode); // 直接插入原節點正下方
-        }
+      let argoLink = '';
+      if (node.type === 'vless') {
+        argoLink = `vless://${node.uuid}@${targetDomain}:443?encryption=none&security=tls&type=${node.network || 'ws'}&host=${targetDomain}&path=${node.wsPath || '/'}#${encodeURIComponent(argoNodeName)}`;
+      } else {
+        const vmessObj = {
+          v: "2", ps: argoNodeName, add: targetDomain, port: 443, id: node.uuid,
+          aid: 0, scy: "auto", net: node.network || 'ws', type: "none",
+          host: targetDomain, path: node.wsPath || '/', tls: "tls", sni: targetDomain
+        };
+        argoLink = 'vmess://' + safeBtoa(JSON.stringify(vmessObj));
       }
+
+      generatedNodesData.push({ originalIndex, link: argoLink });
     }
 
-    // 生成明文連結列表（多行）
-    const rawLinks = toRawLinks(combinedNodes);
-    const base64Sub = toBase64(combinedNodes);
+    // 將 Bash 腳本存入 KV 中 (保留 1 小時 = 3600 秒)
+    let scriptId = '';
+    if (env.SUB_CACHE) {
+      scriptId = crypto.randomUUID();
+      await env.SUB_CACHE.put(`script:${scriptId}`, scripts, { expirationTtl: 3600 });
+    }
 
-    return new Response(JSON.stringify({ script: scripts, links: rawLinks, base64: base64Sub }), {
+    return new Response(JSON.stringify({ 
+      scriptId: scriptId, 
+      fullScript: scripts, // 萬一未綁定 KV 則作後備
+      argoNodes: generatedNodesData 
+    }), {
       headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
     });
   } catch (e: any) {
