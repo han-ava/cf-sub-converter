@@ -165,7 +165,6 @@ export const HTML_PAGE = `
         </div>
       </div>
 
-      <!-- 節點名稱替換 (支援 DEL- 與 - 語法) -->
       <div class="form-group" style="margin-top: 1.5rem;">
         <label for="renameKeywords">節點名稱替換 (選填，多個用 | 分隔)</label>
         <input type="text" id="renameKeywords" placeholder="例如: DEL-[69云]|移动优化-專線">
@@ -190,40 +189,40 @@ export const HTML_PAGE = `
       </button>
     </main>
 
-    <!-- ⚡ Argo 隧道轉換助手區塊 -->
+    <!-- ⚡ Argo 隧道一鍵生成器區塊 -->
     <main class="panel" style="margin-top: 1rem;">
       <div class="panel-header">
         <h2 class="panel-title" style="color: var(--primary);">
           <svg viewBox="0 0 24 24"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"></path></svg>
-          Argo 隧道一鍵生成器 (VLESS 專用)
+          Argo 隧道一鍵生成器
         </h2>
       </div>
       
       <div class="form-group">
         <button class="btn btn-ghost" id="parseVlessBtn" onclick="parseVlessNodes()" style="width: 100%; justify-content: center; font-weight: 600;">
-          第一步：解析並載入目前輸入的 VLESS 節點
+          第一步：解析並載入目前輸入的 VLESS / VMess 節點
         </button>
       </div>
 
       <div id="vlessSelectorWrapper" style="display: none; margin-top: 1.25rem; border: 1px solid var(--border); border-radius: var(--radius-md); padding: 1.25rem; background: var(--bg-input);">
-        <label style="margin-bottom: 0.75rem; display: block; font-weight: 600; color: var(--text-main);">選擇要複製並轉換的 VLESS 節點 (可多選)：</label>
+        <label style="margin-bottom: 0.75rem; display: block; font-weight: 600; color: var(--text-main);">選擇要複製並轉換的原始節點 (支援 VLESS / VMess，可多選)：</label>
         <div id="vlessCheckboxList" style="display: flex; flex-direction: column; gap: 8px; max-height: 220px; overflow-y: auto; padding-right: 4px; margin-bottom: 1.25rem; border-bottom: 1px solid var(--border); padding-bottom: 0.75rem;">
           <!-- 複選框動態生成 -->
         </div>
         
         <div class="form-group">
-          <label>1. VPS 本地 VLESS 監聽連接埠 (請與 mack-a 部署配置一致)</label>
-          <input type="text" id="argoLocalPort" value="8080" placeholder="例如: 8080 或 12345">
+          <label>1. VPS 本地監聽連接埠 (預設已自動匹配您所選節點之端口，可手動修改)</label>
+          <input type="text" id="argoLocalPort" value="8080" placeholder="例如: 8080、12345 等">
         </div>
 
         <div class="form-group" style="margin-top: 1rem;">
-          <label>2. Cloudflare Tunnel Token (選填，若留空則為臨時隨機隧道)</label>
+          <label>2. Cloudflare Tunnel Token (選填，若留空則自動啟用臨時隨機隧道)</label>
           <input type="text" id="argoTunnelToken" placeholder="若使用臨時隧道請留空；固定隧道請貼上 eyJhIjoiY2...">
         </div>
 
         <div class="form-group" style="margin-top: 1rem;">
           <label>3. 自訂綁定域名 (固定隧道必填，臨時隨機隧道免填)</label>
-          <input type="text" id="argoCustomDomain" placeholder="例如: argo-vless.yourdomain.com">
+          <input type="text" id="argoCustomDomain" placeholder="例如: argo.yourdomain.com">
         </div>
 
         <button class="btn btn-primary" id="generateArgoBtn" onclick="generateArgo()" style="margin-top: 1.5rem; background: var(--success);">
@@ -375,7 +374,7 @@ export const HTML_PAGE = `
       const grid = document.getElementById('favGrid');
       if (favs.length === 0) {
         grid.style.display = 'block';
-        grid.innerHTML = '<div class="empty-state">目前尚未儲存任何配置</div>';
+        grid.innerHTML = '<div class="empty-state">目前尚未儲存 any 配置</div>';
         return;
       }
       grid.style.display = 'grid';
@@ -529,7 +528,7 @@ export const HTML_PAGE = `
       btn.innerHTML = originalHTML;
     }
     
-    // ⚡ Argo 隧道前端解析邏輯
+    // ⚡ Argo 隧道前端解析邏輯 (支援 VLESS 與 VMess)
     async function parseVlessNodes() {
       const raw = document.getElementById('urlInput').value.trim();
       if (!raw) return showToast('請先在上方輸入節點連結或訂閱地址', false);
@@ -537,10 +536,10 @@ export const HTML_PAGE = `
       const btn = document.getElementById('parseVlessBtn');
       const originalText = btn.textContent;
       btn.disabled = true;
-      btn.textContent = '正在與後端解析 VLESS 節點...';
+      btn.textContent = '正在與後端解析節點...';
       
       try {
-        const resp = await fetch('/api/parse-vless', {
+        const resp = await fetch('/api/parse-argo', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ url: raw })
@@ -555,20 +554,24 @@ export const HTML_PAGE = `
         const listEl = document.getElementById('vlessCheckboxList');
         
         if (nodes.length === 0) {
-          showToast('目前輸入內容中未找到任何 VLESS 節點', false);
+          showToast('目前輸入內容中未找到任何 VLESS / VMess 節點', false);
           document.getElementById('vlessSelectorWrapper').style.display = 'none';
           return;
         }
         
         listEl.innerHTML = nodes.map(n => \`
           <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.05);">
-            <input type="checkbox" class="vless-chk" value="\${n.index}" checked style="width: auto; height: auto; cursor: pointer;">
-            <span style="font-size: 0.9rem; color: var(--text-main);">\${n.name} <span style="color: var(--text-muted); font-size: 0.8rem;">(\${n.server}:\${n.port} - \${n.type})</span></span>
+            <input type="checkbox" class="vless-chk" value="\${n.index}" data-port="\${n.port}" checked style="width: auto; height: auto; cursor: pointer;" onchange="syncDefaultPort()">
+            <span style="font-size: 0.9rem; color: var(--text-main);">\${n.name} <span style="color: var(--text-muted); font-size: 0.8rem;">(\${n.server}:\s\${n.port} - \${n.type.toUpperCase()})</span></span>
           </label>
         \`).join('');
         
         document.getElementById('vlessSelectorWrapper').style.display = 'block';
-        showToast(\`解析完成，成功載入 \${nodes.length} 個 VLESS 節點！\`);
+        
+        // 載入完成時，預設自動同步第一個勾選節點的原生埠
+        syncDefaultPort();
+        
+        showToast(\`解析完成，成功載入 \${nodes.length} 個 VLESS/VMess 節點！\`);
       } catch(e) {
         showToast('解析出錯: ' + e.message, false);
       } finally {
@@ -577,11 +580,22 @@ export const HTML_PAGE = `
       }
     }
 
-    // ⚡ Argo 隧道一鍵生成與部署腳本生成邏輯
+    // ⚡ 當勾選狀態改變時，自動將監聽連接埠替換成所選節點的埠
+    function syncDefaultPort() {
+      const checkedInput = document.querySelector('.vless-chk:checked');
+      if (checkedInput) {
+        const port = checkedInput.getAttribute('data-port');
+        if (port) {
+          document.getElementById('argoLocalPort').value = port;
+        }
+      }
+    }
+
+    // ⚡ Argo 隧道一鍵生成
     async function generateArgo() {
       const raw = document.getElementById('urlInput').value.trim();
       const checkboxes = document.querySelectorAll('.vless-chk:checked');
-      if (checkboxes.length === 0) return showToast('請至少選擇一個 VLESS 節點進行轉換', false);
+      if (checkboxes.length === 0) return showToast('請至少選擇一個節點進行轉換', false);
       
       const indices = Array.from(checkboxes).map(cb => parseInt(cb.value));
       const port = document.getElementById('argoLocalPort').value.trim() || '8080';
@@ -659,7 +673,7 @@ export const HTML_PAGE = `
           }, 100);
         <\\/script>
         </body></html>
-      \`);
+      \ tablet\` );
     }
     
     function showToast(msg, isSuccess = true) {
