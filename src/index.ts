@@ -3,19 +3,19 @@ import packageJson from '../package.json';
 import { Env, ProxyNode } from './types';
 import { HTML_PAGE } from './constants';
 import { parseContent } from './parser';
-import { toSingBoxWithTemplate, toClashWithTemplate, toBase64, toRawLinks } from './generator';
+import { toSingBoxWithTemplate, toClashWithTemplate, toBase64 } from './generator';
 import { deduplicateNodeNames } from './utils';
 
 const version = packageJson.version || '2.5.0';
 
-// 輔助載入與解析節點（不含流量統計，專供 API 使用）
+// 💥 修正：改用 for...of 順序執行，確保 API 解析出的節點順序與原輸入 100% 相同！
 async function loadNodes(urlParam: string): Promise<ProxyNode[]> {
   const inputs = urlParam.split(/[\n\r|]+/); 
   const allNodes: ProxyNode[] = [];
 
-  await Promise.all(inputs.map(async (input) => { 
+  for (const input of inputs) {
     const trimmed = input.trim(); 
-    if (!trimmed) return;
+    if (!trimmed) continue;
     
     if (trimmed.startsWith('http')) { 
       try { 
@@ -45,7 +45,7 @@ async function loadNodes(urlParam: string): Promise<ProxyNode[]> {
         allNodes.push(...parsed); 
       } catch(err) {}
     }
-  }));
+  }
   return allNodes;
 }
 
@@ -87,7 +87,7 @@ cloudflared tunnel --url http://127.0.0.1:{{VLESS_PORT}}
   const vlessType = node.network || 'ws';
   const vlessPath = node.wsPath || '/';
   
-  // 💥 統一節點名稱格式為：[原節點名]_Argo
+  // 統一節點名稱格式為：[原節點名]_Argo
   const argoNodeName = `${node.name}_Argo`;
 
   // 替換模板中的自訂佔位符
@@ -110,6 +110,7 @@ const url = new URL(request.url);
 if (request.method === 'OPTIONS') {
   return new Response(null, {
     headers: {
+      'Access-Control-Origin': '*',
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type',
@@ -150,6 +151,7 @@ if (request.method === 'POST' && (url.pathname === '/api/parse-vless' || url.pat
     }
 
     const allNodes = await loadNodes(rawUrl);
+    // 篩選 VLESS & VMess
     const argoCompatibleNodes = allNodes.filter(n => n.type === 'vless' || n.type === 'vmess').map((n, idx) => ({
       index: idx,
       name: n.name,
@@ -208,7 +210,7 @@ if (request.method === 'POST' && url.pathname === '/api/argo-generate') {
 
       const targetDomain = (token.trim() && domain.trim()) ? domain.trim() : "請在VPS執行一鍵安裝腳本獲取臨時域名.trycloudflare.com";
       
-      // 💥 格式優化：統一變更節點名字後置：[原節點名]_Argo
+      // 格式優化：統一變更節點名字後置：[原節點名]_Argo
       const argoNodeName = `${node.name}_Argo`;
 
       let argoLink = '';
@@ -381,7 +383,7 @@ if (!urlParam || urlParam.trim() === '') {
   return new Response(dynamicHtml, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
 }
 
-// 4. 解析並下載 (支援流量資訊透傳與合併)
+// 4. 解析並下載 (支援流量資訊透傳與合併 - 💥 修正：改用 for...of 同步循序下載，100% 鎖定原始訂閱順序！)
 const inputs = urlParam.split(/[\n\r|]+/); 
 const allNodes: ProxyNode[] = [];
 const errors: string[] = [];
@@ -392,9 +394,9 @@ let totalTotal = 0;
 let minExpire = 0;
 let hasTrafficInfo = false;
 
-await Promise.all(inputs.map(async (input) => { 
+for (const input of inputs) {
   const trimmed = input.trim(); 
-  if (!trimmed) return;
+  if (!trimmed) continue;
   
   if (trimmed.startsWith('http')) { 
     try { 
@@ -455,7 +457,7 @@ await Promise.all(inputs.map(async (input) => {
       errors.push(`⚠️ [手動輸入內容]\n失敗原因: ${err.message}`);
     }
   }
-}));
+}
 
 if (allNodes.length === 0) {
   const errorReport = `未解析到任何有效節點。\n\n🔍 詳細錯誤診斷報告：\n-------------------------\n${errors.join('\n\n-------------------------\n')}`;
