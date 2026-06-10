@@ -209,7 +209,7 @@ if (request.method === 'POST' && url.pathname === '/api/parse-vless') {
   }
 }
 
-// 💥 2. POST /api/argo-generate (生成 VPS 腳本及整合訂閱)
+// 💥 2. POST /api/argo-generate (生成 VPS 腳本及整合訂閱 - 智慧就近插入邏輯)
 if (request.method === 'POST' && url.pathname === '/api/argo-generate') {
   try {
     const body: any = await request.json();
@@ -228,49 +228,57 @@ if (request.method === 'POST' && url.pathname === '/api/argo-generate') {
 
     const allNodes = await loadNodes(rawUrl);
     const vlessNodes = allNodes.filter(n => n.type === 'vless');
-    const selectedNodes = selectedIndices.map(idx => vlessNodes[idx]).filter(Boolean);
+    
+    // 獲取被選定要轉換的原始節點物件引用
+    const selectedVlessObjects = selectedIndices.map(idx => vlessNodes[idx]).filter(Boolean);
 
-    if (selectedNodes.length === 0) {
+    if (selectedVlessObjects.length === 0) {
       return new Response(JSON.stringify({ error: '選擇的節點不存在' }), { 
         status: 400, 
         headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } 
       });
     }
 
-    const combinedNodes = [...allNodes];
+    const combinedNodes: ProxyNode[] = [];
     let scripts = '';
 
-    for (const node of selectedNodes) {
-      // 串接一鍵 VPS 部署腳本
-      scripts += makeVpsScript(node, port, token, domain) + '\n\n';
+    // 循序掃描原始列表，將複製出來的 Argo 節點精準插入到原節點下方
+    for (const node of allNodes) {
+      combinedNodes.push(node); // 保留並加入原始節點
+      
+      // 如果目前掃描的節點就是被選中要進行轉換的，立即生成 Argo 並插入其正下方
+      if (selectedVlessObjects.includes(node)) {
+        // 串接一鍵 VPS 部署腳本
+        scripts += makeVpsScript(node, port, token, domain) + '\n\n';
 
-      // 複製並產生成對的新 Argo 節點（若是固定隧道模式）
-      if (token.trim() && domain.trim()) {
-        const argoNode: ProxyNode = {
-          type: 'vless',
-          name: `Argo-${node.name}`,
-          server: domain.trim(),
-          port: 443,
-          uuid: node.uuid,
-          tls: true,
-          network: node.network || 'ws',
-          wsPath: node.wsPath || '/',
-          wsHeaders: { Host: domain.trim() },
-          sni: domain.trim(),
-          skipCertVerify: true
-        };
+        // 複製並產生成對的新 Argo 節點（若是固定隧道模式）
+        if (token.trim() && domain.trim()) {
+          const argoNode: ProxyNode = {
+            type: 'vless',
+            name: `Argo-${node.name}`,
+            server: domain.trim(),
+            port: 443,
+            uuid: node.uuid,
+            tls: true,
+            network: node.network || 'ws',
+            wsPath: node.wsPath || '/',
+            wsHeaders: { Host: domain.trim() },
+            sni: domain.trim(),
+            skipCertVerify: true
+          };
 
-        // 配接 Sing-box / Clash 物件結構
-        const sb: any = { tag: argoNode.name, type: 'vless', server: argoNode.server, server_port: argoNode.port, uuid: argoNode.uuid };
-        sb.tls = { enabled: true, server_name: argoNode.sni, insecure: true, utls: { enabled: true, fingerprint: 'chrome' }};
-        if(argoNode.network === 'ws') sb.transport = { type: 'ws', path: argoNode.wsPath, headers: argoNode.wsHeaders };
-        argoNode.singboxObj = sb;
+          // 配接 Sing-box / Clash 物件結構
+          const sb: any = { tag: argoNode.name, type: 'vless', server: argoNode.server, server_port: argoNode.port, uuid: argoNode.uuid };
+          sb.tls = { enabled: true, server_name: argoNode.sni, insecure: true, utls: { enabled: true, fingerprint: 'chrome' }};
+          if(argoNode.network === 'ws') sb.transport = { type: 'ws', path: argoNode.wsPath, headers: argoNode.wsHeaders };
+          argoNode.singboxObj = sb;
 
-        const cl: any = { name: argoNode.name, type: 'vless', server: argoNode.server, port: argoNode.port, uuid: argoNode.uuid, udp: true, tls: true, servername: argoNode.sni, 'skip-cert-verify': true, 'client-fingerprint': 'chrome' };
-        if(argoNode.network === 'ws') { cl.network = 'ws'; cl['ws-opts'] = { path: argoNode.wsPath, headers: argoNode.wsHeaders }; }
-        argoNode.clashObj = cl;
+          const cl: any = { name: argoNode.name, type: 'vless', server: argoNode.server, port: argoNode.port, uuid: argoNode.uuid, udp: true, tls: true, servername: argoNode.sni, 'skip-cert-verify': true, 'client-fingerprint': 'chrome' };
+          if(argoNode.network === 'ws') { cl.network = 'ws'; cl['ws-opts'] = { path: argoNode.wsPath, headers: argoNode.wsHeaders }; }
+          argoNode.clashObj = cl;
 
-        combinedNodes.push(argoNode);
+          combinedNodes.push(argoNode); // 直接插入原 VLESS 節點正下方
+        }
       }
     }
 
@@ -565,7 +573,7 @@ if (excludeParam) {
 }
 
 if (filteredNodes.length === 0) {
-  return new Response('篩選與替換後，未剩下任何有效節點。', { 
+  return new Response('篩選與替換後，未剩下 any 有效節點。', { 
     status: 400, 
     headers: { 'Content-Type': 'text/plain; charset=utf-8' } 
   });
