@@ -3,7 +3,7 @@ import packageJson from '../package.json';
 import { Env, ProxyNode } from './types';
 import { HTML_PAGE } from './constants';
 import { parseContent } from './parser';
-import { toSingBoxWithTemplate, toClashWithTemplate, toBase64 } from './generator';
+import { toSingBoxWithTemplate, toClashWithTemplate, toBase64, toRawLinks } from './generator';
 import { deduplicateNodeNames } from './utils';
 
 const version = packageJson.version || '2.5.0';
@@ -73,7 +73,7 @@ async function getArgoScriptFromGithub(node: ProxyNode, port: string, token: str
       throw new Error("GitHub Fetch Failed");
     }
   } catch(e) {
-    // 降級備用本地極簡模板（防範 GitHub 被阻擋或尚未上傳檔案之情況）
+    // 降級備用本地極簡模板
     template = `#!/bin/bash
 echo "警告: 無法從 GitHub 獲取最新 argo.sh 模板，正在使用降級極簡部署..."
 if ! command -v cloudflared &> /dev/null; then
@@ -86,6 +86,9 @@ cloudflared tunnel --url http://127.0.0.1:{{VLESS_PORT}}
 
   const vlessType = node.network || 'ws';
   const vlessPath = node.wsPath || '/';
+  
+  // 💥 統一節點名稱格式為：[原節點名]_Argo
+  const argoNodeName = `${node.name}_Argo`;
 
   // 替換模板中的自訂佔位符
   return template
@@ -94,7 +97,7 @@ cloudflared tunnel --url http://127.0.0.1:{{VLESS_PORT}}
     .replace("{{VLESS_PATH}}", vlessPath)
     .replace("{{VLESS_TYPE}}", vlessType)
     .replace("{{VLESS_PORT}}", port)
-    .replace("{{NODE_NAME}}", node.name)
+    .replace("{{NODE_NAME}}", argoNodeName)
     .replace("{{TUNNEL_TOKEN}}", token.trim())
     .replace("{{CUSTOM_DOMAIN}}", domain.trim());
 }
@@ -114,7 +117,7 @@ if (request.method === 'OPTIONS') {
   });
 }
 
-// 💥 GET /argo/sh/:id 路由 (供 VPS 執行 wget/curl 讀取一鍵安裝腳本)
+// GET /argo/sh/:id 路由 (供 VPS 執行 wget/curl 讀取一鍵安裝腳本)
 if (request.method === 'GET' && url.pathname.startsWith('/argo/sh/')) {
   const scriptId = url.pathname.split('/').pop();
   if (env.SUB_CACHE && scriptId) {
@@ -134,7 +137,7 @@ if (request.method === 'GET' && url.pathname.startsWith('/argo/sh/')) {
   });
 }
 
-// POST /api/parse-vless 
+// POST /api/parse-argo (同時解析並篩選 VLESS 和 VMess 節點)
 if (request.method === 'POST' && (url.pathname === '/api/parse-vless' || url.pathname === '/api/parse-argo')) {
   try {
     const body: any = await request.json();
@@ -166,7 +169,7 @@ if (request.method === 'POST' && (url.pathname === '/api/parse-vless' || url.pat
   }
 }
 
-// POST /api/argo-generate (生成 VPS 腳本與整合訂閱 - 智慧就近插入明文連結)
+// POST /api/argo-generate (生成 VPS 腳本與獨立 Argo 明文節點)
 if (request.method === 'POST' && url.pathname === '/api/argo-generate') {
   try {
     const body: any = await request.json();
@@ -201,11 +204,12 @@ if (request.method === 'POST' && url.pathname === '/api/argo-generate') {
       const node = selectedObjects[i];
       const originalIndex = selectedIndices[i];
       
-      // 💥 改由動態拉取 GitHub 模板生成 Bash 腳本
       scripts += await getArgoScriptFromGithub(node, port, token, domain) + '\n\n';
 
       const targetDomain = (token.trim() && domain.trim()) ? domain.trim() : "請在VPS執行一鍵安裝腳本獲取臨時域名.trycloudflare.com";
-      const argoNodeName = (token.trim() && domain.trim()) ? `Argo-${node.name}` : `Argo-Temp-${node.name}`;
+      
+      // 💥 格式優化：統一變更節點名字後置：[原節點名]_Argo
+      const argoNodeName = `${node.name}_Argo`;
 
       let argoLink = '';
       if (node.type === 'vless') {
