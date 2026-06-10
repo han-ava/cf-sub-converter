@@ -15,7 +15,7 @@ VLESS_PORT="{{VLESS_PORT}}"
 NODE_NAME="{{NODE_NAME}}"
 TUNNEL_TOKEN="{{TUNNEL_TOKEN}}"
 CUSTOM_DOMAIN="{{CUSTOM_DOMAIN}}"
-VLESS_TLS="{{VLESS_TLS}}" # 💥 新增變數：本地節點是否帶有 TLS
+VLESS_TLS="{{VLESS_TLS}}"
 
 echo -e "${GREEN}=== 開始部署 Cloudflare Argo 隧道 (${NODE_NAME}) ===${NC}"
 
@@ -35,11 +35,29 @@ fi
 
 SAFE_NODE_NAME=$(echo "$NODE_NAME" | sed 's/[^a-zA-Z0-9]/_/g')
 
-# 💥 2. 智慧本地協定判斷：原節點若有 TLS，則改用 https 搭配 --no-tls-verify 轉發
-LOCAL_URL="http://127.0.0.1:$VLESS_PORT"
-if [ "$VLESS_TLS" = "true" ]; then
-    echo "檢測到本地節點啟用 TLS 加密，一鍵腳本已自動開啟 https 轉發與 --no-tls-verify 屬性。"
-    LOCAL_URL="https://127.0.0.1:$VLESS_PORT --no-tls-verify"
+# 💥 2. 雙重保險：VPS 本地執行期自動檢測並修正連接埠與 TLS 加密衝突
+DETECTED_PORT="$VLESS_PORT"
+DETECTED_TLS="$VLESS_TLS"
+
+if command -v ss &> /dev/null; then
+    # 檢查使用者輸入的埠在 VPS 上是否有監聽
+    if ! ss -tln | grep -q ":$VLESS_PORT "; then
+        echo -e "${RED}警告: 輸入的本地轉發埠 $VLESS_PORT 似乎未在本地監聽。正在探測常用埠...${NC}"
+        if ss -tln | grep -q ":443 "; then
+            echo -e "${GREEN}自動修正成功：偵測到 VPS 本地 Nginx/443 埠正在運行！已將轉發目標自動修正為: 443 (TLS) 埠。${NC}"
+            DETECTED_PORT="443"
+            DETECTED_TLS="true"
+        elif ss -tln | grep -q ":80 "; then
+            echo -e "${GREEN}自動修正成功：偵測到 VPS 本地 80 埠正在運行！已將轉發目標自動修正為: 80 埠。${NC}"
+            DETECTED_PORT="80"
+            DETECTED_TLS="false"
+        fi
+    fi
+fi
+
+LOCAL_URL="http://127.0.0.1:$DETECTED_PORT"
+if [ "$DETECTED_TLS" = "true" ]; then
+    LOCAL_URL="https://127.0.0.1:$DETECTED_PORT --no-tls-verify"
 fi
 
 # 3. 判斷並執行部署
@@ -53,7 +71,7 @@ if [ -n "$TUNNEL_TOKEN" ]; then
     
     echo -e "${GREEN}固定隧道服務啟動成功！${NC}"
     echo "請確保已在 Cloudflare Dashboard 中將網域 '$CUSTOM_DOMAIN' 指向本地服務。"
-    echo "提示：若您使用的是 TLS 加密端口 (如 8443)，請在 Cloudflare Zero Trust 的 Tunnel 設置中，將 Service Type 設定為 HTTPS，並在 Additional HTTP settings 中開啟 [No TLS Verify] 屬性。"
+    echo "提示：若您使用的是 TLS 加密端口 (如 443)，請在 Cloudflare Zero Trust 的 Tunnel 設置中，將 Service Type 設定為 HTTPS，並在 Additional HTTP settings 中開啟 [No TLS Verify] 屬性。"
     
     if [ "$NODE_TYPE" = "vless" ]; then
         FINAL_LINK="vless://$VLESS_UUID@$CUSTOM_DOMAIN:443?encryption=none&security=tls&type=$VLESS_TYPE&host=$CUSTOM_DOMAIN"
@@ -121,7 +139,7 @@ EOF
         
         echo -e "\n${GREEN}=== 部署成功 ===${NC}"
         echo -e "原節點名稱: $NODE_NAME"
-        echo -e "轉發連接埠: $VLESS_PORT"
+        echo -e "轉發連接埠: $DETECTED_PORT"
         echo -e "您的臨時 Argo 節點 $NODE_TYPE 連結為 (注意：VPS 重啟或重開服務後域名會刷新):"
         echo -e "${GREEN}$FINAL_LINK${NC}\n"
     else
