@@ -1,6 +1,6 @@
 # ⚡ CF Sub Converter Pro
 
-基於 Cloudflare Workers 的 Serverless 訂閱轉換工具。擁有全新專業級的無廣告深色 UI，內建智慧過濾、替換、智慧國旗萬國對齊系統，以及 **Argo 隧道一鍵生成器**。一鍵將雜亂的訂閱或節點轉換為 Sing-Box / Clash Meta (Mihomo) / Base64 格式，亦可直接作為第三方轉換網頁（如 `sub-web`）的自定義後端 [1]。
+基於 Cloudflare Workers 的 Serverless 訂閱轉換工具。擁有全新專業級的無廣告深色 UI，內建智慧過濾、替換、智慧國旗萬國對齊系統，以及 **Argo 隧道一鍵生成器**。一鍵將訂閱或節點轉換為 Sing-Box / Clash Meta (Mihomo) / Base64 格式，亦可直接作為第三方轉換網頁（如 `sub-web`）的自定義後端 [1]。
 
 [![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/sammy0101/cf-sub-converter)
 
