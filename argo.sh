@@ -52,7 +52,7 @@ if command -v ss &> /dev/null; then
     fi
 fi
 
-# 💥 智慧探測：自動探測目標連接埠是否啟用 TLS 加密，徹底解決明文/密文與 530 握手錯誤！
+# 智慧探測：自動探測目標連接埠是否啟用 TLS 加密
 DETECTED_TLS="false"
 if curl -s -k --connect-timeout 2 "https://127.0.0.1:$DETECTED_PORT" &>/dev/null; then
     echo "偵測到本地轉發埠 $DETECTED_PORT 為 TLS 加密連接埠，自動開啟 HTTPS 轉發與 SNI 對齊模式。"
@@ -68,7 +68,7 @@ if [ "$DETECTED_TLS" = "true" ]; then
     EXTRA_ARGS="--no-tls-verify"
 fi
 
-# 💥 重寫 Host Header 與 TLS SNI，完美解決 Sing-box 的 530 安全拒絕連線！
+# 重寫 Host Header 與 TLS SNI
 if [ -n "$ORIGIN_HOST" ]; then
     echo "已自動啟用 HTTP 主機頭部重寫 (Host Header 重寫為: $ORIGIN_HOST)"
     EXTRA_ARGS="$EXTRA_ARGS --http-host-header $ORIGIN_HOST"
@@ -90,7 +90,7 @@ if [ -n "$TUNNEL_TOKEN" ]; then
     echo -e "\n${GREEN}=== 部署成功 【固定域名模式】 ===${NC}"
     echo -e "原節點名稱: $NODE_NAME"
     echo -e "轉發連接埠: $DETECTED_PORT"
-    echo -e "綁定自訂域名: $CUSTOM_DOMAIN"
+    echo -e "綁定自訂域名: $CUSTOM_DOMAIN" [1]
     
     if [ "$NODE_TYPE" = "vless" ]; then
         FINAL_LINK="vless://$VLESS_UUID@$CUSTOM_DOMAIN:443?encryption=none&security=tls&type=$VLESS_TYPE&host=$CUSTOM_DOMAIN"
@@ -136,7 +136,8 @@ EOF
     TEMP_DOMAIN=""
     for i in {1..15}; do
         sleep 1
-        TEMP_DOMAIN=$(grep -o 'https://[a-zA-Z0-9-]*\.trycloudflare\.com' /var/log/cloudflared-argo-${SAFE_NODE_NAME}.log | head -n 1 | cut -d'/' -f3)
+        # 💥 引入甬哥 (yonggekkk) 穩定性 100% 的極簡管道提取算法！
+        TEMP_DOMAIN=$(grep -a 'trycloudflare.com' /var/log/cloudflared-argo-${SAFE_NODE_NAME}.log 2>/dev/null | awk 'NR==2' | awk -F// '{print $2}' | awk '{print $1}')
         if [ -n "$TEMP_DOMAIN" ]; then
             break
         fi
