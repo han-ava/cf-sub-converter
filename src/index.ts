@@ -4,7 +4,7 @@ import { Env, ProxyNode } from './types';
 import { HTML_PAGE } from './constants';
 import { parseContent } from './parser';
 import { toSingBoxWithTemplate, toClashWithTemplate, toBase64 } from './generator';
-// 💥 引入同家歸類演算法
+// 💥 引入極簡同家歸類演算法
 import { deduplicateNodeNames, groupNodesByProvider } from './utils';
 
 const version = packageJson.version || '2.5.0';
@@ -465,7 +465,7 @@ for (const input of inputs) {
 }
 
 if (allNodes.length === 0) {
-  const errorReport = `未解析到任何有效節節點。\n\n🔍 詳細錯誤診斷報告：\n-------------------------\n${errors.join('\n\n-------------------------\n')}`;
+  const errorReport = `未解析到任何有效節點。\n\n🔍 詳細錯誤診斷報告：\n-------------------------\n${errors.join('\n\n-------------------------\n')}`;
   return new Response(errorReport, { 
     status: 400, 
     headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Access-Control-Allow-Origin': '*' } 
@@ -538,7 +538,7 @@ if (filteredNodes.length === 0) {
   });
 }
 
-// 💥 修改：對篩選過後的節點先進行「智慧同家歸類」，再進行「去重命名與補國旗」
+// 💥 修改：對篩選過後的節點先進行「極簡域名反轉同家排序歸類」，再進行「去重複命名自動補國旗」
 const groupedNodes = groupNodesByProvider(filteredNodes);
 const uniqueNodes = deduplicateNodeNames(groupedNodes);
 
@@ -553,7 +553,42 @@ if (!target) {
   if (renameParam) filterQuery += `&rename=${encodeURIComponent(renameParam)}`;
 
   const htmlInfo = `
-... (保持原 HTML 結構) ...
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>訂閱轉換結果</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0f172a; color: #f8fafc; padding: 40px 20px; display: flex; justify-content: center; }
+    .container { background: #1e293b; padding: 2rem; border-radius: 16px; max-width: 600px; width: 100%; }
+    h1 { margin: 0 0 1.5rem 0; font-size: 1.5rem; text-align: center; }
+    .result { background: #0f172a; padding: 1rem; border-radius: 8px; margin-bottom: 1rem; }
+    .result-title { font-weight: 600; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 8px; }
+    .result-link { background: #334155; padding: 0.8rem; border-radius: 6px; word-break: break-all; font-family: monospace; font-size: 0.85rem; }
+    .btn { display: block; background: #22c55e; color: white; text-align: center; padding: 1rem; border-radius: 8px; text-decoration: none; font-weight: 600; margin-top: 1.5rem; }
+    .btn:hover { background: #16a34a; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>⚡ 篩選並轉換完成 (${uniqueNodes.length} 節點)</h1>
+    <div class="result">
+      <div class="result-title">📄 Sing-Box (JSON)</div>
+      <div class="result-link">${host}/?url=${encodedUrl}&target=singbox</div>
+    </div>
+    <div class="result">
+      <div class="result-title">📋 Clash Meta (YAML)</div>
+      <div class="result-link">${host}/?url=${encodedUrl}&target=clash</div>
+    </div>
+    <div class="result">
+      <div class="result-title">🔗 Base64 (原始)</div>
+      <div class="result-link">${host}/?url=${encodedUrl}&target=base64</div>
+    </div>
+    <a class="btn" href="${host}/?url=${encodedUrl}&target=singbox">📥 下載 Sing-Box 訂閱</a>
+  </div>
+</body>
+</html>
 `;
   return new Response(htmlInfo, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
 }
