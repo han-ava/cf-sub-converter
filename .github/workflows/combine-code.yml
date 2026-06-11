@@ -26,7 +26,7 @@ jobs:
           echo "Generated on: $(date)" >> "$OUT_FILE"
           echo "" >> "$OUT_FILE"
 
-          # 遍歷專案內的所有檔案，只排除 node_modules、.git、大鎖定檔與圖片等二進位檔案
+          # 遍歷專案內的所有檔案，排除依賴、Git 歷史、打包產物及二進位檔案
           find . -type f \
             -not -path "*/node_modules/*" \
             -not -path "*/.git/*" \
@@ -52,11 +52,13 @@ jobs:
                 ext=""
               fi
               
+              # 寫入檔案標題
               echo "## File: $rel_path" >> "$OUT_FILE"
-              echo "\`\`\`$ext" >> "$OUT_FILE"
+              # 使用四個反單引號（````）包裹，防止內部程式碼的三個反單引號造成排版衝突
+              echo "\`\`\`\`$ext" >> "$OUT_FILE"
               cat "$file" >> "$OUT_FILE"
               echo "" >> "$OUT_FILE"
-              echo "\`\`\`" >> "$OUT_FILE"
+              echo "\`\`\`\`" >> "$OUT_FILE"
               echo "" >> "$OUT_FILE"
           done
 
