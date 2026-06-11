@@ -48,7 +48,14 @@ export const HTML_PAGE = `
     .brand svg { color: var(--primary); width: 1.75rem; height: 1.75rem; }
     .badge { background: rgba(59, 130, 246, 0.1); color: var(--primary); font-size: 0.75rem; padding: 4px 8px; border-radius: 9999px; font-weight: 600; border: 1px solid rgba(59, 130, 246, 0.2); }
     .container { max-width: 860px; margin: 2.5rem auto; padding: 0 1.5rem; display: flex; flex-direction: column; gap: 1.5rem; }
-    .panel { background-color: var(--bg-panel); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 1.75rem; box-shadow: var(--shadow); }
+    
+    /* 💥 優化：配置面板強制開啟 GPU 複合層與字體優化 */
+    .panel { 
+      background-color: var(--bg-panel); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 1.75rem; box-shadow: var(--shadow); 
+      transform: translate3d(0,0,0);
+      backface-visibility: hidden;
+      -webkit-backface-visibility: hidden;
+    }
     .panel-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.25rem; }
     .panel-title { font-size: 1.1rem; font-weight: 600; display: flex; align-items: center; gap: 8px; }
     .panel-title svg { color: var(--text-muted); }
@@ -56,17 +63,24 @@ export const HTML_PAGE = `
     .form-group:last-child { margin-bottom: 0; }
     label { display: block; font-size: 0.875rem; font-weight: 500; color: var(--text-muted); margin-bottom: 0.5rem; }
     textarea, input[type="text"] {
-      width: 100%; background-color: var(--bg-input); border: 1px solid var(--border); color: var(--text-main); border-radius: var(--radius-md); padding: 0.875rem 1rem; font-size: 0.95rem; transition: all 0.2s ease; outline: none;
+      width: 100%; background-color: var(--bg-input); border: 1px solid var(--border); color: var(--text-main); border-radius: var(--radius-md); padding: 0.875rem 1rem; font-size: 0.95rem; transition: border-color 0.2s ease, box-shadow 0.2s ease; outline: none;
     }
     textarea { font-family: 'JetBrains Mono', monospace; font-size: 0.875rem; min-height: 140px; resize: vertical; line-height: 1.6; }
     textarea::placeholder, input::placeholder { color: #475569; }
     textarea:focus, input[type="text"]:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15); }
     .hint { font-size: 0.8rem; color: var(--text-muted); margin-top: 0.4rem; display: flex; align-items: center; gap: 4px; }
+    
+    /* 💥 優化：按鈕 transition 限制特定屬性，並強制常駐 GPU 加速層避免影響附近文字 */
     .btn {
-      display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 0.75rem 1.25rem; border-radius: var(--radius-md); font-weight: 600; font-size: 0.95rem; border: none; cursor: pointer; transition: all 0.2s ease; user-select: none;
+      display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 0.75rem 1.25rem; border-radius: var(--radius-md); font-weight: 600; font-size: 0.95rem; border: none; cursor: pointer; 
+      transition: background-color 0.2s ease, transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease; 
+      user-select: none;
+      transform: translate3d(0,0,0);
+      backface-visibility: hidden;
+      -webkit-backface-visibility: hidden;
     }
     .btn-primary { background-color: var(--primary); color: white; width: 100%; padding: 1rem; font-size: 1.05rem; }
-    .btn-primary:hover:not(:disabled) { background-color: var(--primary-hover); transform: translateY(-1px); }
+    .btn-primary:hover:not(:disabled) { background-color: var(--primary-hover); transform: translate3d(0, -1px, 0); }
     .btn-primary:disabled { opacity: 0.7; cursor: not-allowed; }
     .btn-icon { background: var(--bg-input); color: var(--text-main); border: 1px solid var(--border); padding: 0.6rem; border-radius: var(--radius-sm); }
     .btn-icon:hover { background: var(--bg-hover); color: var(--primary); border-color: var(--text-muted); }
@@ -89,10 +103,17 @@ export const HTML_PAGE = `
     .result-input-wrapper input { width: 100%; padding: 0.6rem 0.8rem; background: var(--bg-panel); font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text-muted); }
     .result-actions { display: flex; gap: 6px; }
     .fav-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 1rem; margin-top: 1rem; }
+    
+    /* 💥 優化：收藏卡片 transition 限制特定屬性，常駐 3D 加速層，完美杜絕 subpixel 重繪抖動 */
     .fav-card {
-      background: var(--bg-input); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 1.25rem; cursor: pointer; transition: all 0.2s ease; position: relative;
+      background: var(--bg-input); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 1.25rem; cursor: pointer; 
+      transition: border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease; 
+      position: relative;
+      transform: translate3d(0,0,0);
+      backface-visibility: hidden;
+      -webkit-backface-visibility: hidden;
     }
-    .fav-card:hover { border-color: var(--primary); transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
+    .fav-card:hover { border-color: var(--primary); transform: translate3d(0, -2px, 0); box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
     .fav-title { font-weight: 600; font-size: 0.95rem; margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
     .fav-url { font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .fav-actions { display: flex; gap: 8px; margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border); justify-content: flex-end; }
@@ -611,7 +632,7 @@ export const HTML_PAGE = `
       }
     }
 
-    // ⚡ Argo 隧道一鍵生成 (修正：不重寫 urlInput、第二步只顯示新生成的 Argo 連結) [1]
+    // ⚡ Argo 隧道一鍵生成 (修正：不重寫 urlInput、第二步只顯示新生成的 Argo 連結)
     async function generateArgo() {
       const raw = document.getElementById('urlInput').value.trim();
       const checkboxes = document.querySelectorAll('.vless-chk:checked');
@@ -644,7 +665,7 @@ export const HTML_PAGE = `
         const res = await resp.json();
         const host = window.location.origin;
 
-        // 1. 填入極簡一鍵指令 [1]
+        // 1. 填入極簡一鍵指令
         const hasKv = res.scriptId && res.scriptId.trim() !== '';
         if (hasKv) {
           document.getElementById('argoCurlCmd').value = \`curl -sSL \${host}/argo/sh/\${res.scriptId} | bash\`;
@@ -678,7 +699,7 @@ export const HTML_PAGE = `
     function copyText(id) {
       const el = document.getElementById(id);
       el.select();
-      navigator.clipboard.writeText(el.value).then(() => showToast('已成功複製！'));
+      navigator.clipboard.writeText(el.value).then(() => showToast('已成功複製到剪貼簿！'));
     }
 
     function showQr(id) {
