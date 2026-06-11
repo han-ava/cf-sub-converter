@@ -99,7 +99,7 @@ export function addFlag(name: string): string {
   return "🇺🇳 " + name;
 }
 
-// 💥 修改：按 22 國多梯隊黃金國旗順序進行排序（保留各機場內部原生排序，並自動將 UN 佔位符置底）
+// 💥 按國旗進行歸類排序（💥 修正：將 🇺🇳 置於最頂部，其餘依黃金順序排布）
 export function groupNodesByFlag(nodes: ProxyNode[]): ProxyNode[] {
   const groups = new Map<string, ProxyNode[]>();
   const flagOrder: string[] = [];
@@ -107,6 +107,7 @@ export function groupNodesByFlag(nodes: ProxyNode[]): ProxyNode[] {
   for (const node of nodes) {
     const flaggedName = addFlag(node.name || 'node');
     
+    // 提取國旗 Emoji (包含 surrogate pairs)
     let flag = '';
     const match = flaggedName.match(/^([\uD83C][\uDDE6-\uDDFF][\uD83C][\uDDE6-\uDDFF])/);
     if (match) {
@@ -122,17 +123,18 @@ export function groupNodesByFlag(nodes: ProxyNode[]): ProxyNode[] {
     groups.get(flag)!.push(node);
   }
   
-  // 💥 22 國精細分群黃金排序：亞太一線 ➔ 歐美二線 ➔ 東南亞/特區 ➔ 歐洲與全球主流
+  // 黃金地區排序順序
   const standardOrder = [
     '🇭🇰', '🇹🇼', '🇯🇵', '🇸🇬', '🇰🇷',  // 1. 亞太一線核心
     '🇺🇸', '🇬🇧', '🇨🇦', '🇦🇺',        // 2. 歐美主流大戶
     '🇲🇴', '🇨🇳', '🇹🇭', '🇻🇳', '🇲🇾', '🇵🇭', '🇮🇩', // 3. 特區與東南亞
-    '🇩🇪', '🇫🇷', '🇳🇱', '🇷🇺', '🇮🇳', '🇹🇷'  // 4. 歐洲與全球主流
+    '🇩🇪', '🇫🇷', '🇳🇱', '🇷🇺', '🇮🇳', '🇹睿'  // 4. 歐洲與全球主流
   ];
   
   flagOrder.sort((a, b) => {
-    if (a === '🇺🇳' && b !== '🇺🇳') return 1;
-    if (b === '🇺🇳' && a !== '🇺🇳') return -1;
+    // 💥 修正：🇺🇳 (聯合國國旗/臨時佔位符/官網提示) 優先排序在最前面
+    if (a === '🇺🇳' && b !== '🇺🇳') return -1;
+    if (b === '🇺🇳' && a !== '🇺🇳') return 1;
     
     const idxA = standardOrder.indexOf(a);
     const idxB = standardOrder.indexOf(b);
