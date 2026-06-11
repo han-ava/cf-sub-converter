@@ -1,0 +1,62 @@
+name: Generate Combined Codebase for AI
+
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - 'combined_project_code.md' # 避免此檔案自身的更新引發無限循環
+  workflow_dispatch: # 支援在 GitHub 頁面上手動觸發
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Combine Source Code
+        run: |
+          OUT_FILE="combined_project_code.md"
+          echo "# Project Codebase for AI Reference" > "$OUT_FILE"
+          echo "Generated on: $(date)" >> "$OUT_FILE"
+          echo "" >> "$OUT_FILE"
+
+          # 尋找相關程式碼與設定檔（自動排除依賴庫、Git 歷史、編譯產物等）
+          find . -type f \( -name "*.ts" -o -name "*.js" -o -name "*.json" -o -name "*.toml" -o -name "*.html" -o -name "*.css" \) \
+            -not -path "*/node_modules/*" \
+            -not -path "*/.git/*" \
+            -not -path "*/.github/*" \
+            -not -path "*/dist/*" \
+            -not -name "package-lock.json" \
+            -not -name "$OUT_FILE" | while read -r file; do
+              
+              # 取得檔案相對路徑與副檔名
+              rel_path="${file#./}"
+              ext="${file##*.}"
+              
+              echo "## File: $rel_path" >> "$OUT_FILE"
+              echo "\`\`\`$ext" >> "$OUT_FILE"
+              cat "$file" >> "$OUT_FILE"
+              echo "" >> "$OUT_FILE"
+              echo "\`\`\`" >> "$OUT_FILE"
+              echo "" >> "$OUT_FILE"
+          done
+
+      - name: Commit and Push changes
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add combined_project_code.md
+          
+          # 檢查是否有內容更新，避免無意義的提交
+          if git diff --staged --quiet; then
+            echo "No changes in codebase structure."
+          else
+            git commit -m "docs: auto-generate combined codebase file [skip ci]"
+            git push origin main
+          fi
