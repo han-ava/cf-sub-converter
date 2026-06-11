@@ -1,5 +1,5 @@
 # Complete Project Codebase
-Generated on: Thu Jun 11 13:15:43 UTC 2026
+Generated on: Thu Jun 11 13:19:03 UTC 2026
 
 ## File: argo.sh
 ````sh
@@ -3373,7 +3373,7 @@ id = "KV_ID_PLACEHOLDER"
 ### API 調用與外部前端對接
 
 #### 1. 當作標準 SubConverter 後端使用
-本專案內建對應 `/sub` 與 `/version` 端點。你可以打開 any 一個開源的 `sub-web` 網頁（例如：`sub.id9.cc` 或其他的轉換前端），並在**「後端地址 (Backend URL)」**中，填入你的 Cloudflare Workers 網址：
+本專案內建對應 `/sub` 與 `/version` 端點。你可以打開任何一個開源的 `sub-web` 網頁（例如：`sub.id9.cc` 或其他的轉換前端），並在**「後端地址 (Backend URL)」**中，填入你的 Cloudflare Workers 網址：
 ```text
 https://your-worker.workers.dev
 ```
