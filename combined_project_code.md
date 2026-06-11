@@ -1,5 +1,5 @@
 # Complete Project Codebase
-Generated on: Thu Jun 11 10:38:56 UTC 2026
+Generated on: Thu Jun 11 13:15:43 UTC 2026
 
 ## File: argo.sh
 ````sh
@@ -3286,55 +3286,65 @@ id = "KV_ID_PLACEHOLDER"
 - ⚡ **標準 SubConverter 後端支援** - 內建 **`/sub`** 和 **`/version`** API 路由，回傳與您專案版本和網域動態對齊的標準格式（如 `subconverter v2.5.0 <your-worker-domain> backend`）並全面支援跨域 (CORS)。這使其可以直接做為任何第三方訂閱前端網頁（如 `sub-web`）的自定義後端。
 - 🔍 **智慧過濾與替換** - 
   - **節點篩選**：支援「僅保留」與「排除」雙向過濾（使用 `|` 隔開，如 `HK|TW` 或 `5x`）。後端內建字元智慧相容技術，自動將 `x`、`X`、全形 `ｘ` 與數學乘號 `×` 進行互通匹配。
-  - **名稱替換**：支援極簡統一的替換與刪除語法。刪除請用 `DEL-關鍵字`，替換請用 `尋找-替換`，多組規則請用 `|` 隔開（例如：`DEL-[69云]|移动优化-專線`）。
+  - **名稱替換**：支援極簡統一的替換與刪除語法。刪除請用 `DEL-關鍵字`，替換請用 `尋找-替換`，多組規則用 `|` 隔開（例如：`DEL-[69云]|移动优化-專線`）。
 - 🚩 **自動國旗與萬國標註** - 內建智慧辨識系統，自動為節點名稱補上對應的國家國旗 Emoji (如 🇹🇼、🇭🇰、🇯🇵、🇲🇴、🇰🇭、🇬🇷、🇵🇱 等 40+ 國家與常用機場縮寫)。**若遇到無對應國家的節點（如流量提示、機場官網），自動補上 🇺🇳 (聯合國國旗)**，達成 100% 工整排版。
 - 🔌 **全協議支援** - 完美解析 `Trojan`, `VLESS`, `VMess`, `Shadowsocks`, `Hysteria2 (hy2)`, `TUIC`, `AnyTLS` 等主流與新興協議。
 - 🚀 **極速路由與 DNS** - 轉換出的配置檔內建頂級路由規則：
   - **Clash Meta**：流量嗅探 (Sniffer)、Fake-IP、TProxy 軟路由最佳化、中外 DNS 智慧解析。
-  - **Sing-Box**：Mixed TUN 堆疊優化、獨立 DNS 快取、蘋果/國內服務精準直連。
+  - **Sing-Box**：Mixed TUN 堆疊優化、獨立 DNS Kay、蘋果/國內服務精準直連。
 - ☁️ **雲端與配置同步** - 運行在 Cloudflare 邊緣網絡，零成本運維。生成短連結時，**系統會將「資料來源、過濾規則、替換規則」打包存入 KV**，客戶端直接更新短連結即可自動套用所有規則，不需在客戶端 URL 後手動外掛複雜參數。
 
 ## 🚀 部署教學
 
-### 方法一：GitHub Actions 自動部署 (推薦)
+### 方法一：一鍵快速部署 (最推薦、最簡單)
 
-當您將專案 Fork 到您的帳號或 Push 至您的 GitHub 倉庫時，可以透過工作流自動編譯並部署至 Cloudflare Workers。
+點擊本說明文件上方的 **Deploy to Cloudflare Workers** 藍色按鈕。
 
-#### 🔑 設定 GitHub Repository Secrets：
-請前往您的 GitHub 專案頁面，依次點擊 **`Settings`** -> **`Secrets and variables`** -> **`Actions`** -> **`New repository secret`**，並添加以下三個密鑰：
+* **零設定自動託管**：Cloudflare 網頁部署精靈會引導您登入，並**在背景全自動為您建立並對接好所需的 KV 命名空間（`SUB_CACHE`）**，完全不需要您手動至儀表板綁定。
+* **自建 CI/CD (Workers Builds)**：Cloudflare 會在您的 GitHub 下自動建立此專案的複製倉庫。未來您只要在 GitHub 修改並 `git push`，Cloudflare 就會自動在端點編譯部署，**此模式完全不需要設定 GitHub Secrets 密鑰**。
 
-* **`CF_API_TOKEN`**：您的 Cloudflare API 令牌（Token）。
-  * *獲取方式*：前往 Cloudflare 帳戶 -> 我的個人資料 -> API 令牌 -> 建立具有「編輯 Cloudflare Workers 與 KV」權限的權杖。
-* **`CF_ACCOUNT_ID`**：您的 Cloudflare 帳戶 ID。
-  * *獲取方式*：可在 Cloudflare 儀表板首頁右側或 Worker 頁面右側找到。
-* **`CF_KV_ID`**：您在 Cloudflare 上為此專案建立的 KV 空間 ID (SUB_CACHE)。
-  * *獲取方式*：可在 Cloudflare 儀表板 -> 網域與組織 -> 鍵值儲存 (KV) 中建立一個命名空間（例如 `SUB_CACHE`），並複製其 ID。
+---
 
-設定完成後，每次推送到 `main` 或 `master` 分支，GitHub Actions 將會自動替換專案中的 KV 佔位符，並將最新代碼安全部署。
+### 方法二：手動 Fork 本項目並使用 GitHub Actions 自動部署 (需要設定 Secrets)
 
-### 方法二：本地手動部署 (Wrangler CLI)
+如果您選擇**不使用**一鍵部署按鈕，而是打算手動 Fork 本項目，並利用專案內建的 GitHub Actions 自動進行部署，請按照以下步驟操作：
 
-1. **克隆倉庫**
+1. **Fork 本項目**：
+   請先點擊本專案右上角的 **`Fork`** 按鈕，將專案複製一份到您自己的 GitHub 帳號下。
+
+2. **設定 GitHub Repository Secrets**：
+   前往您 GitHub 專案頁面，依次點擊 **`Settings`** -> **`Secrets and variables`** -> **`Actions`** -> **`New repository secret`**，並添加以下三個密鑰，否則 GitHub 部署工作流會報錯：
+   * **`CF_API_TOKEN`**：您的 Cloudflare API 權杖。
+     * *獲取方式*：Cloudflare 首頁 -> 我的個人資料 -> API 權杖 -> 建立具有「編輯 Workers 與 KV」權限的權杖。
+   * **`CF_ACCOUNT_ID`**：您的 Cloudflare 帳戶 ID（可在 Worker 頁面右側找到）。
+   * **`CF_KV_ID`**：您在 Cloudflare 上建立的 KV 命名空間 ID。
+     * *獲取方式*：Cloudflare 儀表板 -> 鍵值儲存 (KV) -> 建立一個空間（例如 `SUB_CACHE`）並複製其 ID。
+
+3. **Actions 執行部署**：
+   設定完成後，當您對專案進行任何修改並推送（Push），或手動在倉庫的 **`Actions`** 頁面觸發 **`Deploy to Cloudflare Workers`** 工作流，GitHub 就會全自動為您編譯並完成部署。
+
+---
+
+### 方法三：本地手動編譯部署 (Wrangler CLI)
+
+1. **克隆本專案**：
    ```bash
    git clone https://github.com/sammy0101/cf-sub-converter.git
    cd cf-sub-converter
    ```
 
-2. **上傳 `argo.sh` 腳本**
-   將專案根目錄的 `argo.sh` 上傳到您的 GitHub 專案 `sammy0101/cf-sub-converter` 的 `main` 分支。
-
-3. **安裝依賴**
+2. **安裝專案依賴**：
    ```bash
    npm install
    ```
 
-4. **創建 KV 命名空間**
+3. **創建並綁定 KV 命名空間**：
    ```bash
    wrangler kv:namespace create SUB_CACHE
    ```
-   *執行後，終端機會回傳一段配置代碼，請將其複製並貼上取代您 `wrangler.toml` 中的 `KV_ID_PLACEHOLDER`。*
+   *執行後，將終端機回傳的配置代碼（包含 binding 和 id），複製並貼上取代您 `wrangler.toml` 中的 `KV_ID_PLACEHOLDER` 佔位符。*
 
-5. **部署到 Cloudflare**
+4. **發布至 Cloudflare**：
    ```bash
    wrangler deploy
    ```
@@ -3417,6 +3427,7 @@ cf-sub-converter/
 ## ⚠️ 免責聲明
 
 本專案僅供技術交流與網路安全學習研究使用，不提供 any 節點服務。請使用者務必遵守當地法律法規，勿將其用於 any 違法用途，開發者對使用者的行為不承擔 any 責任。
+```
 
 ````
 
