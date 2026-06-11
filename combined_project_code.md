@@ -1,836 +1,1470 @@
 # Complete Project Codebase
-Generated on: Thu Jun 11 10:24:56 UTC 2026
+Generated on: Thu Jun 11 10:38:56 UTC 2026
 
-## File: scripts/argo-converter.ts
-````ts
-// scripts/argo-converter.ts
-import fs from 'fs';
-import path from 'path';
-import readline from 'readline';
-import { Buffer } from 'buffer';
+## File: argo.sh
+````sh
+#!/bin/bash
+# Cloudflare Argo Tunnel 一鍵部署腳本 (由 cf-sub-converter 動態配置)
+# 專案網址: https://github.com/sammy0101/cf-sub-converter
 
-const rl = readline.createInterface({
-  input: process.stdin,
-  output: process.stdout
-});
+GREEN='\033[0;32m'
+RED='\033[0;31m'
+NC='\033[0m'
 
-const question = (query: string): Promise<string> => {
-  return new Promise((resolve) => rl.question(query, resolve));
-};
+# 動態變數佔位符 (由 Worker 自動替換)
+NODE_TYPE="{{NODE_TYPE}}"
+VLESS_UUID="{{VLESS_UUID}}"
+VLESS_PATH="{{VLESS_PATH}}"
+VLESS_TYPE="{{VLESS_TYPE}}"
+VLESS_PORT="{{VLESS_PORT}}"
+NODE_NAME="{{NODE_NAME}}"
+TUNNEL_TOKEN="{{TUNNEL_TOKEN}}"
+CUSTOM_DOMAIN="{{CUSTOM_DOMAIN}}"
+VLESS_TLS="{{VLESS_TLS}}"
+ORIGIN_HOST="{{ORIGIN_HOST}}"
 
-interface VlessNode {
-  originalLink: string;
-  uuid: string;
-  server: string;
-  port: string;
-  type: string;
-  path: string;
-  host: string;
-  sni: string;
-  name: string;
-}
-
-// 簡易 VLESS 連結解析器
-function parseVlessLink(link: string): VlessNode | null {
-  try {
-    const urlStr = link.replace('vless://', 'http://');
-    const url = new URL(urlStr);
-    const params = url.searchParams;
-    return {
-      originalLink: link,
-      uuid: url.username,
-      server: url.hostname,
-      port: url.port,
-      type: params.get('type') || 'ws',
-      path: params.get('path') || '/',
-      host: params.get('host') || params.get('sni') || url.hostname,
-      sni: params.get('sni') || url.hostname,
-      name: decodeURIComponent(url.hash.slice(1)) || 'VLESS Node'
-    };
-  } catch (e) {
-    return null;
-  }
-}
-
-// 獲取並解析訂閱
-async function fetchAndParse(input: string): Promise<VlessNode[]> {
-  let content = input.trim();
-  if (input.startsWith('http')) {
-    console.log('正在獲取網址內容...');
-    try {
-      const res = await fetch(input, {
-        headers: { 'User-Agent': 'v2rayNG/1.8.5' }
-      });
-      if (!res.ok) throw new Error(`HTTP 狀態碼 ${res.status}`);
-      content = await res.text();
-    } catch (e: any) {
-      console.log(`獲取訂閱失敗: ${e.message}`);
-      return [];
-    }
-  }
-
-  // 嘗試 Base64 解碼
-  let decoded = content;
-  try {
-    const cleaned = content.replace(/[\s\r\n]+/g, '');
-    decoded = Buffer.from(cleaned, 'base64').toString('utf8');
-  } catch (e) {
-    // 解碼失敗則視為純文字
-  }
-
-  const lines = decoded.split(/\r?\n/);
-  const vlessNodes: VlessNode[] = [];
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (trimmed.startsWith('vless://')) {
-      const parsed = parseVlessLink(trimmed);
-      if (parsed) vlessNodes.push(parsed);
-    }
-  }
-  return vlessNodes;
-}
-
-// 生成 VPS 安裝腳本模板
-function generateVpsScript(node: VlessNode, port: string, token: string, domain: string): string {
-  return `#!/bin/bash
-# Cloudflare Argo Tunnel 一鍵部署腳本 (由 cf-sub-converter 自動生成)
-# 適用於已使用 mack-a v2ray-agent 部署之 Xray/Sing-box 環境
-
-GREEN='\\033[0;32m'
-RED='\\033[0;31m'
-NC='\\033[0m'
-
-echo -e "\${GREEN}=== 開始部署 Cloudflare Argo 隧道 ===\${NC}"
+echo -e "${GREEN}=== 開始部署 Cloudflare Argo 隧道 (${NODE_NAME}) ===${NC}"
 
 if [ "$EUID" -ne 0 ]; then
-  echo -e "\${RED}錯誤: 請使用 root 權限執行此腳本！\${NC}"
+  echo -e "${RED}錯誤: 請使用 root 權限執行此腳本！${NC}"
   exit 1
 fi
 
-# 節點參數配置
-VLESS_UUID="${node.uuid}"
-VLESS_PATH="${node.path}"
-VLESS_TYPE="${node.type}"
-VLESS_PORT="${port}"
-NODE_NAME="${node.name}"
-TUNNEL_TOKEN="${token.trim()}"
-CUSTOM_DOMAIN="${domain.trim()}"
-
-# 下載安裝 cloudflared
+# 1. 安裝 cloudflared
 if ! command -v cloudflared &> /dev/null; then
     echo "正在下載安裝 cloudflared..."
     curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o /usr/local/bin/cloudflared
     chmod +x /usr/local/bin/cloudflared
-    echo "cloudflared 安裝完成！"
 else
     echo "cloudflared 已存在，跳過安裝。"
 fi
 
-# 判斷是否使用固定隧道
+SAFE_NODE_NAME=$(echo "$NODE_NAME" | sed 's/[^a-zA-Z0-9]/_/g')
+
+# 2. 雙重保險：VPS 本地執行期自動檢測並修正連接埠與 TLS 加密衝突
+DETECTED_PORT="$VLESS_PORT"
+
+if command -v ss &> /dev/null; then
+    if ! ss -tln | grep -qE ":$VLESS_PORT([[:space:]]|$)"; then
+        echo -e "${RED}警告: 本地轉發埠 $VLESS_PORT 似乎未在本地監聽。正在探測常用埠...${NC}"
+        if ss -tln | grep -qE ":443([[:space:]]|$)"; then
+            echo -e "${GREEN}自動修正成功：偵測到 VPS 本地 Nginx/443 埠正在運行！已將轉發目標自動修正為: 443 埠。${NC}"
+            DETECTED_PORT="443"
+        elif ss -tln | grep -qE ":80([[:space:]]|$)"; then
+            echo -e "${GREEN}自動修正成功：偵測到 VPS 本地 80 埠正在運行！已將轉發目標自動修正為: 80 埠。${NC}"
+            DETECTED_PORT="80"
+        fi
+    fi
+fi
+
+# 智慧探測：自動探測目標連接埠是否啟用 TLS 加密
+DETECTED_TLS="false"
+if curl -s -k --connect-timeout 2 "https://127.0.0.1:$DETECTED_PORT" &>/dev/null; then
+    echo "偵測到本地轉發埠 $DETECTED_PORT 為 TLS 加密連接埠，自動開啟 HTTPS 轉發與 SNI 對齊模式。"
+    DETECTED_TLS="true"
+else
+    echo "偵測到本地轉發埠 $DETECTED_PORT 為明文連接埠，自動開啟 HTTP 轉發模式。"
+fi
+
+LOCAL_URL="http://127.0.0.1:$DETECTED_PORT"
+EXTRA_ARGS=""
+if [ "$DETECTED_TLS" = "true" ]; then
+    LOCAL_URL="https://127.0.0.1:$DETECTED_PORT"
+    EXTRA_ARGS="--no-tls-verify"
+fi
+
+# 重寫 Host Header 與 TLS SNI
+if [ -n "$ORIGIN_HOST" ]; then
+    echo "已自動啟用 HTTP 主機頭部重寫 (Host Header 重寫為: $ORIGIN_HOST)"
+    EXTRA_ARGS="$EXTRA_ARGS --http-host-header $ORIGIN_HOST"
+    if [ "$DETECTED_TLS" = "true" ]; then
+        echo "已自動啟用 TLS SNI 重寫為: $ORIGIN_HOST"
+        EXTRA_ARGS="$EXTRA_ARGS --origin-server-name $ORIGIN_HOST"
+    fi
+fi
+
+# 4. 判斷並執行部署
 if [ -n "$TUNNEL_TOKEN" ]; then
-    echo -e "\${GREEN}【固定隧道模式】正在配置服務...\${NC}"
+    echo -e "${GREEN}【固定隧道模式】正在配置服務...${NC}"
     cloudflared service uninstall &> /dev/null
     cloudflared service install "$TUNNEL_TOKEN"
     systemctl daemon-reload
     systemctl enable cloudflared
     systemctl restart cloudflared
     
-    echo -e "\${GREEN}部署成功！\${NC}"
-    echo "請確保已在 Cloudflare Dashboard 中將網域 '$CUSTOM_DOMAIN' 指向本地 'http://localhost:$VLESS_PORT'"
+    echo -e "\n${GREEN}=== 部署成功 【固定域名模式】 ===${NC}"
+    echo -e "原節點名稱: $NODE_NAME"
+    echo -e "轉發連接埠: $DETECTED_PORT"
+    echo -e "綁定自訂域名: $CUSTOM_DOMAIN"
     
-    # 輸出用戶端連結
-    FINAL_LINK="vless://$VLESS_UUID@$CUSTOM_DOMAIN:443?encryption=none&security=tls&type=$VLESS_TYPE&host=$CUSTOM_DOMAIN"
-    if [ "$VLESS_TYPE" = "ws" ]; then
-        FINAL_LINK="$FINAL_LINK&path=$(echo -n "$VLESS_PATH" | jq -s -R -r @uri 2>/dev/null || echo -n "$VLESS_PATH")"
+    if [ "$NODE_TYPE" = "vless" ]; then
+        FINAL_LINK="vless://$VLESS_UUID@$CUSTOM_DOMAIN:443?encryption=none&security=tls&type=$VLESS_TYPE&host=$CUSTOM_DOMAIN"
+        if [ "$VLESS_TYPE" = "ws" ]; then
+            FINAL_LINK="$FINAL_LINK&path=$VLESS_PATH"
+        fi
+        FINAL_LINK="$FINAL_LINK#$NODE_NAME"
+    else
+        VMESS_JSON="{\"v\":\"2\",\"ps\":\"$NODE_NAME\",\"add\":\"$CUSTOM_DOMAIN\",\"port\":443,\"id\":\"$VLESS_UUID\",\"aid\":0,\"scy\":\"auto\",\"net\":\"$VLESS_TYPE\",\"type\":\"none\",\"host\":\"$CUSTOM_DOMAIN\",\"path\":\"$VLESS_PATH\",\"tls\":\"tls\",\"sni\":\"$CUSTOM_DOMAIN\"}"
+        VMESS_B64=$(echo -n "$VMESS_JSON" | base64 | tr -d '\n')
+        FINAL_LINK="vmess://$VMESS_B64"
     fi
-    FINAL_LINK="$FINAL_LINK#Argo-$NODE_NAME"
-    echo -e "\n\${GREEN}您的 Argo VLESS 訂閱連結為:\${NC}"
-    echo -e "\${GREEN}$FINAL_LINK\${NC}\n"
+    echo -e "\n${GREEN}您的 Argo $NODE_TYPE 訂閱連結為:${NC}"
+    echo -e "${GREEN}$FINAL_LINK${NC}\n"
 else
-    echo -e "\${GREEN}【臨時隧道模式】正在啟動 Quick Tunnel...\${NC}"
-    systemctl stop cloudflared-argo &> /dev/null
+    echo -e "${GREEN}【臨時隧道模式】正在啟動 Quick Tunnel...${NC}"
+    systemctl stop cloudflared-argo-${SAFE_NODE_NAME} &> /dev/null
     
-    # 寫入 systemd 臨時隧道服務
-    cat <<EOF > /etc/systemd/system/cloudflared-argo.service
+    cat <<EOF > /etc/systemd/system/cloudflared-argo-${SAFE_NODE_NAME}.service
 [Unit]
-Description=Cloudflare Argo Temporary Tunnel for VLESS
+Description=Cloudflare Argo Temporary Tunnel for ${NODE_NAME}
 After=network.target
 
 [Service]
 Type=simple
 User=root
-ExecStart=/usr/local/bin/cloudflared tunnel --url http://127.0.0.1:$VLESS_PORT
+ExecStart=/usr/local/bin/cloudflared tunnel --url $LOCAL_URL $EXTRA_ARGS
 Restart=always
 RestartSec=5
-StandardOutput=file:/var/log/cloudflared-argo.log
-StandardError=file:/var/log/cloudflared-argo.log
+StandardOutput=journal
+StandardError=journal
 
 [Install]
 WantedBy=multi-user.target
 EOF
 
-    touch /var/log/cloudflared-argo.log
     systemctl daemon-reload
-    systemctl enable cloudflared-argo
-    systemctl start cloudflared-argo
+    systemctl enable cloudflared-argo-${SAFE_NODE_NAME}
+    systemctl start cloudflared-argo-${SAFE_NODE_NAME}
     
     echo "正在等待 Cloudflare 分配臨時域名 (約需 10-15 秒)..."
     TEMP_DOMAIN=""
     for i in {1..15}; do
         sleep 1
-        TEMP_DOMAIN=$(grep -oE 'https://[a-zA-Z0-9-]+\\.trycloudflare\\.com' /var/log/cloudflared-argo.log | head -n 1 | sed 's/https:\\/\\///')
+        # 💥 核心修正：改用系統級 journalctl 探測，並搭配 tail -n 1 永遠提取最新活著的網域，徹底解決 530 緩存！
+        TEMP_DOMAIN=$(journalctl -u cloudflared-argo-${SAFE_NODE_NAME} -n 50 --no-pager 2>/dev/null | grep -o 'https://[a-zA-Z0-9-]*\.trycloudflare\.com' | tail -n 1 | cut -d'/' -f3)
         if [ -n "$TEMP_DOMAIN" ]; then
             break
         fi
     done
     
     if [ -n "$TEMP_DOMAIN" ]; then
-        echo -e "\${GREEN}獲取域名成功: \$TEMP_DOMAIN\${NC}"
-        FINAL_LINK="vless://$VLESS_UUID@\$TEMP_DOMAIN:443?encryption=none&security=tls&type=$VLESS_TYPE&host=\$TEMP_DOMAIN"
-        if [ "$VLESS_TYPE" = "ws" ]; then
-            FINAL_LINK="$FINAL_LINK&path=$(echo -n "$VLESS_PATH" | jq -s -R -r @uri 2>/dev/null || echo -n "$VLESS_PATH")"
+        echo -e "${GREEN}獲取臨時域名成功: $TEMP_DOMAIN${NC}"
+        if [ "$NODE_TYPE" = "vless" ]; then
+            FINAL_LINK="vless://$VLESS_UUID@$TEMP_DOMAIN:443?encryption=none&security=tls&type=$VLESS_TYPE&host=$TEMP_DOMAIN"
+            if [ "$VLESS_TYPE" = "ws" ]; then
+                FINAL_LINK="$FINAL_LINK&path=$VLESS_PATH"
+            fi
+            FINAL_LINK="$FINAL_LINK#$NODE_NAME"
+        else
+            VMESS_JSON="{\"v\":\"2\",\"ps\":\"$NODE_NAME\",\"add\":\"$TEMP_DOMAIN\",\"port\":443,\"id\":\"$VLESS_UUID\",\"aid\":0,\"scy\":\"auto\",\"net\":\"$VLESS_TYPE\",\"type\":\"none\",\"host\":\"$TEMP_DOMAIN\",\"path\":\"$VLESS_PATH\",\"tls\":\"tls\",\"sni\":\"$TEMP_DOMAIN\"}"
+            VMESS_B64=$(echo -n "$VMESS_JSON" | base64 | tr -d '\n')
+            FINAL_LINK="vmess://$VMESS_B64"
         fi
-        FINAL_LINK="$FINAL_LINK#Argo-Temp-$NODE_NAME"
         
-        echo -e "\n\${GREEN}=== 部署成功 ===\${NC}"
+        echo -e "\n${GREEN}=== 部署成功 【臨時域名模式】 ===${NC}"
         echo -e "原節點名稱: $NODE_NAME"
-        echo -e "轉發連接埠: $VLESS_PORT"
-        echo -e "您的臨時 Argo 節點 VLESS 連結為 (注意：VPS 重啟或重開服務後域名會刷新):"
-        echo -e "\${GREEN}\$FINAL_LINK\${NC}\n"
+        echo -e "轉發連接埠: $DETECTED_PORT"
+        echo -e "分配的臨時域名: $TEMP_DOMAIN"
+        echo -e "您的臨時 Argo 節點 $NODE_TYPE 連結為 (注意：VPS 重啟或重開服務後域名會刷新):"
+        echo -e "${GREEN}$FINAL_LINK${NC}\n"
     else
-        echo -e "\${RED}錯誤: 獲取臨時域名超時！請執行 'cat /var/log/cloudflared-argo.log' 檢查日誌。\${NC}"
+        echo -e "${RED}錯誤: 獲取臨時域名超時！請執行 'journalctl -u cloudflared-argo-${SAFE_NODE_NAME} -n 30' 檢查日誌。${NC}"
     fi
 fi
-`;
-}
-
-async function main() {
-  console.log('==============================================');
-  console.log('      VLESS -> Cloudflare Argo 轉換工具');
-  console.log('==============================================');
-
-  const input = await question('請輸入訂閱地址、多個 VLESS 節點、或儲存配置的訂閱網址:\n> ');
-  if (!input.trim()) {
-    console.log('輸入不能為空。');
-    rl.close();
-    return;
-  }
-
-  const nodes = await fetchAndParse(input);
-  if (nodes.length === 0) {
-    console.log('未找到任何有效的 VLESS 節點。');
-    rl.close();
-    return;
-  }
-
-  console.log(`\n成功解析出 ${nodes.length} 個 VLESS 節點:`);
-  nodes.forEach((node, i) => {
-    console.log(`  [${i + 1}] ${node.name} (${node.server}:${node.port}, 傳輸協定: ${node.type})`);
-  });
-
-  const select = await question('\n請選擇要複製並轉換的節點 (輸入數字並用逗號隔開，例如: 1,3 ；或輸入 all 代表全部):\n> ');
-  let selectedNodes: VlessNode[] = [];
-  if (select.trim().toLowerCase() === 'all') {
-    selectedNodes = nodes;
-  } else {
-    const indices = select.split(',').map(s => parseInt(s.trim()) - 1);
-    selectedNodes = indices.map(idx => nodes[idx]).filter(Boolean);
-  }
-
-  if (selectedNodes.length === 0) {
-    console.log('選擇無效，程式結束。');
-    rl.close();
-    return;
-  }
-
-  console.log(`\n已選擇 ${selectedNodes.length} 個節點進行轉換...`);
-
-  // 本地連接埠設定
-  const port = await question('\n1. 請輸入該 VLESS 節點在 VPS 上監聽的本地連接埠 (預設 8080，請與 mack-a 配置一致):\n> ') || '8080';
-
-  // Argo Tunnel 授權設定
-  console.log('\n2. 隧道設定（直接斷行即代表隨機生成臨時隧道）：');
-  const token = await question('   請貼上您的 Cloudflare Tunnel Token (選填):\n   > ');
-
-  let domain = '';
-  if (token.trim()) {
-    domain = await question('   請輸入該隧道綁定的自訂域名 (例如: vless.domain.com):\n   > ');
-    if (!domain.trim()) {
-      console.log('   錯誤: 固定隧道模式必須提供自訂域名。');
-      rl.close();
-      return;
-    }
-  }
-
-  // 建立腳本存放目錄
-  const outputDir = path.join(process.cwd(), 'argo_outputs');
-  if (!fs.existsSync(outputDir)) {
-    fs.mkdirSync(outputDir);
-  }
-
-  const generatedNodes: string[] = [];
-
-  for (const node of selectedNodes) {
-    // 保留原本節點
-    generatedNodes.push(node.originalLink);
-
-    // 生成並寫入一鍵 VPS 腳本
-    const vpsScript = generateVpsScript(node, port, token, domain);
-    const safeNodeName = node.name.replace(/[^a-zA-Z0-9\u4e00-\u9fa5]/g, '_');
-    const scriptPath = path.join(outputDir, `argo-install-${safeNodeName}.sh`);
-    
-    fs.writeFileSync(scriptPath, vpsScript, { encoding: 'utf8', mode: 0o755 });
-    console.log(`\n[✓] 成功生成 VPS 安裝腳本: ${scriptPath}`);
-
-    // 如果是固定隧道，可以直接在本地計算出新的 Argo 節點
-    if (token.trim() && domain.trim()) {
-      const argoLink = `vless://${node.uuid}@${domain.trim()}:443?encryption=none&security=tls&type=${node.type}&host=${domain.trim()}${node.type === 'ws' ? `&path=${encodeURIComponent(node.path)}` : ''}#Argo-${node.name}`;
-      generatedNodes.push(argoLink);
-      console.log(`    └─ 同步生成 Argo 節點連結: ${argoLink}`);
-    } else {
-      console.log(`    └─ 臨時隧道模式：節點連結需在 VPS 上執行腳本後動態輸出。`);
-    }
-  }
-
-  // 如果有生成固定隧道的節點，將新舊節點整合寫入訂閱文件
-  if (generatedNodes.length > selectedNodes.length) {
-    const subPath = path.join(outputDir, 'argo_subscription.txt');
-    fs.writeFileSync(subPath, generatedNodes.join('\n'), 'utf8');
-    const base64Sub = Buffer.from(generatedNodes.join('\n')).toString('base64');
-    fs.writeFileSync(path.join(outputDir, 'argo_subscription_base64.txt'), base64Sub, 'utf8');
-    
-    console.log(`\n[✓] 整合訂閱已生成（含原節點 + 新 Argo 節點）:`);
-    console.log(`    - 明文列表: ${path.join(outputDir, 'argo_subscription.txt')}`);
-    console.log(`    - Base64 格式: ${path.join(outputDir, 'argo_subscription_base64.txt')}`);
-  }
-
-  console.log('\n==============================================');
-  console.log('部署說明：');
-  console.log('1. 請將 argo_outputs 目錄內對應的 .sh 腳本上傳至您的 VPS。');
-  console.log('2. 執行命令賦予執行權限並啟動：');
-  console.log('   chmod +x argo-install-*.sh && ./argo-install-*.sh');
-  console.log('==============================================');
-
-  rl.close();
-}
-
-main();
 
 ````
 
-## File: Clash_Rules.YAML
-````YAML
-port: 7890
-socks-port: 7891
-mixed-port: 7893
-redir-port: 7892
-tproxy-port: 7895
-allow-lan: true
-bind-address: "*"
-mode: rule
-log-level: info
-ipv6: false
-external-controller: 0.0.0.0:9090
-tcp-concurrent: true
-unified-delay: true
+## File: .github/workflows/combine-code.yml
+````yml
+name: Generate All Codebase to MD
 
-# ==================== 設定檔快取 ====================
-profile:
-  store-selected: true
-  store-fake-ip: true
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - 'combined_project_code.md' # 避免此檔案自身更新引發無限循環
+  workflow_dispatch: # 支援在 GitHub 網頁上手動觸發執行
 
-# ==================== 流量嗅探器 Sniffer ====================
-sniffer:
-  enable: true
-  override-destination: true
-  sniff:
-    QUIC:
-      ports:
-        - 443
-    TLS:
-      ports:
-        - 443
-        - 8443
-    HTTP:
-      ports:
-        - 80
-        - 8080-8880
-      override-destination: true
-  force-domain:
-    - "+.netflix.com"
-    - "+.nflxvideo.net"
-    - "+.amazonaws.com"
-    - "+.media.dssott.com"
-  skip-domain:
-    - "+.apple.com"
-    - "Mijia Cloud"
-    - "dlg.io.mi.com"
-    - "+.oray.com"
-    - "+.sunlogin.net"
-    - "+.push.apple.com"
-  parse-pure-ip: true
-  force-dns-mapping: true
+permissions:
+  contents: write
 
-# ==================== 進階 DNS 設定 (中港兩地智能切換版) ====================
-dns:
-  enable: true
-  ipv6: false
-  listen: 0.0.0.0:1053
-  enhanced-mode: fake-ip
-  fake-ip-range: 198.18.0.1/16
-  fake-ip-filter-mode: blacklist
-  respect-rules: true  # 開啟：讓兜底的 DoH 解析也能精準走分流規則，在大陸完美防污染
-  fake-ip-filter:
-    - '*.lan'
-    - '*.local'
-    - '*.localhost'
-    - '*.home.arpa'
-    - 'captive.apple.com'
-    - 'time.apple.com'
-    - 'time.*.apple.com'
-    - 'time.*.com'
-    - 'time.*.gov'
-    - 'time.*.edu.cn'
-    - 'ntp.*.com'
-    # 讓國內網站與蘋果服務強制返回真實 IP
-    - 'rule-set:meta-cn,meta-private,meta-apple' 
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Combine All Files into MD
+        run: |
+          OUT_FILE="combined_project_code.md"
+          echo "# Complete Project Codebase" > "$OUT_FILE"
+          echo "Generated on: $(date)" >> "$OUT_FILE"
+          echo "" >> "$OUT_FILE"
+
+          # 遍歷專案內的所有檔案，排除依賴、Git 歷史、打包產物及二進位檔案
+          find . -type f \
+            -not -path "*/node_modules/*" \
+            -not -path "*/.git/*" \
+            -not -path "*/dist/*" \
+            -not -name "package-lock.json" \
+            -not -name "yarn.lock" \
+            -not -name "pnpm-lock.yaml" \
+            -not -name "$OUT_FILE" \
+            -not -name "*.png" \
+            -not -name "*.jpg" \
+            -not -name "*.jpeg" \
+            -not -name "*.gif" \
+            -not -name "*.ico" \
+            -not -name "*.woff*" \
+            -not -name "*.ttf" | while read -r file; do
+              
+              # 取得相對路徑與副檔名
+              rel_path="${file#./}"
+              ext="${file##*.}"
+              
+              # 如果無副檔名，清除變數避免格式混亂
+              if [ "$ext" = "$rel_path" ]; then
+                ext=""
+              fi
+              
+              # 寫入檔案標題
+              echo "## File: $rel_path" >> "$OUT_FILE"
+              # 使用四個反單引號（````）包裹，防止內部程式碼的三個反單引號造成排版衝突
+              echo "\`\`\`\`$ext" >> "$OUT_FILE"
+              cat "$file" >> "$OUT_FILE"
+              echo "" >> "$OUT_FILE"
+              echo "\`\`\`\`" >> "$OUT_FILE"
+              echo "" >> "$OUT_FILE"
+          done
+
+      - name: Commit and Push changes
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add combined_project_code.md
+          
+          if git diff --staged --quiet; then
+            echo "No changes in codebase."
+          else
+            git commit -m "docs: auto-generate complete codebase [skip ci]"
+            git push origin main
+          fi
+
+````
+
+## File: .github/workflows/deploy.yml
+````yml
+name: Deploy to Cloudflare Workers
+
+on:
+  # 1. 當推送到 main 或 master 分支時自動執行
+  push:
+    branches:
+      - main
+      - master
   
-  # 基礎 DNS (解析 DoH 網域用，混合中外 DNS 確保兩地皆通)
-  default-nameserver:
-    - 223.5.5.5
-    - 119.29.29.29
-    - 8.8.8.8
-    - 1.1.1.1
+  # 2. 保留手動執行按鈕
+  workflow_dispatch:
 
-  # 節點專用 DNS (只用來找機場的 IP，防止在大陸找不到海外機場，或在香港被擋)
-  proxy-server-nameserver:
-    - 223.5.5.5
-    - 8.8.8.8
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    name: Deploy
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install dependencies
+        run: npm install
 
-  nameserver-policy:
-    # 國內網站強制使用國內公共 DNS (阿里、騰訊)
-    "rule-set:meta-cn":
-      - 223.5.5.5
-      - 119.29.29.29
-    # 蘋果服務：中外 DNS 並發競爭！香港 8.8.8.8 回應快得 HK CDN；大陸 223.5.5.5 回應快得 CN CDN
-    "rule-set:meta-apple":
-      - 223.5.5.5
-      - 8.8.8.8
+      # 替換 KV ID
+      - name: Inject KV ID from Secrets
+        run: |
+          sed -i 's/KV_ID_PLACEHOLDER/${{ secrets.CF_KV_ID }}/g' wrangler.toml
 
-  # 國外網站兜底 DNS (使用加密 DoH。在大陸會自動走代理防污染，香港直連極速)
-  nameserver:
-    - https://dns.google/dns-query
-    - https://cloudflare-dns.com/dns-query
-
-# ==================================================
-# 代理節點設定
-# ==================================================
-proxies:
-
-proxy-groups:
-  - name: 🚀 節點選擇
-    type: select
-    proxies:
-      - ⚡ 自動選擇
-      - DIRECT
-
-  - name: ⚡ 自動選擇
-    type: url-test
-    url: http://www.gstatic.com/generate_204
-    interval: 300
-    proxies:
-
-  - name: 💬 AI 服務
-    type: select
-    proxies:
-      - ⚡ 自動選擇
-      - 🚀 節點選擇
-
-  - name: 🍎 蘋果服務
-    type: select
-    proxies:
-      - DIRECT
-      - 🚀 節點選擇
-
-  - name: Ⓜ️ 微軟服務
-    type: select
-    proxies:
-      - DIRECT
-      - 🚀 節點選擇
-
-  - name: 🎮 遊戲平台
-    type: select
-    proxies:
-      - DIRECT
-      - 🚀 節點選擇
-
-  - name: 🌐 非中國
-    type: select
-    proxies:
-      - 🚀 節點選擇
-      - DIRECT
-
-  - name: 🇨🇳 國內服務
-    type: select
-    proxies:
-      - DIRECT
-      - 🚀 節點選擇
-
-  - name: 🏠 私有網絡
-    type: select
-    proxies:
-      - DIRECT
-
-  - name: 🐟 漏網之魚
-    type: select
-    proxies:
-      - 🚀 節點選擇
-      - DIRECT
-
-  - name: 🛑 廣告攔截
-    type: select
-    proxies:
-      - REJECT
-      - DIRECT
-
-# ==================================================
-# 規則集 Rule Providers
-# ==================================================
-rule-providers:
-  my-ai:
-    type: http
-    behavior: domain
-    format: mrs
-    url: "https://github.com/sammy0101/myself/raw/refs/heads/main/geosite_ai_hk_proxy.mrs"
-    path: ./ruleset/my-ai.mrs
-    interval: 86400
-
-  meta-apple:
-    type: http
-    behavior: domain
-    format: mrs
-    url: "https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geosite/apple.mrs"
-    path: ./ruleset/apple.mrs
-    interval: 86400
-
-  meta-microsoft:
-    type: http
-    behavior: domain
-    format: mrs
-    url: "https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geosite/microsoft.mrs"
-    path: ./ruleset/microsoft.mrs
-    interval: 86400
-
-  meta-steam:
-    type: http
-    behavior: domain
-    format: mrs
-    url: "https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geosite/steam.mrs"
-    path: ./ruleset/steam.mrs
-    interval: 86400
-
-  meta-epicgames:
-    type: http
-    behavior: domain
-    format: mrs
-    url: "https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geosite/epicgames.mrs"
-    path: ./ruleset/epicgames.mrs
-    interval: 86400
-
-  meta-ea:
-    type: http
-    behavior: domain
-    format: mrs
-    url: "https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geosite/ea.mrs"
-    path: ./ruleset/ea.mrs
-    interval: 86400
-
-  meta-ubisoft:
-    type: http
-    behavior: domain
-    format: mrs
-    url: "https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geosite/ubisoft.mrs"
-    path: ./ruleset/ubisoft.mrs
-    interval: 86400
-
-  meta-blizzard:
-    type: http
-    behavior: domain
-    format: mrs
-    url: "https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geosite/blizzard.mrs"
-    path: ./ruleset/blizzard.mrs
-    interval: 86400
-
-  meta-geolocation-!cn:
-    type: http
-    behavior: domain
-    format: mrs
-    url: "https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geosite/geolocation-!cn.mrs"
-    path: ./ruleset/geolocation-!cn.mrs
-    interval: 86400
-
-  meta-cn:
-    type: http
-    behavior: domain
-    format: mrs
-    url: "https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geosite/cn.mrs"
-    path: ./ruleset/cn.mrs
-    interval: 86400
-
-  meta-cn-ip:
-    type: http
-    behavior: ipcidr
-    format: mrs
-    url: "https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geoip/cn.mrs"
-    path: ./ruleset/cn-ip.mrs
-    interval: 86400
-
-  meta-ads:
-    type: http
-    behavior: domain
-    format: mrs
-    url: "https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geosite/category-ads-all.mrs"
-    path: ./ruleset/ads.mrs
-    interval: 86400
-
-  meta-private:
-    type: http
-    behavior: domain
-    format: mrs
-    url: "https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geosite/private.mrs"
-    path: ./ruleset/private.mrs
-    interval: 86400
-
-  meta-ip-private:
-    type: http
-    behavior: ipcidr
-    format: mrs
-    url: "https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geoip/private.mrs"
-    path: ./ruleset/ip-private.mrs
-    interval: 86400
-
-# ==================================================
-# 流量路由 Rules
-# ==================================================
-rules:
-  # 1. 廣告與內網
-  - RULE-SET,meta-ads,🛑 廣告攔截
-  - RULE-SET,meta-private,🏠 私有網絡
-  - RULE-SET,meta-ip-private,🏠 私有網絡,no-resolve
-
-  # 2. 強制代理業務
-  - RULE-SET,my-ai,💬 AI 服務
-
-  # 3. Microsoft 服務分流
-  - RULE-SET,meta-microsoft,Ⓜ️ 微軟服務
-
-  # 4. 遊戲平台分流
-  - RULE-SET,meta-steam,🎮 遊戲平台
-  - RULE-SET,meta-epicgames,🎮 遊戲平台
-  - RULE-SET,meta-ea,🎮 遊戲平台
-  - RULE-SET,meta-ubisoft,🎮 遊戲平台
-  - RULE-SET,meta-blizzard,🎮 遊戲平台
-
-  # 5. Apple 服務分流
-  - RULE-SET,meta-apple,🍎 蘋果服務
-
-  # 6. 非中國網站：走代理
-  - RULE-SET,meta-geolocation-!cn,🌐 非中國
-
-  # 7. 中國國內網域與 IP：走直連
-  - RULE-SET,meta-cn,🇨🇳 國內服務
-  - RULE-SET,meta-cn-ip,🇨🇳 國內服務,no-resolve
-
-  # 8. 國外網站兜底：全走代理
-  - MATCH,🐟 漏網之魚
+      # 部署步驟
+      - name: Deploy
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CF_API_TOKEN }}
+          accountId: ${{ secrets.CF_ACCOUNT_ID }}
 
 ````
 
-## File: README.md
-````md
-# ⚡ CF Sub Converter Pro
-
-基於 Cloudflare Workers 的 Serverless 訂閱轉換工具。擁有全新專業級的無廣告深色 UI，內建智慧過濾、替換、智慧國旗萬國對齊系統，以及 **Argo 隧道一鍵生成器**。一鍵將雜亂的訂閱或節點轉換為 Sing-Box / Clash Meta (Mihomo) / Base64 格式，亦可直接作為第三方轉換網頁（如 `sub-web`）的自定義後端。
-
-[![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/sammy0101/cf-sub-converter)
-
-## 🌟 特性
-
-- 🎨 **專業級 UI** - 全新深色主題設計 (Slate/Zinc)，無廣告、純淨排版，搭配流暢的互動動畫與一鍵掃碼功能。
-- 🌀 **Argo 隧道一鍵生成器** - 
-  - **自動化克隆轉換**：一鍵載入貼入的節點，勾選 VLESS 或 VMess 節點，系統自動拷貝並轉換為對應的 Argo 隧道節點。
-  - **超簡短一鍵 VPS 命令**：結合 Cloudflare KV 雲端動態腳本快取技術與 `curl | bash` 機制，產生超簡短的 VPS 一鍵部署命令。
-  - **雙層智慧探測校正**：VPS 部署時自動檢測本地連接埠與 TLS 加密，智慧避免 Proxy Protocol / TLS 握手衝突，並自動重寫 Host Header 與 TLS SNI。
-- 📊 **流量與到期日智慧透傳** - 自動從上游多個機場擷取並**加總多個訂閱的流量（上傳、下載、總量），並自動計算最近的到期時間**，透過標準 `subscription-userinfo` 標頭透傳，完美點亮客戶端的流量條！
-- ⚡ **標準 SubConverter 後端支援** - 內建 **`/sub`** 和 **`/version`** API 路由，回傳與您專案版本和網域動態對齊的標準格式（如 `subconverter v2.5.0 <your-worker-domain> backend`）並全面支援跨域 (CORS)。這使其可以直接做為任何第三方訂閱前端網頁（如 `sub-web`）的自定義後端。
-- 🔍 **智慧過濾與替換** - 
-  - **節點篩選**：支援「僅保留」與「排除」雙向過濾（使用 `|` 隔開，如 `HK|TW` 或 `5x`）。後端內建字元智慧相容技術，自動將 `x`、`X`、全形 `ｘ` 與數學乘號 `×` 進行互通匹配。
-  - **名稱替換**：支援極簡統一的替換與刪除語法。刪除請用 `DEL-關鍵字`，替換請用 `尋找-替換`，多組規則請用 `|` 隔開（例如：`DEL-[69云]|移动优化-專線`）。
-- 🚩 **自動國旗與萬國標註** - 內建智慧辨識系統，自動為節點名稱補上對應的國家國旗 Emoji (如 🇹🇼、🇭🇰、🇯🇵、🇲🇴、🇰🇭、🇬🇷、🇵🇱 等 40+ 國家與常用機場縮寫)。**若遇到無對應國家的節點（如流量提示、機場官網），自動補上 🇺🇳 (聯合國國旗)**，達成 100% 工整排版。
-- 🔌 **全協議支援** - 完美解析 `Trojan`, `VLESS`, `VMess`, `Shadowsocks`, `Hysteria2 (hy2)`, `TUIC`, `AnyTLS` 等主流與新興協議。
-- 🚀 **極速路由與 DNS** - 轉換出的配置檔內建頂級路由規則：
-  - **Clash Meta**：流量嗅探 (Sniffer)、Fake-IP、TProxy 軟路由最佳化、中外 DNS 智慧解析。
-  - **Sing-Box**：Mixed TUN 堆疊優化、獨立 DNS 快取、蘋果/國內服務精準直連。
-- ☁️ **雲端與配置同步** - 運行在 Cloudflare 邊緣網絡，零成本運維。生成短連結時，**系統會將「資料來源、過濾規則、替換規則」打包存入 KV**，客戶端直接更新短連結即可自動套用所有規則，不需在客戶端 URL 後手動外掛複雜參數。
-
-## 🚀 部署教學
-
-### 方法一：GitHub Actions 自動部署 (推薦)
-
-當您將專案 Fork 到您的帳號或 Push 至您的 GitHub 倉庫時，可以透過工作流自動編譯並部署至 Cloudflare Workers。
-
-#### 🔑 設定 GitHub Repository Secrets：
-請前往您的 GitHub 專案頁面，依次點擊 **`Settings`** -> **`Secrets and variables`** -> **`Actions`** -> **`New repository secret`**，並添加以下三個密鑰：
-
-* **`CF_API_TOKEN`**：您的 Cloudflare API 令牌（Token）。
-  * *獲取方式*：前往 Cloudflare 帳戶 -> 我的個人資料 -> API 令牌 -> 建立具有「編輯 Cloudflare Workers 與 KV」權限的權杖。
-* **`CF_ACCOUNT_ID`**：您的 Cloudflare 帳戶 ID。
-  * *獲取方式*：可在 Cloudflare 儀表板首頁右側或 Worker 頁面右側找到。
-* **`CF_KV_ID`**：您在 Cloudflare 上為此專案建立的 KV 空間 ID (SUB_CACHE)。
-  * *獲取方式*：可在 Cloudflare 儀表板 -> 網域與組織 -> 鍵值儲存 (KV) 中建立一個命名空間（例如 `SUB_CACHE`），並複製其 ID。
-
-設定完成後，每次推送到 `main` 或 `master` 分支，GitHub Actions 將會自動替換專案中的 KV 佔位符，並將最新代碼安全部署。
-
-### 方法二：本地手動部署 (Wrangler CLI)
-
-1. **克隆倉庫**
-   ```bash
-   git clone https://github.com/sammy0101/cf-sub-converter.git
-   cd cf-sub-converter
-   ```
-
-2. **上傳 `argo.sh` 腳本**
-   將專案根目錄的 `argo.sh` 上傳到您的 GitHub 專案 `sammy0101/cf-sub-converter` 的 `main` 分支。
-
-3. **安裝依賴**
-   ```bash
-   npm install
-   ```
-
-4. **創建 KV 命名空間**
-   ```bash
-   wrangler kv:namespace create SUB_CACHE
-   ```
-   *執行後，終端機會回傳一段配置代碼，請將其複製並貼上取代您 `wrangler.toml` 中的 `KV_ID_PLACEHOLDER`。*
-
-5. **部署到 Cloudflare**
-   ```bash
-   wrangler deploy
-   ```
-
-## 📖 使用指南
-
-訪問你部署完成的 Workers 網址即可進入視覺化面板。
-
-### 面板功能
-- **資料來源設定**：支援貼上機場訂閱連結、Base64 字串，或直接貼上多行節點 URI。支援多個訂閱地址換行輸入，系統將保持原始順序進行合併。
-- **Argo 隧道一鍵生成**：
-  1. 在資料來源貼入您的機場訂閱或明文連結。
-  2. 點選「解析並載入目前輸入的 VLESS / VMess 節點」，介面會自動拉出節點列表。
-  3. 勾選您要轉換的節點，系統會自動在下方同步該節點的原生埠號。
-  4. 設定 VPS 本地對接連接埠，點選「一鍵生成 Argo 節點與一鍵部署腳本」。
-  5. 複製產生的簡短 `curl` 或 `wget` 指令至您的 VPS 上執行。
-  6. 腳本成功執行後：
-     * **臨時域名模式**：請在您的 VPS 終端機內直接複製最終生成、連通的 VLESS/VMess 節點。
-     * **固定域名模式**：新生成的 Argo 節點（原節點名末尾加 `_Argo` 後綴）會直接顯示在網頁下方的明文列表框中，方便拷貝。
-- **過濾與替換**：
-  - **僅保留關鍵字**：只留下符合關鍵字的節點。例如輸入 `HK|TW`。
-  - **排除關鍵字**：過濾掉垃圾或高倍率節點。例如輸入 `5x`（系統會自動相容 `5×` 乘號）。
-  - **節點名稱替換**：刪除寫 `DEL-關鍵字`，替換寫 `尋找-替換`，多組規則用 `|` 隔開。例如輸入 `DEL-[69云]|移动优化-專線`。
-- **配置收藏**：常用的節點與過濾替換規則可以儲存到「已儲存的配置」區塊。卡片上會直觀地以綠色 `保`、紅色 `排` 和藍色 `替` 標籤顯示你所設定的規則，點擊卡片即可自動載入所有設定。
-
-### API 調用與外部前端對接
-
-#### 1. 當作標準 SubConverter 後端使用
-本專案內建對應 `/sub` 與 `/version` 端點。你可以打開 any 一個開源的 `sub-web` 網頁（例如：`sub.id9.cc` 或其他的轉換前端），並在**「後端地址 (Backend URL)」**中，填入你的 Cloudflare Workers 網址：
-```text
-https://your-worker.workers.dev
-```
-
-#### 2. 自訂 API 參數格式
-你也可以直接透過 URL 參數進行手動調用與過濾：
-
-```http
-# 轉換原始連結 + 僅保留港台 + 排除 5x 節點 + 移除 [69云] 廣告 + 將 移动优化 替換為 專線
-https://your-worker.workers.dev/sub?url=<URL編碼後的訂閱連結>&target=singbox&include=HK|TW&exclude=5x&rename=DEL-[69云]|移动优化-專線
-
-# 轉換短連結 + 自動套用在雲端 KV 中存好的過濾與名稱替換規則
-https://your-worker.workers.dev/<自訂短連結名稱>?target=clash
-```
-
-## 🛡️ 內建分流規則群組
-
-轉換出的 Sing-Box / Clash 配置文件預設包含以下精心設計的分流群組，開箱即用：
-
-| 圖標 | 群組名稱 | 路由說明 |
-| :--- | :--- | :--- |
-| 🚀 | 節點選擇 | 手動切換所有可用節點 |
-| ⚡ | 自動選擇 | 基於 URL Test 自動測速切換延遲最低的節點 |
-| 💬 | AI 服務 | ChatGPT / Gemini / Claude / Copilot 專屬分流 |
-| 🍎 | 蘋果服務 | Apple 相關服務直連或代理 (自動依據網路環境切換最快 CDN) |
-| Ⓜ️ | 微軟服務 | Microsoft 服務直連 or 代理 |
-| 🎮 | 遊戲平台 | Steam / Epic / EA / Ubisoft / Blizzard |
-| 🌐 | 非中國 | 全球主流網站 (Google, Telegram 等) |
-| 🇨🇳 | 國內服務 | 中國大陸 IP 與網域自動直連 (精準 IP 解析) |
-| 🏠 | 私有網絡 | 區域網路 (LAN / 內網) 直連 |
-| 🛑 | 廣告攔截 | 阻擋常見廣告、追蹤器 (AdBlock) |
-| 🐟 | 漏網之魚 | Final Match (未匹配規則的最終去向) |
-
-## 📁 專案結構
-
-```text
-cf-sub-converter/
-├── src/
-│   ├── index.ts          # Worker 主入口路由、並發請求控制、智慧過濾、雲端配置同步與 /version 後端模擬
-│   ├── constants.ts      # 專業版 HTML 視圖模板與遠端規則常數 (含過濾、收藏與 Argo 隧道 UI)
-│   ├── parser.ts         # 節點解析器 (支援 Trojan, AnyTLS, TUIC, Hy2 等)
-│   ├── generator.ts      # 格式生成器 (映射為 Sing-Box / Clash Meta / Base64 / 原始連結明文導出)
-│   ├── utils.ts          # Base64 淨化與智慧國旗自動標註系統 (豪華全球版 + 萬國 🇺🇳 對齊)
-│   └── types.ts          # TypeScript 類型定義
-├── argo.sh               # 上傳至 GitHub 倉庫的一鍵 VPS 隧道部署通用腳本
-├── Sing-Box_Rules.JSON   # 遠端 Sing-Box 路由規則範本 (極速混合堆疊版)
-├── Clash_Rules.YAML      # 遠端 Clash Meta 路由規則範本 (軟路由透明代理版)
-└── wrangler.toml         # Cloudflare Workers 設定檔
-```
-
-## ⚠️ 免責聲明
-
-本專案僅供技術交流與網路安全學習研究使用，不提供 any 節點服務。請使用者務必遵守當地法律法規，勿將其用於 any 違法用途，開發者對使用者的行為不承擔 any 責任。
+## File: package.json
+````json
+{
+  "name": "cf-sub-converter",
+  "version": "3.0.1",
+  "private": true,
+  "scripts": {
+    "deploy": "wrangler deploy",
+    "dev": "wrangler dev",
+    "start": "wrangler dev",
+    "argo": "tsx scripts/argo-converter.ts"
+  },
+  "dependencies": {
+    "js-yaml": "^4.1.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20240208.0",
+    "@types/js-yaml": "^4.0.9",
+    "tsx": "^4.7.1",
+    "typescript": "^5.3.3",
+    "wrangler": "^3.28.1"
+  }
+}
 
 ````
 
-## File: src/types.ts
+## File: src/parser.ts
 ````ts
-export interface Env {
-  SUB_CACHE: KVNamespace;
+import { ProxyNode } from "./types";
+import { safeBase64Decode, tryDecodeURIComponent } from "./utils";
+
+function parsePluginParams(str: string): Record<string, string> {
+  const params: Record<string, string> = {};
+  str.split(';').forEach(p => {
+    const [k, v] = p.split('=');
+    if (k && v) params[k] = v;
+  });
+  return params;
 }
 
-export interface ProxyNode {
-  type: string;
-  name: string;
-  server: string;
-  port: number;
-  uuid?: string;
-  password?: string;
-  cipher?: string;
-  udp?: boolean;
-  tls?: boolean;
-  sni?: string;
-  alpn?: string[];
-  fingerprint?: string;
-  flow?: string;
-  network?: string;
-  wsPath?: string;
-  wsHeaders?: Record<string, string>;
-  reality?: { publicKey: string; shortId: string };
-  obfs?: string;
-  obfsPassword?: string;
-  skipCertVerify?: boolean;
-  singboxObj?: any; 
-  clashObj?: any;
-  congestion_control?: string;
-  udp_relay_mode?: string;
+// --- 解析 Shadowsocks ---
+function parseShadowsocks(urlStr: string): ProxyNode | null {
+  try {
+    const getParam = (str: string, key: string) => {
+        const regex = new RegExp(`[?&]${key}=([^&#]*)`, 'i');
+        const match = str.match(regex);
+        return match ? tryDecodeURIComponent(match[1]) : '';
+    };
+
+    let raw = urlStr.replace('ss://', '');
+    const hashIndex = raw.indexOf('#');
+    let name = 'Shadowsocks';
+    if (hashIndex !== -1) {
+      name = tryDecodeURIComponent(raw.substring(hashIndex + 1));
+      raw = raw.substring(0, hashIndex);
+    }
+    if (raw.includes('?')) { raw = raw.split('?')[0]; }
+
+    let method = ''; let password = ''; let server = ''; let portStr = '';
+    
+    if (raw.includes('@')) {
+      const parts = raw.split('@');
+      const serverPart = parts[parts.length - 1];
+      const userPart = parts.slice(0, parts.length - 1).join('@');
+      const lastColonIndex = serverPart.lastIndexOf(':');
+      if (lastColonIndex === -1) return null;
+      server = serverPart.substring(0, lastColonIndex);
+      portStr = serverPart.substring(lastColonIndex + 1);
+      if (server.startsWith('[') && server.endsWith(']')) server = server.slice(1, -1);
+      try {
+        const decoded = safeBase64Decode(userPart);
+        if (decoded && decoded.includes(':')) { 
+          const up = decoded.split(':'); method = up[0]; password = up.slice(1).join(':');
+        } else { throw new Error('Not Base64'); }
+      } catch (e) { const up = userPart.split(':'); method = up[0]; password = up.slice(1).join(':'); }
+    } else {
+      const decoded = safeBase64Decode(raw);
+      if (!decoded) return null;
+      const atIndex = decoded.lastIndexOf('@');
+      if (atIndex === -1) return null;
+      const userPart = decoded.substring(0, atIndex);
+      const serverPart = decoded.substring(atIndex + 1);
+      const lastColonIndex = serverPart.lastIndexOf(':');
+      if (lastColonIndex === -1) return null;
+      server = serverPart.substring(0, lastColonIndex);
+      portStr = serverPart.substring(lastColonIndex + 1);
+      if (server.startsWith('[') && server.endsWith(']')) server = server.slice(1, -1);
+      const firstColonIndex = userPart.indexOf(':');
+      if (firstColonIndex === -1) return null;
+      method = userPart.substring(0, firstColonIndex);
+      password = userPart.substring(firstColonIndex + 1);
+    }
+
+    if (!server || !portStr || !method || !password) return null;
+    const port = parseInt(portStr);
+    if (isNaN(port)) return null;
+
+    const pluginStr = getParam(urlStr, 'plugin');
+    const security = getParam(urlStr, 'security');
+    const type = getParam(urlStr, 'type') || 'tcp'; 
+    const sni = getParam(urlStr, 'sni') || getParam(urlStr, 'host') || server;
+    const alpnStr = getParam(urlStr, 'alpn');
+    const fp = getParam(urlStr, 'fp') || 'chrome';
+    const echStr = getParam(urlStr, 'ech');
+
+    const isTls = security === 'tls' || urlStr.includes('obfs=tls') || (alpnStr && alpnStr.length > 0) || (echStr && echStr.length > 0);
+    const alpn = alpnStr ? alpnStr.split(',') : undefined;
+
+    const node: ProxyNode = {
+      type: 'shadowsocks', name, server, port, cipher: method, password, udp: true,
+      tls: isTls, sni: sni, alpn: alpn, fingerprint: fp
+    };
+
+    node.singboxObj = {
+      tag: name,
+      type: 'shadowsocks',
+      server: node.server,
+      server_port: node.port,
+      method: node.cipher,
+      password: node.password
+    };
+    
+    if (method.toLowerCase().includes('2022')) { node.singboxObj.udp_over_tcp = true; }
+
+    node.clashObj = {
+      name: name, type: 'ss', server: node.server, port: node.port, cipher: node.cipher, password: node.password, udp: true,
+      plugin: pluginStr ? pluginStr.split(';')[0] : undefined,
+      'plugin-opts': pluginStr ? parsePluginParams(pluginStr.split(';').slice(1).join(';')) : undefined
+    };
+    if (isTls) { node.clashObj.smux = { enabled: true }; }
+
+    return node;
+  } catch (e) { return null; }
 }
+
+// --- 解析 VLESS ---
+function parseVless(urlStr: string): ProxyNode | null {
+  try {
+    const fakeUrlStr = urlStr.replace(/^[^:]+:\/\//i, 'http://');
+    const url = new URL(fakeUrlStr); 
+    const params = url.searchParams; 
+    const name = tryDecodeURIComponent(url.hash.slice(1)) || 'VLESS';
+    
+    let wsPath = params.get('path') || '/';
+    if (!wsPath.startsWith('/')) wsPath = '/' + wsPath;
+
+    const node: ProxyNode = { type: 'vless', name, server: url.hostname, port: parseInt(url.port) || 443, uuid: url.username, tls: params.get('security') === 'tls' || params.get('security') === 'reality', flow: params.get('flow') || undefined, network: params.get('type') || 'tcp', sni: params.get('sni') || params.get('host') || undefined, fingerprint: params.get('fp') || 'chrome', skipCertVerify: params.get('allowInsecure') === '1' };
+    if (params.get('security') === 'reality') { node.reality = { publicKey: params.get('pbk') || '', shortId: params.get('sid') || '' }; if (!node.sni) node.sni = node.server; }
+    if (node.network === 'ws') { node.wsPath = wsPath; node.wsHeaders = { Host: params.get('host') || node.server }; }
+    
+    const sb: any = { tag: name, type: 'vless', server: node.server, server_port: node.port, uuid: node.uuid };
+    sb.tls = { enabled: node.tls, server_name: node.sni || node.server, insecure: node.skipCertVerify, utls: { enabled: true, fingerprint: node.fingerprint }};
+    if(node.flow) sb.flow = node.flow;
+    if(node.reality) sb.tls.reality = { enabled: true, public_key: node.reality.publicKey, short_id: node.reality.shortId };
+    if(node.network === 'ws') sb.transport = { type: 'ws', path: node.wsPath, headers: node.wsHeaders };
+    node.singboxObj = sb;
+    
+    const cl: any = { name, type: 'vless', server: node.server, port: node.port, uuid: node.uuid, udp: true, tls: node.tls, servername: node.sni || node.server, 'skip-cert-verify': node.skipCertVerify, 'client-fingerprint': node.fingerprint };
+    if(node.flow) cl.flow = node.flow; 
+    if(node.reality) { cl.reality = true; cl['reality-opts'] = { 'public-key': node.reality.publicKey, 'short-id': node.reality.shortId }; }
+    if(node.network === 'ws') { cl.network = 'ws'; cl['ws-opts'] = { path: node.wsPath, headers: node.wsHeaders }; }
+    node.clashObj = cl;
+
+    return node;
+  } catch (e) { return null; }
+}
+
+// --- 解析 Hysteria2 ---
+function parseHysteria2(urlStr: string): ProxyNode | null {
+  try {
+    const fakeUrlStr = urlStr.replace(/^[^:]+:\/\//i, 'http://');
+    const url = new URL(fakeUrlStr); 
+    const params = url.searchParams; 
+    const name = tryDecodeURIComponent(url.hash.slice(1)) || 'Hy2';
+    
+    const node: ProxyNode = { type: 'hysteria2', name, server: url.hostname, port: parseInt(url.port) || 443, password: url.username, tls: true, sni: params.get('sni') || url.hostname, skipCertVerify: params.get('insecure') === '1', obfs: params.get('obfs') || undefined, obfsPassword: params.get('obfs-password') || undefined };
+    const sb: any = { tag: name, type: 'hysteria2', server: node.server, server_port: node.port, password: node.password };
+    sb.tls = { enabled: true, server_name: node.sni, insecure: node.skipCertVerify }; if(node.obfs) sb.obfs = { type: node.obfs, password: node.obfsPassword }; node.singboxObj = sb;
+    const cl: any = { name, type: 'hysteria2', server: node.server, port: node.port, password: node.password, sni: node.sni, 'skip-cert-verify': node.skipCertVerify };
+    if(node.obfs) { cl.obfs = node.obfs; cl['obfs-password'] = node.obfsPassword; } node.clashObj = cl;
+    return node;
+  } catch (e) { return null; }
+}
+
+// --- 解析 TUIC ---
+function parseTuic(urlStr: string): ProxyNode | null {
+  try {
+    const fakeUrlStr = urlStr.replace(/^[^:]+:\/\//i, 'http://');
+    const url = new URL(fakeUrlStr);
+    const params = url.searchParams;
+    const name = tryDecodeURIComponent(url.hash.slice(1)) || 'TUIC';
+
+    const congestion_control = params.get('congestion_control') || 'bbr';
+    const udp_relay_mode = params.get('udp_relay_mode') || 'native';
+    const alpnStr = params.get('alpn');
+    const skipCertVerify = params.get('allow_insecure') === '1' || params.get('insecure') === '1';
+
+    const node: ProxyNode = {
+      type: 'tuic',
+      name,
+      server: url.hostname,
+      port: parseInt(url.port) || 443,
+      uuid: url.username,
+      password: url.password,
+      tls: true,
+      sni: params.get('sni') || url.hostname,
+      alpn: alpnStr ? alpnStr.split(',') : ['h3'],
+      skipCertVerify,
+      congestion_control,
+      udp_relay_mode
+    };
+
+    const sb: any = { tag: name, type: 'tuic', server: node.server, server_port: node.port, uuid: node.uuid, password: node.password, congestion_control: node.congestion_control, udp_relay_mode: node.udp_relay_mode, tls: { enabled: true, server_name: node.sni, alpn: node.alpn, insecure: node.skipCertVerify } };
+    node.singboxObj = sb;
+
+    const cl: any = { name, type: 'tuic', server: node.server, port: node.port, uuid: node.uuid, password: node.password, sni: node.sni, alpn: node.alpn, 'skip-cert-verify': node.skipCertVerify, 'congestion-controller': node.congestion_control, 'udp-relay-mode': node.udp_relay_mode };
+    node.clashObj = cl;
+
+    return node;
+  } catch (e) { return null; }
+}
+
+// --- 解析 AnyTLS ---
+function parseAnytls(urlStr: string): ProxyNode | null {
+  try {
+    const fakeUrlStr = urlStr.replace(/^[^:]+:\/\//i, 'http://');
+    const url = new URL(fakeUrlStr);
+    const params = url.searchParams;
+    const name = tryDecodeURIComponent(url.hash.slice(1)) || 'AnyTLS';
+    
+    const uuid = url.username; 
+    const skipCertVerify = params.get('allowInsecure') === '1' || params.get('insecure') === '1';
+    const alpnStr = params.get('alpn');
+
+    const node: ProxyNode = {
+      type: 'anytls',
+      name,
+      server: url.hostname,
+      port: parseInt(url.port) || 443,
+      uuid: uuid,
+      password: uuid,
+      tls: true,
+      sni: params.get('sni') || url.hostname,
+      fingerprint: params.get('fp') || 'chrome',
+      skipCertVerify: skipCertVerify,
+      alpn: alpnStr ? alpnStr.split(',') : undefined
+    };
+
+    const sb: any = { tag: name, type: 'vless', server: node.server, server_port: node.port, uuid: node.uuid, tls: { enabled: true, server_name: node.sni, insecure: node.skipCertVerify, utls: { enabled: true, fingerprint: node.fingerprint } } };
+    if (node.alpn) sb.tls.alpn = node.alpn;
+    node.singboxObj = sb;
+
+    const cl: any = { name, type: 'anytls', server: node.server, port: node.port, password: node.password, sni: node.sni, 'skip-cert-verify': node.skipCertVerify, 'client-fingerprint': node.fingerprint, udp: true };
+    if (node.alpn) cl.alpn = node.alpn;
+    node.clashObj = cl;
+
+    return node;
+  } catch (e) { return null; }
+}
+
+// --- 解析 VMess ---
+function parseVmess(vmessUrl: string): ProxyNode | null {
+  try {
+    const b64 = vmessUrl.replace('vmess://', ''); const jsonStr = safeBase64Decode(b64); const config = JSON.parse(jsonStr); const name = config.ps || 'VMess';
+    let wsPath = config.path || '/';
+    if (!wsPath.startsWith('/')) wsPath = '/' + wsPath;
+
+    const node: ProxyNode = { type: 'vmess', name, server: config.add, port: parseInt(config.port) || 443, uuid: config.id, cipher: 'auto', tls: config.tls === 'tls', sni: config.sni || config.host, network: config.net || 'tcp', wsPath: wsPath, wsHeaders: config.host ? { Host: config.host } : undefined, skipCertVerify: true };
+    
+    const sb: any = { tag: name, type: 'vmess', server: node.server, server_port: node.port, uuid: node.uuid, security: 'auto' };
+    sb.tls = { enabled: node.tls, server_name: node.sni || node.server, insecure: true }; if(node.network === 'ws') sb.transport = { type: 'ws', path: node.wsPath, headers: node.wsHeaders }; node.singboxObj = sb;
+    
+    const cl: any = { name, type: 'vmess', server: node.server, port: node.port, uuid: node.uuid, alterId: parseInt(config.aid) || 0, cipher: config.scy || 'auto', udp: true, tls: node.tls, servername: node.sni || config.host || node.server, network: node.network };
+    if(node.network === 'ws') cl['ws-opts'] = { path: wsPath, headers: node.wsHeaders }; 
+    node.clashObj = cl;
+
+    return node;
+  } catch (e) { return null; }
+}
+
+// 💥 【全新：解析 Trojan】
+function parseTrojan(urlStr: string): ProxyNode | null {
+  try {
+    const fakeUrlStr = urlStr.replace(/^[^:]+:\/\//i, 'http://');
+    const url = new URL(fakeUrlStr); 
+    const params = url.searchParams; 
+    const name = tryDecodeURIComponent(url.hash.slice(1)) || 'Trojan';
+
+    const node: ProxyNode = {
+      type: 'trojan',
+      name,
+      server: url.hostname,
+      port: parseInt(url.port) || 443,
+      password: url.username,
+      tls: true, // Trojan 必定啟用 TLS
+      sni: params.get('sni') || params.get('peer') || url.hostname,
+      skipCertVerify: params.get('allowInsecure') === '1' || params.get('insecure') === '1'
+    };
+
+    const sb: any = {
+      tag: name,
+      type: 'trojan',
+      server: node.server,
+      server_port: node.port,
+      password: node.password,
+      tls: {
+        enabled: true,
+        server_name: node.sni,
+        insecure: node.skipCertVerify
+      }
+    };
+    node.singboxObj = sb;
+
+    const cl: any = {
+      name,
+      type: 'trojan',
+      server: node.server,
+      port: node.port,
+      password: node.password,
+      sni: node.sni,
+      'skip-cert-verify': node.skipCertVerify,
+      udp: true
+    };
+    node.clashObj = cl;
+
+    return node;
+  } catch (e) { return null; }
+}
+
+// --- 主解析函數 ---
+export async function parseContent(content: string): Promise<ProxyNode[]> {
+  let plainText = content.replace(/^\uFEFF/, '').trim(); 
+  
+  const protocols = ['ss://', 'vmess://', 'vless://', 'trojan://', 'tuic://', 'hysteria2://', 'hy2://', 'anytls://'];
+  const firstLine = plainText.split(/\r?\n/)[0].trim();
+  const isPlainText = protocols.some(p => firstLine.startsWith(p));
+  
+  if (!isPlainText) { 
+    try {
+      let b64 = plainText.replace(/[\s\r\n]+/g, '').replace(/-/g, '+').replace(/_/g, '/');
+      b64 = b64.replace(/=+$/, '');
+      while (b64.length % 4 > 0) b64 += '=';
+      
+      const binaryStr = atob(b64);
+      const bytes = new Uint8Array(binaryStr.length);
+      for (let i = 0; i < binaryStr.length; i++) {
+        bytes[i] = binaryStr.charCodeAt(i);
+      }
+      const decoded = new TextDecoder('utf-8').decode(bytes);
+      
+      if (decoded && protocols.some(p => decoded.includes(p))) {
+        plainText = decoded.replace(/^\uFEFF/, '').trim(); 
+      } else {
+        throw new Error("Base64 解碼成功，但內容並非有效的代理節點。");
+      }
+    } catch (err: any) {
+      throw new Error(`Base64 暴力解碼失敗: ${err.message}`);
+    }
+  }
+  
+  const lines = plainText.split(/\r?\n/); 
+  const nodes: ProxyNode[] = [];
+  
+  for (const line of lines) { 
+    let l = line.replace(/^[\s\uFEFF\xA0\u200B\u200C\u200D\u200E\u200F]+|[\s\uFEFF\xA0\u200B\u200C\u200D\u200E\u200F]+$/g, ''); 
+    if (!l) continue;
+    
+    if (l.startsWith('ss://')) { const n = parseShadowsocks(l); if (n) nodes.push(n); } 
+    else if (l.startsWith('vless://')) { const n = parseVless(l); if (n) nodes.push(n); } 
+    else if (l.startsWith('hysteria2://') || l.startsWith('hy2://')) { const n = parseHysteria2(l); if (n) nodes.push(n); } 
+    else if (l.startsWith('vmess://')) { const n = parseVmess(l); if (n) nodes.push(n); }
+    else if (l.startsWith('tuic://')) { const n = parseTuic(l); if (n) nodes.push(n); }
+    else if (l.startsWith('anytls://')) { const n = parseAnytls(l); if (n) nodes.push(n); }
+    // 💥 註冊 Trojan 路由
+    else if (l.startsWith('trojan://')) { const n = parseTrojan(l); if (n) nodes.push(n); }
+  } 
+  
+  if (nodes.length === 0) {
+    throw new Error("資料獲取成功，但未能成功配對到任何支援的節點格式。");
+  }
+  
+  return nodes;
+}
+
+````
+
+## File: src/generator.ts
+````ts
+import yaml from 'js-yaml';
+import { ProxyNode } from './types';
+import { REMOTE_CONFIG } from './constants';
+import { utf8ToBase64 } from './utils';
+
+// 💥 新增：導出明文連結列表（一列一條節點，多筆換行）
+export function toRawLinks(nodes: ProxyNode[]): string {
+  const links = nodes.map(node => {
+    try {
+      if (node.type === 'vless') {
+        const params = new URLSearchParams();
+        params.set('security', node.reality ? 'reality' : (node.tls ? 'tls' : 'none'));
+        params.set('type', node.network || 'tcp');
+        if (node.flow) params.set('flow', node.flow);
+        if (node.sni) params.set('sni', node.sni);
+        if (node.fingerprint) params.set('fp', node.fingerprint);
+        if (node.reality) { params.set('pbk', node.reality.publicKey); params.set('sid', node.reality.shortId); }
+        if (node.network === 'ws') { if (node.wsPath) params.set('path', node.wsPath); if (node.wsHeaders?.Host) params.set('host', node.wsHeaders.Host); }
+        return `vless://${node.uuid}@${node.server}:${node.port}?${params.toString()}#${encodeURIComponent(node.name)}`;
+      }
+      if (node.type === 'hysteria2') {
+        const params = new URLSearchParams();
+        if (node.sni) params.set('sni', node.sni);
+        if (node.obfs) { params.set('obfs', node.obfs); if (node.obfsPassword) params.set('obfs-password', node.obfsPassword); }
+        if (node.skipCertVerify) params.set('insecure', '1');
+        return `hysteria2://${node.password}@${node.server}:${node.port}?${params.toString()}#${encodeURIComponent(node.name)}`;
+      }
+      if (node.type === 'vmess') {
+        const vmessObj = {
+          v: "2", ps: node.name, add: node.server, port: node.port, id: node.uuid,
+          aid: node.clashObj?.alterId || 0, scy: "auto", net: node.network, type: "none",
+          host: node.wsHeaders?.Host || "", path: node.wsPath || "",
+          tls: node.tls ? "tls" : "", sni: node.sni || ""
+        };
+        return 'vmess://' + utf8ToBase64(JSON.stringify(vmessObj));
+      }
+      if (node.type === 'shadowsocks') {
+        const method = encodeURIComponent(node.cipher || '');
+        const pass = encodeURIComponent(node.password || '');
+        const params = new URLSearchParams();
+        if (node.tls) {
+            params.set('security', 'tls');
+            if (node.sni) params.set('sni', node.sni);
+            if (node.alpn) params.set('alpn', node.alpn.join(','));
+            if (node.fingerprint) params.set('fp', node.fingerprint);
+            params.set('type', node.network || 'tcp');
+        }
+        if (node.clashObj && node.clashObj.plugin && !node.tls) {
+             const pluginOpts = node.clashObj['plugin-opts'];
+             const optStr = pluginOpts ? ';' + new URLSearchParams(pluginOpts).toString().replace(/&/g, ';') : '';
+             params.set('plugin', node.clashObj.plugin + optStr);
+        }
+        const query = params.toString();
+        return `ss://${method}:${pass}@${node.server}:${node.port}${query ? '/?' + query : ''}#${encodeURIComponent(node.name)}`;
+      }
+      if (node.type === 'tuic') {
+        const params = new URLSearchParams();
+        if (node.sni) params.set('sni', node.sni);
+        if (node.congestion_control) params.set('congestion_control', node.congestion_control);
+        if (node.udp_relay_mode) params.set('udp_relay_mode', node.udp_relay_mode);
+        if (node.alpn && node.alpn.length > 0) params.set('alpn', node.alpn.join(','));
+        if (node.skipCertVerify) params.set('allow_insecure', '1');
+        
+        const uuid = node.uuid || '';
+        const password = node.password || '';
+        return `tuic://${uuid}:${password}@${node.server}:${node.port}?${params.toString()}#${encodeURIComponent(node.name)}`;
+      }
+      if (node.type === 'anytls') {
+        const params = new URLSearchParams();
+        params.set('security', 'tls');
+        if (node.sni) params.set('sni', node.sni);
+        params.set('insecure', node.skipCertVerify ? '1' : '0');
+        params.set('allowInsecure', node.skipCertVerify ? '1' : '0');
+        if (node.fingerprint) params.set('fp', node.fingerprint);
+        if (node.alpn && node.alpn.length > 0) params.set('alpn', node.alpn.join(','));
+        params.set('type', 'tcp'); 
+        return `anytls://${node.password}@${node.server}:${node.port}?${params.toString()}#${encodeURIComponent(node.name)}`;
+      }
+      if (node.type === 'trojan') {
+        const params = new URLSearchParams();
+        if (node.sni) params.set('sni', node.sni);
+        if (node.skipCertVerify) params.set('allowInsecure', '1');
+        return `trojan://${node.password}@${node.server}:${node.port}?${params.toString()}#${encodeURIComponent(node.name)}`;
+      }
+      return null;
+    } catch { return null; }
+  }).filter(l => l !== null);
+  return links.join('\n');
+}
+
+// 導出 Base64 訂閱
+export function toBase64(nodes: ProxyNode[]) {
+  const rawLinks = toRawLinks(nodes);
+  return utf8ToBase64(rawLinks);
+}
+
+async function fetchWithUA(url: string) {
+  const resp = await fetch(`${url}?t=${Math.random()}`, {
+    headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' }
+  });
+  if (!resp.ok) throw new Error(`Template fetch failed: ${resp.status}`);
+  return await resp.text();
+}
+
+export async function toSingBoxWithTemplate(nodes: ProxyNode[]) {
+  const text = await fetchWithUA(REMOTE_CONFIG.singbox);
+  let config = JSON.parse(text);
+  const outbounds = nodes.map(n => JSON.parse(JSON.stringify(n.singboxObj)));
+  const nodeTags = outbounds.map((o:any) => o.tag);
+  
+  if (!Array.isArray(config.outbounds)) config.outbounds = [];
+  config.outbounds.push(...outbounds);
+  config.outbounds.forEach((out: any) => {
+    if (out.type === 'selector' || out.type === 'urltest') {
+      if (!Array.isArray(out.outbounds)) out.outbounds = [];
+      nodeTags.forEach(tag => { if (!out.outbounds.includes(tag)) out.outbounds.push(tag); });
+    }
+  });
+  return JSON.stringify(config, null, 2);
+}
+
+export async function toClashWithTemplate(nodes: ProxyNode[]) {
+  const text = await fetchWithUA(REMOTE_CONFIG.clash);
+  let config: any = yaml.load(text);
+  
+  const proxies = nodes.map(n => {
+    const obj = JSON.parse(JSON.stringify(n.clashObj));
+    Object.keys(obj).forEach(key => obj[key] === undefined && delete obj[key]);
+    return obj;
+  }); 
+  const proxyNames = proxies.map((p: any) => p.name);
+
+  if (!Array.isArray(config.proxies)) config.proxies = [];
+  config.proxies.push(...proxies);
+
+  if (Array.isArray(config['proxy-groups'])) {
+    config['proxy-groups'].forEach((group: any) => {
+      if (!Array.isArray(group.proxies)) group.proxies = [];
+      proxyNames.forEach(name => { if (!group.proxies.includes(name)) group.proxies.push(name); });
+    });
+  }
+  return yaml.dump(config, { indent: 2, noRefs: true });
+}
+
+````
+
+## File: src/index.ts
+````ts
+// @ts-ignore
+import packageJson from '../package.json';
+import { Env, ProxyNode } from './types';
+import { HTML_PAGE } from './constants';
+import { parseContent } from './parser';
+import { toSingBoxWithTemplate, toClashWithTemplate, toBase64 } from './generator';
+// 引入最新的國旗智慧分群與去重演算法
+import { deduplicateNodeNames, groupNodesByFlag } from './utils';
+
+const version = packageJson.version || '2.5.0';
+
+// 輔助載入與解析節點（不含流量統計，專供 API 使用）
+async function loadNodes(urlParam: string): Promise<ProxyNode[]> {
+  const inputs = urlParam.split(/[\n\r|]+/); 
+  const allNodes: ProxyNode[] = [];
+
+  for (const input of inputs) {
+    const trimmed = input.trim(); 
+    if (!trimmed) continue;
+    
+    if (trimmed.startsWith('http')) { 
+      try { 
+        const separator = trimmed.includes('?') ? '&' : '?';
+        const fetchUrl = `${trimmed}${separator}t=${Date.now()}`;
+        
+        const resp = await fetch(fetchUrl, { 
+          headers: { 
+            'User-Agent': 'v2rayNG/1.8.5',
+            'Accept': '*/*'
+          } 
+        }); 
+        
+        if (resp.ok) { 
+          const text = await resp.text(); 
+          if (!text.trim().startsWith('<')) {
+             try {
+               const parsed = await parseContent(text);
+               allNodes.push(...parsed);
+             } catch(err) {}
+          }
+        }
+      } catch (e) {} 
+    } else { 
+      try {
+        const parsed = await parseContent(trimmed);
+        allNodes.push(...parsed); 
+      } catch(err) {}
+    }
+  }
+  return allNodes;
+}
+
+// 安全的 Base64 編碼，防止中文節點名解析錯誤
+function safeBtoa(str: string): string {
+  try {
+    return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, (match, p1) => {
+      return String.fromCharCode(parseInt(p1, 16));
+    }));
+  } catch (e) {
+    return btoa(str);
+  }
+}
+
+// 動態從 GitHub 獲取模板腳本並進行變數置換 (網址增加動態時間戳，消除 Cloudflare 緩存)
+async function getArgoScriptFromGithub(node: ProxyNode, port: string, token: string, domain: string): Promise<string> {
+  const GITHUB_TEMPLATE_URL = `https://raw.githubusercontent.com/sammy0101/cf-sub-converter/main/argo.sh?t=${Date.now()}`;
+  let template = "";
+  
+  try {
+    const res = await fetch(GITHUB_TEMPLATE_URL, { headers: { 'User-Agent': 'v2rayNG/1.8.5' } });
+    if (res.ok) {
+      template = await res.text();
+    } else {
+      throw new Error("GitHub Fetch Failed");
+    }
+  } catch(e) {
+    // 降級備用本地極簡模板 
+    template = `#!/bin/bash
+echo "警告: 無法從 GitHub 獲取最新 argo.sh 模板，正在使用降級極簡部署..."
+if ! command -v cloudflared &> /dev/null; then
+  curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o /usr/local/bin/cloudflared
+  chmod +x /usr/local/bin/cloudflared
+fi
+cloudflared tunnel --url http://127.0.0.1:{{VLESS_PORT}}
+`;
+  }
+
+  const vlessType = node.network || 'ws';
+  const vlessPath = node.wsPath || '/';
+  
+  // 統一節點名稱格式為：[原節點名]_Argo
+  const argoNodeName = `${node.name}_Argo`;
+  const isTls = node.tls ? "true" : "false";
+  const realHost = node.wsHeaders?.Host || node.sni || node.server; 
+
+  // 替換模板中的自訂佔位符
+  return template
+    .replace("{{NODE_TYPE}}", node.type)
+    .replace("{{VLESS_UUID}}", node.uuid || '')
+    .replace("{{VLESS_PATH}}", vlessPath)
+    .replace("{{VLESS_TYPE}}", vlessType)
+    .replace("{{VLESS_PORT}}", port)
+    .replace("{{NODE_NAME}}", argoNodeName)
+    .replace("{{TUNNEL_TOKEN}}", token.trim())
+    .replace("{{CUSTOM_DOMAIN}}", domain.trim())
+    .replace("{{VLESS_TLS}}", isTls)
+    .replace("{{ORIGIN_HOST}}", realHost);
+}
+
+export default {
+async fetch(request: Request, env: Env, ctx: any): Promise<Response> {
+const url = new URL(request.url);
+
+// 跨域預檢
+if (request.method === 'OPTIONS') {
+  return new Response(null, {
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type',
+    }
+  });
+}
+
+// GET /argo/sh/:id 路由 (供 VPS 執行 wget/curl 讀取一鍵安裝腳本)
+if (request.method === 'GET' && url.pathname.startsWith('/argo/sh/')) {
+  const scriptId = url.pathname.split('/').pop();
+  if (env.SUB_CACHE && scriptId) {
+    const script = await env.SUB_CACHE.get(`script:${scriptId}`);
+    if (script) {
+      return new Response(script, {
+        headers: { 
+          'Content-Type': 'text/plain; charset=utf-8', 
+          'Access-Control-Allow-Origin': '*' 
+        }
+      });
+    }
+  }
+  return new Response('# 錯誤: 該腳本不存在或已過期 (有效期 1 小時)，請重新在網頁上生成。\nexit 1\n', { 
+    status: 404,
+    headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Access-Control-Allow-Origin': '*' }
+  });
+}
+
+// POST /api/parse-argo (同時解析並篩選 VLESS 和 VMess 節點)
+if (request.method === 'POST' && (url.pathname === '/api/parse-vless' || url.pathname === '/api/parse-argo')) {
+  try {
+    const body: any = await request.json();
+    const rawUrl = body.url || '';
+    if (!rawUrl.trim()) {
+      return new Response(JSON.stringify({ error: '請輸入有效的節點內容' }), { 
+        status: 400, 
+        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } 
+      });
+    }
+
+    const allNodes = await loadNodes(rawUrl);
+    // 篩選 VLESS & VMess
+    const argoCompatibleNodes = allNodes.filter(n => n.type === 'vless' || n.type === 'vmess').map((n, idx) => ({
+      index: idx,
+      name: n.name,
+      server: n.server,
+      port: n.port,
+      type: n.type,
+      host: n.wsHeaders?.Host || n.sni || n.server
+    }));
+
+    return new Response(JSON.stringify(argoCompatibleNodes), {
+      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+    });
+  } catch (e: any) {
+    return new Response(JSON.stringify({ error: e.message }), { 
+      status: 500, 
+      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } 
+    });
+  }
+}
+
+// POST /api/argo-generate (生成 VPS 腳本與獨立 Argo 明文節點)
+if (request.method === 'POST' && url.pathname === '/api/argo-generate') {
+  try {
+    const body: any = await request.json();
+    const rawUrl = body.url || '';
+    const selectedIndices: number[] = body.indices || [];
+    const port = body.port || '8080';
+    const token = body.token || '';
+    const domain = body.domain || '';
+
+    if (!rawUrl.trim() || selectedIndices.length === 0) {
+      return new Response(JSON.stringify({ error: '無效的參數或未選擇 any 節點' }), { 
+        status: 400, 
+        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } 
+      });
+    }
+
+    const allNodes = await loadNodes(rawUrl);
+    const compatibleNodes = allNodes.filter(n => n.type === 'vless' || n.type === 'vmess');
+    const selectedObjects = selectedIndices.map(idx => compatibleNodes[idx]).filter(Boolean);
+
+    if (selectedObjects.length === 0) {
+      return new Response(JSON.stringify({ error: '選擇的節點不存在' }), { 
+        status: 400, 
+        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } 
+      });
+    }
+
+    let scripts = '';
+    const generatedNodesData: any[] = [];
+
+    for (let i = 0; i < selectedObjects.length; i++) {
+      const node = selectedObjects[i];
+      const originalIndex = selectedIndices[i];
+      
+      scripts += await getArgoScriptFromGithub(node, port, token, domain) + '\n\n';
+
+      const targetDomain = (token.trim() && domain.trim()) ? domain.trim() : "請在VPS執行一鍵安裝腳本獲取臨時域名.trycloudflare.com";
+      
+      // 格式優化：統一變更節點名字後置：[原節點名]_Argo
+      const argoNodeName = `${node.name}_Argo`;
+
+      let argoLink = '';
+      if (node.type === 'vless') {
+        argoLink = `vless://${node.uuid}@${targetDomain}:443?encryption=none&security=tls&type=${node.network || 'ws'}&host=${targetDomain}&path=${node.wsPath || '/'}#${encodeURIComponent(argoNodeName)}`;
+      } else {
+        const vmessObj = {
+          v: "2", ps: argoNodeName, add: targetDomain, port: 443, id: node.uuid,
+          aid: 0, scy: "auto", net: node.network || 'ws', type: "none",
+          host: targetDomain, path: node.wsPath || '/', tls: "tls", sni: targetDomain
+        };
+        argoLink = 'vmess://' + safeBtoa(JSON.stringify(vmessObj));
+      }
+
+      generatedNodesData.push({ originalIndex, link: argoLink });
+    }
+
+    // 將 Bash 腳本存入 KV 中 (保留 1 小時)
+    let scriptId = '';
+    if (env.SUB_CACHE) {
+      scriptId = crypto.randomUUID();
+      await env.SUB_CACHE.put(`script:${scriptId}`, scripts, { expirationTtl: 3600 });
+    }
+
+    return new Response(JSON.stringify({ 
+      scriptId: scriptId, 
+      argoNodes: generatedNodesData 
+    }), {
+      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+    });
+  } catch (e: any) {
+    return new Response(JSON.stringify({ error: e.message }), { 
+      status: 500, 
+      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } 
+    });
+  }
+}
+
+// 0. GET /version 
+if (request.method === 'GET' && url.pathname === '/version') {
+  return new Response(`subconverter v${version} ${url.host} backend\n`, {
+    headers: { 
+      'Content-Type': 'text/plain; charset=utf-8', 
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Headers': '*'
+    } 
+  });
+}
+
+// 1. POST /save 
+if (request.method === 'POST' && url.pathname === '/save') {
+  try {
+    const body: any = await request.json();
+    if (!body.path || !body.content) return new Response('Missing path or content', { status: 400 });
+    
+    const saveData = {
+      content: body.content,
+      include: body.include || '',
+      exclude: body.exclude || '',
+      rename: body.rename || ''
+    };
+    await env.SUB_CACHE.put(body.path, JSON.stringify(saveData));
+    
+    const redirectUrl = `/?url=${encodeURIComponent(body.content)}&target=singbox&include=${encodeURIComponent(body.include || '')}&exclude=${encodeURIComponent(body.exclude || '')}&rename=${encodeURIComponent(body.rename || '')}`;
+    return new Response(null, { 
+      status: 302, 
+      headers: { 'Location': redirectUrl } 
+    });
+  } catch (e) { return new Response('Error saving profile', { status: 500 }); }
+}
+
+// 2. KV 收藏 API
+const FAVS_KEY = 'favorites';
+
+async function getFavs(): Promise<any[]> {
+  const data = await env.SUB_CACHE.get(FAVS_KEY);
+  return data ? JSON.parse(data) : [];
+}
+
+async function saveFavs(favs: any[]): Promise<void> {
+  await env.SUB_CACHE.put(FAVS_KEY, JSON.stringify(favs));
+}
+
+if (request.method === 'GET' && url.pathname === '/favs') {
+  const favs = await getFavs();
+  return new Response(JSON.stringify(favs), { 
+    headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } 
+  });
+}
+
+if (request.method === 'POST' && url.pathname === '/favs') {
+  try {
+    const body: any = await request.json();
+    if (!body.name || !body.url) return new Response('Missing name or url', { status: 400 });
+    const favs = await getFavs();
+    favs.push({ 
+      name: body.name, 
+      url: body.url, 
+      include: body.include || '', 
+      exclude: body.exclude || '',
+      rename: body.rename || ''
+    });
+    await saveFavs(favs);
+    return new Response('OK', { status: 200 });
+  } catch (e) { return new Response('Error saving favorite', { status: 500 }); }
+}
+
+if (request.method === 'PUT' && url.pathname === '/favs') {
+  try {
+    const body: any = await request.json();
+    if (body.index === undefined || !body.name || !body.url) return new Response('Missing data', { status: 400 });
+    const favs = await getFavs();
+    if (body.index >= 0 && body.index < favs.length) {
+      favs[body.index] = { 
+        name: body.name, 
+        url: body.url, 
+        include: body.include || '', 
+        exclude: body.exclude || '',
+        rename: body.rename || ''
+      };
+      await saveFavs(favs);
+    }
+    return new Response('OK', { status: 200 });
+  } catch (e) { return new Response('Error updating favorite', { status: 500 }); }
+}
+
+if (request.method === 'DELETE' && url.pathname === '/favs') {
+  try {
+    const body: any = await request.json();
+    if (body.index === undefined) return new Response('Missing index', { status: 400 });
+    const favs = await getFavs();
+    if (body.index >= 0 && body.index < favs.length) {
+      favs.splice(body.index, 1);
+      await saveFavs(favs);
+    }
+    return new Response('OK', { status: 200 });
+  } catch (e) { return new Response('Error deleting favorite', { status: 500 }); }
+}
+
+// 3. GET /path (讀取短連結或一般轉換)
+let urlParam = url.searchParams.get('url') || '';
+let includeParam = url.searchParams.get('include') || '';
+let excludeParam = url.searchParams.get('exclude') || '';
+let renameParam = url.searchParams.get('rename') || '';
+
+const path = decodeURIComponent(url.pathname.slice(1)); 
+
+if (path && path !== 'sub' && path !== 'favicon.ico' && path !== '') {
+  const stored = await env.SUB_CACHE.get(path);
+  if (stored) { 
+    try {
+      const parsed = JSON.parse(stored);
+      if (parsed && parsed.content) {
+        urlParam = parsed.content;
+        if (!includeParam) includeParam = parsed.include || '';
+        if (!excludeParam) excludeParam = parsed.exclude || '';
+        if (!renameParam) renameParam = parsed.rename || '';
+      }
+    } catch (e) {
+      urlParam = stored; 
+    }
+  }
+}
+
+if (!urlParam || urlParam.trim() === '') {
+  if (path === 'sub') {
+    return new Response('Error: Missing parameter "url"', { status: 400, headers: { 'Access-Control-Allow-Origin': '*' } });
+  }
+  const dynamicHtml = HTML_PAGE.replace('v2.5.0', `v${version}`);
+  return new Response(dynamicHtml, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+}
+
+// 4. 解析並下載 
+const inputs = urlParam.split(/[\n\r|]+/); 
+const allNodes: ProxyNode[] = [];
+const errors: string[] = [];
+
+let totalUpload = 0;
+let totalDownload = 0;
+let totalTotal = 0;
+let minExpire = 0;
+let hasTrafficInfo = false;
+
+for (const input of inputs) {
+  const trimmed = input.trim(); 
+  if (!trimmed) continue;
+  
+  if (trimmed.startsWith('http')) { 
+    try { 
+      const separator = trimmed.includes('?') ? '&' : '?';
+      const fetchUrl = `${trimmed}${separator}t=${Date.now()}`;
+      
+      const resp = await fetch(fetchUrl, { 
+        headers: { 
+          'User-Agent': 'v2rayNG/1.8.5',
+          'Accept': '*/*'
+        } 
+      }); 
+      
+      if (resp.ok) { 
+        const text = await resp.text(); 
+        
+        const userInfo = resp.headers.get('subscription-userinfo');
+        if (userInfo) {
+          hasTrafficInfo = true;
+          const uploadMatch = userInfo.match(/upload=(\d+)/i);
+          const downloadMatch = userInfo.match(/download=(\d+)/i);
+          const totalMatch = userInfo.match(/total=(\d+)/i);
+          const expireMatch = userInfo.match(/expire=(\d+)/i);
+
+          totalUpload += uploadMatch ? parseInt(uploadMatch[1]) : 0;
+          totalDownload += downloadMatch ? parseInt(downloadMatch[1]) : 0;
+          totalTotal += totalMatch ? parseInt(totalMatch[1]) : 0;
+          
+          const expireVal = expireMatch ? parseInt(expireMatch[1]) : 0;
+          if (expireVal > 0) {
+            if (minExpire === 0 || expireVal < minExpire) {
+              minExpire = expireVal; 
+            }
+          }
+        }
+
+        if (text.trim().startsWith('<')) {
+           errors.push(`❌ [${trimmed}]\n失敗原因: 伺服器回傳了 HTML 網頁而不是訂閱代碼。`);
+        } else {
+           try {
+             const parsed = await parseContent(text);
+             allNodes.push(...parsed);
+           } catch(err: any) {
+             errors.push(`⚠️ [${trimmed}]\n失敗原因: ${err.message}\n內容預覽: ${text.substring(0, 100)}...`);
+           }
+        }
+      } else {
+        errors.push(`❌ [${trimmed}]\n失敗原因: HTTP 狀態碼 ${resp.status} ${resp.statusText}`);
+      }
+    } catch (e: any) {
+      errors.push(`❌ [${trimmed}]\n連線錯誤: ${e.message}`);
+    } 
+  } else { 
+    try {
+      const parsed = await parseContent(trimmed);
+      allNodes.push(...parsed); 
+    } catch(err: any) {
+      errors.push(`⚠️ [手動輸入內容]\n失敗原因: ${err.message}`);
+    }
+  }
+}
+
+if (allNodes.length === 0) {
+  const errorReport = `未解析到任何有效節點。\n\n🔍 詳細錯誤診斷報告：\n-------------------------\n${errors.join('\n\n-------------------------\n')}`;
+  return new Response(errorReport, { 
+    status: 400, 
+    headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Access-Control-Allow-Origin': '*' } 
+  });
+}
+
+let filteredNodes = allNodes;
+
+if (renameParam) {
+  try {
+    const rules = renameParam.split('|');
+    for (const rule of rules) {
+      const trimmedRule = rule.trim();
+      if (!trimmedRule) continue;
+
+      if (trimmedRule.startsWith('DEL-')) {
+        const search = trimmedRule.substring(4); 
+        if (search) {
+          filteredNodes.forEach(node => {
+            if (node.name) {
+              node.name = node.name.split(search).join('');
+            }
+          });
+        }
+      } else if (trimmedRule.includes('-')) {
+        const index = trimmedRule.indexOf('-');
+        const search = trimmedRule.substring(0, index).trim();
+        const replace = trimmedRule.substring(index + 1).trim();
+        if (search && replace !== undefined) {
+          filteredNodes.forEach(node => {
+            if (node.name) {
+              node.name = node.name.split(search).join(replace);
+            }
+          });
+        }
+      }
+    }
+  } catch (e) {
+    console.error('Rename replacement failed:', e);
+  }
+}
+
+const buildFilterRegex = (param: string): RegExp => {
+  const safePattern = param.replace(/[xXｘＸ]/g, '[xXｘＸ×]').replace(/×/g, '[xXｘＸ×]');
+  return new RegExp(safePattern, 'i');
+};
+
+if (includeParam) {
+  try {
+    const includeRegex = buildFilterRegex(includeParam);
+    filteredNodes = filteredNodes.filter(node => includeRegex.test(node.name));
+  } catch (e) {
+    console.error('Invalid include regex:', e);
+  }
+}
+
+if (excludeParam) {
+  try {
+    const excludeRegex = buildFilterRegex(excludeParam);
+    filteredNodes = filteredNodes.filter(node => !excludeRegex.test(node.name));
+  } catch (e) {
+    console.error('Invalid exclude regex:', e);
+  }
+}
+
+if (filteredNodes.length === 0) {
+  return new Response('篩選與替換後，未剩下 any 有效節點。', { 
+    status: 400, 
+    headers: { 'Content-Type': 'text/plain; charset=utf-8' } 
+  });
+}
+
+// 💥 對齊：對篩選過後的節點先進行「極簡國旗智慧排序歸類」，再進行「去重複命名自動補國旗」
+const sortedNodes = groupNodesByFlag(filteredNodes);
+const uniqueNodes = deduplicateNodeNames(sortedNodes);
+
+const target = url.searchParams.get('target');
+
+if (!target) {
+  const host = `https://${url.host}`;
+  const encodedUrl = encodeURIComponent(urlParam);
+  let filterQuery = '';
+  if (includeParam) filterQuery += `&include=${encodeURIComponent(includeParam)}`;
+  if (excludeParam) filterQuery += `&exclude=${encodeURIComponent(excludeParam)}`;
+  if (renameParam) filterQuery += `&rename=${encodeURIComponent(renameParam)}`;
+
+  const htmlInfo = `
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>訂閱轉換結果</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0f172a; color: #f8fafc; padding: 40px 20px; display: flex; justify-content: center; }
+    .container { background: #1e293b; padding: 2rem; border-radius: 16px; max-width: 600px; width: 100%; }
+    h1 { margin: 0 0 1.5rem 0; font-size: 1.5rem; text-align: center; }
+    .result { background: #0f172a; padding: 1rem; border-radius: 8px; margin-bottom: 1rem; }
+    .result-title { font-weight: 600; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 8px; }
+    .result-link { background: #334155; padding: 0.8rem; border-radius: 6px; word-break: break-all; font-family: monospace; font-size: 0.85rem; }
+    .btn { display: block; background: #22c55e; color: white; text-align: center; padding: 1rem; border-radius: 8px; text-decoration: none; font-weight: 600; margin-top: 1.5rem; }
+    .btn:hover { background: #16a34a; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>⚡ 篩選並轉換完成 (${uniqueNodes.length} 節點)</h1>
+    <div class="result">
+      <div class="result-title">📄 Sing-Box (JSON)</div>
+      <div class="result-link">${host}/?url=${encodedUrl}&target=singbox</div>
+    </div>
+    <div class="result">
+      <div class="result-title">📋 Clash Meta (YAML)</div>
+      <div class="result-link">${host}/?url=${encodedUrl}&target=clash</div>
+    </div>
+    <div class="result">
+      <div class="result-title">🔗 Base64 (原始)</div>
+      <div class="result-link">${host}/?url=${encodedUrl}&target=base64</div>
+    </div>
+    <a class="btn" href="${host}/?url=${encodedUrl}&target=singbox">📥 下載 Sing-Box 訂閱</a>
+  </div>
+</body>
+</html>
+`;
+  return new Response(htmlInfo, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+}
+
+let result = '';
+let contentType = 'text/plain';
+let fileExt = '.txt';
+
+if (target === 'clash') { 
+  result = await toClashWithTemplate(uniqueNodes); 
+  contentType = 'text/yaml'; 
+  fileExt = '.yaml';
+} else if (target === 'base64') { 
+  result = toBase64(uniqueNodes); 
+  contentType = 'text/plain'; 
+  fileExt = '.txt';
+} else { 
+  result = await toSingBoxWithTemplate(uniqueNodes); 
+  contentType = 'application/json'; 
+  fileExt = '.json';
+}
+
+const filename = `subscription${fileExt}`;
+
+const responseHeaders: Record<string, string> = {
+  'Content-Type': `${contentType}; charset=utf-8`, 
+  'Access-Control-Allow-Origin': '*', 
+  'Cache-Control': 'no-store, no-cache, must-revalidate',
+  'profile-title': filename, 
+  'subscription-title': filename,
+  'Content-Disposition': `inline; filename="${filename}"`,
+  'Profile-Update-Interval': '3600',
+};
+
+if (hasTrafficInfo) {
+  let userInfoHeader = `upload=${totalUpload}; download=${totalDownload}; total=${totalTotal}`;
+  if (minExpire > 0) {
+    userInfoHeader += `; expire=${minExpire}`;
+  }
+  responseHeaders['subscription-userinfo'] = userInfoHeader;
+}
+
+return new Response(result, { headers: responseHeaders });
+}
+};
 
 ````
 
@@ -1596,154 +2230,6 @@ export const HTML_PAGE = `
 
 ````
 
-## File: src/generator.ts
-````ts
-import yaml from 'js-yaml';
-import { ProxyNode } from './types';
-import { REMOTE_CONFIG } from './constants';
-import { utf8ToBase64 } from './utils';
-
-// 💥 新增：導出明文連結列表（一列一條節點，多筆換行）
-export function toRawLinks(nodes: ProxyNode[]): string {
-  const links = nodes.map(node => {
-    try {
-      if (node.type === 'vless') {
-        const params = new URLSearchParams();
-        params.set('security', node.reality ? 'reality' : (node.tls ? 'tls' : 'none'));
-        params.set('type', node.network || 'tcp');
-        if (node.flow) params.set('flow', node.flow);
-        if (node.sni) params.set('sni', node.sni);
-        if (node.fingerprint) params.set('fp', node.fingerprint);
-        if (node.reality) { params.set('pbk', node.reality.publicKey); params.set('sid', node.reality.shortId); }
-        if (node.network === 'ws') { if (node.wsPath) params.set('path', node.wsPath); if (node.wsHeaders?.Host) params.set('host', node.wsHeaders.Host); }
-        return `vless://${node.uuid}@${node.server}:${node.port}?${params.toString()}#${encodeURIComponent(node.name)}`;
-      }
-      if (node.type === 'hysteria2') {
-        const params = new URLSearchParams();
-        if (node.sni) params.set('sni', node.sni);
-        if (node.obfs) { params.set('obfs', node.obfs); if (node.obfsPassword) params.set('obfs-password', node.obfsPassword); }
-        if (node.skipCertVerify) params.set('insecure', '1');
-        return `hysteria2://${node.password}@${node.server}:${node.port}?${params.toString()}#${encodeURIComponent(node.name)}`;
-      }
-      if (node.type === 'vmess') {
-        const vmessObj = {
-          v: "2", ps: node.name, add: node.server, port: node.port, id: node.uuid,
-          aid: node.clashObj?.alterId || 0, scy: "auto", net: node.network, type: "none",
-          host: node.wsHeaders?.Host || "", path: node.wsPath || "",
-          tls: node.tls ? "tls" : "", sni: node.sni || ""
-        };
-        return 'vmess://' + utf8ToBase64(JSON.stringify(vmessObj));
-      }
-      if (node.type === 'shadowsocks') {
-        const method = encodeURIComponent(node.cipher || '');
-        const pass = encodeURIComponent(node.password || '');
-        const params = new URLSearchParams();
-        if (node.tls) {
-            params.set('security', 'tls');
-            if (node.sni) params.set('sni', node.sni);
-            if (node.alpn) params.set('alpn', node.alpn.join(','));
-            if (node.fingerprint) params.set('fp', node.fingerprint);
-            params.set('type', node.network || 'tcp');
-        }
-        if (node.clashObj && node.clashObj.plugin && !node.tls) {
-             const pluginOpts = node.clashObj['plugin-opts'];
-             const optStr = pluginOpts ? ';' + new URLSearchParams(pluginOpts).toString().replace(/&/g, ';') : '';
-             params.set('plugin', node.clashObj.plugin + optStr);
-        }
-        const query = params.toString();
-        return `ss://${method}:${pass}@${node.server}:${node.port}${query ? '/?' + query : ''}#${encodeURIComponent(node.name)}`;
-      }
-      if (node.type === 'tuic') {
-        const params = new URLSearchParams();
-        if (node.sni) params.set('sni', node.sni);
-        if (node.congestion_control) params.set('congestion_control', node.congestion_control);
-        if (node.udp_relay_mode) params.set('udp_relay_mode', node.udp_relay_mode);
-        if (node.alpn && node.alpn.length > 0) params.set('alpn', node.alpn.join(','));
-        if (node.skipCertVerify) params.set('allow_insecure', '1');
-        
-        const uuid = node.uuid || '';
-        const password = node.password || '';
-        return `tuic://${uuid}:${password}@${node.server}:${node.port}?${params.toString()}#${encodeURIComponent(node.name)}`;
-      }
-      if (node.type === 'anytls') {
-        const params = new URLSearchParams();
-        params.set('security', 'tls');
-        if (node.sni) params.set('sni', node.sni);
-        params.set('insecure', node.skipCertVerify ? '1' : '0');
-        params.set('allowInsecure', node.skipCertVerify ? '1' : '0');
-        if (node.fingerprint) params.set('fp', node.fingerprint);
-        if (node.alpn && node.alpn.length > 0) params.set('alpn', node.alpn.join(','));
-        params.set('type', 'tcp'); 
-        return `anytls://${node.password}@${node.server}:${node.port}?${params.toString()}#${encodeURIComponent(node.name)}`;
-      }
-      if (node.type === 'trojan') {
-        const params = new URLSearchParams();
-        if (node.sni) params.set('sni', node.sni);
-        if (node.skipCertVerify) params.set('allowInsecure', '1');
-        return `trojan://${node.password}@${node.server}:${node.port}?${params.toString()}#${encodeURIComponent(node.name)}`;
-      }
-      return null;
-    } catch { return null; }
-  }).filter(l => l !== null);
-  return links.join('\n');
-}
-
-// 導出 Base64 訂閱
-export function toBase64(nodes: ProxyNode[]) {
-  const rawLinks = toRawLinks(nodes);
-  return utf8ToBase64(rawLinks);
-}
-
-async function fetchWithUA(url: string) {
-  const resp = await fetch(`${url}?t=${Math.random()}`, {
-    headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' }
-  });
-  if (!resp.ok) throw new Error(`Template fetch failed: ${resp.status}`);
-  return await resp.text();
-}
-
-export async function toSingBoxWithTemplate(nodes: ProxyNode[]) {
-  const text = await fetchWithUA(REMOTE_CONFIG.singbox);
-  let config = JSON.parse(text);
-  const outbounds = nodes.map(n => JSON.parse(JSON.stringify(n.singboxObj)));
-  const nodeTags = outbounds.map((o:any) => o.tag);
-  
-  if (!Array.isArray(config.outbounds)) config.outbounds = [];
-  config.outbounds.push(...outbounds);
-  config.outbounds.forEach((out: any) => {
-    if (out.type === 'selector' || out.type === 'urltest') {
-      if (!Array.isArray(out.outbounds)) out.outbounds = [];
-      nodeTags.forEach(tag => { if (!out.outbounds.includes(tag)) out.outbounds.push(tag); });
-    }
-  });
-  return JSON.stringify(config, null, 2);
-}
-
-export async function toClashWithTemplate(nodes: ProxyNode[]) {
-  const text = await fetchWithUA(REMOTE_CONFIG.clash);
-  let config: any = yaml.load(text);
-  
-  const proxies = nodes.map(n => {
-    const obj = JSON.parse(JSON.stringify(n.clashObj));
-    Object.keys(obj).forEach(key => obj[key] === undefined && delete obj[key]);
-    return obj;
-  }); 
-  const proxyNames = proxies.map((p: any) => p.name);
-
-  if (!Array.isArray(config.proxies)) config.proxies = [];
-  config.proxies.push(...proxies);
-
-  if (Array.isArray(config['proxy-groups'])) {
-    config['proxy-groups'].forEach((group: any) => {
-      if (!Array.isArray(group.proxies)) group.proxies = [];
-      proxyNames.forEach(name => { if (!group.proxies.includes(name)) group.proxies.push(name); });
-    });
-  }
-  return yaml.dump(config, { indent: 2, noRefs: true });
-}
-
-````
-
 ## File: src/utils.ts
 ````ts
 import { ProxyNode } from "./types";
@@ -1847,7 +2333,7 @@ export function addFlag(name: string): string {
   return "🇺🇳 " + name;
 }
 
-// 💥 修改：按 22 國多梯隊黃金國旗順序進行排序（保留各機場內部原生排序，並自動將 UN 佔位符置底）
+// 💥 按國旗進行歸類排序（💥 修正：將 🇺🇳 置於最頂部，其餘依黃金順序排布）
 export function groupNodesByFlag(nodes: ProxyNode[]): ProxyNode[] {
   const groups = new Map<string, ProxyNode[]>();
   const flagOrder: string[] = [];
@@ -1855,6 +2341,7 @@ export function groupNodesByFlag(nodes: ProxyNode[]): ProxyNode[] {
   for (const node of nodes) {
     const flaggedName = addFlag(node.name || 'node');
     
+    // 提取國旗 Emoji (包含 surrogate pairs)
     let flag = '';
     const match = flaggedName.match(/^([\uD83C][\uDDE6-\uDDFF][\uD83C][\uDDE6-\uDDFF])/);
     if (match) {
@@ -1870,17 +2357,18 @@ export function groupNodesByFlag(nodes: ProxyNode[]): ProxyNode[] {
     groups.get(flag)!.push(node);
   }
   
-  // 💥 22 國精細分群黃金排序：亞太一線 ➔ 歐美二線 ➔ 東南亞/特區 ➔ 歐洲與全球主流
+  // 黃金地區排序順序
   const standardOrder = [
     '🇭🇰', '🇹🇼', '🇯🇵', '🇸🇬', '🇰🇷',  // 1. 亞太一線核心
     '🇺🇸', '🇬🇧', '🇨🇦', '🇦🇺',        // 2. 歐美主流大戶
     '🇲🇴', '🇨🇳', '🇹🇭', '🇻🇳', '🇲🇾', '🇵🇭', '🇮🇩', // 3. 特區與東南亞
-    '🇩🇪', '🇫🇷', '🇳🇱', '🇷🇺', '🇮🇳', '🇹🇷'  // 4. 歐洲與全球主流
+    '🇩🇪', '🇫🇷', '🇳🇱', '🇷🇺', '🇮🇳', '🇹睿'  // 4. 歐洲與全球主流
   ];
   
   flagOrder.sort((a, b) => {
-    if (a === '🇺🇳' && b !== '🇺🇳') return 1;
-    if (b === '🇺🇳' && a !== '🇺🇳') return -1;
+    // 💥 修正：🇺🇳 (聯合國國旗/臨時佔位符/官網提示) 優先排序在最前面
+    if (a === '🇺🇳' && b !== '🇺🇳') return -1;
+    if (b === '🇺🇳' && a !== '🇺🇳') return 1;
     
     const idxA = standardOrder.indexOf(a);
     const idxB = standardOrder.indexOf(b);
@@ -1931,1019 +2419,683 @@ export function deduplicateNodeNames(nodes: ProxyNode[]): ProxyNode[] {
 
 ````
 
-## File: src/parser.ts
+## File: src/types.ts
 ````ts
-import { ProxyNode } from "./types";
-import { safeBase64Decode, tryDecodeURIComponent } from "./utils";
-
-function parsePluginParams(str: string): Record<string, string> {
-  const params: Record<string, string> = {};
-  str.split(';').forEach(p => {
-    const [k, v] = p.split('=');
-    if (k && v) params[k] = v;
-  });
-  return params;
+export interface Env {
+  SUB_CACHE: KVNamespace;
 }
 
-// --- 解析 Shadowsocks ---
-function parseShadowsocks(urlStr: string): ProxyNode | null {
-  try {
-    const getParam = (str: string, key: string) => {
-        const regex = new RegExp(`[?&]${key}=([^&#]*)`, 'i');
-        const match = str.match(regex);
-        return match ? tryDecodeURIComponent(match[1]) : '';
-    };
-
-    let raw = urlStr.replace('ss://', '');
-    const hashIndex = raw.indexOf('#');
-    let name = 'Shadowsocks';
-    if (hashIndex !== -1) {
-      name = tryDecodeURIComponent(raw.substring(hashIndex + 1));
-      raw = raw.substring(0, hashIndex);
-    }
-    if (raw.includes('?')) { raw = raw.split('?')[0]; }
-
-    let method = ''; let password = ''; let server = ''; let portStr = '';
-    
-    if (raw.includes('@')) {
-      const parts = raw.split('@');
-      const serverPart = parts[parts.length - 1];
-      const userPart = parts.slice(0, parts.length - 1).join('@');
-      const lastColonIndex = serverPart.lastIndexOf(':');
-      if (lastColonIndex === -1) return null;
-      server = serverPart.substring(0, lastColonIndex);
-      portStr = serverPart.substring(lastColonIndex + 1);
-      if (server.startsWith('[') && server.endsWith(']')) server = server.slice(1, -1);
-      try {
-        const decoded = safeBase64Decode(userPart);
-        if (decoded && decoded.includes(':')) { 
-          const up = decoded.split(':'); method = up[0]; password = up.slice(1).join(':');
-        } else { throw new Error('Not Base64'); }
-      } catch (e) { const up = userPart.split(':'); method = up[0]; password = up.slice(1).join(':'); }
-    } else {
-      const decoded = safeBase64Decode(raw);
-      if (!decoded) return null;
-      const atIndex = decoded.lastIndexOf('@');
-      if (atIndex === -1) return null;
-      const userPart = decoded.substring(0, atIndex);
-      const serverPart = decoded.substring(atIndex + 1);
-      const lastColonIndex = serverPart.lastIndexOf(':');
-      if (lastColonIndex === -1) return null;
-      server = serverPart.substring(0, lastColonIndex);
-      portStr = serverPart.substring(lastColonIndex + 1);
-      if (server.startsWith('[') && server.endsWith(']')) server = server.slice(1, -1);
-      const firstColonIndex = userPart.indexOf(':');
-      if (firstColonIndex === -1) return null;
-      method = userPart.substring(0, firstColonIndex);
-      password = userPart.substring(firstColonIndex + 1);
-    }
-
-    if (!server || !portStr || !method || !password) return null;
-    const port = parseInt(portStr);
-    if (isNaN(port)) return null;
-
-    const pluginStr = getParam(urlStr, 'plugin');
-    const security = getParam(urlStr, 'security');
-    const type = getParam(urlStr, 'type') || 'tcp'; 
-    const sni = getParam(urlStr, 'sni') || getParam(urlStr, 'host') || server;
-    const alpnStr = getParam(urlStr, 'alpn');
-    const fp = getParam(urlStr, 'fp') || 'chrome';
-    const echStr = getParam(urlStr, 'ech');
-
-    const isTls = security === 'tls' || urlStr.includes('obfs=tls') || (alpnStr && alpnStr.length > 0) || (echStr && echStr.length > 0);
-    const alpn = alpnStr ? alpnStr.split(',') : undefined;
-
-    const node: ProxyNode = {
-      type: 'shadowsocks', name, server, port, cipher: method, password, udp: true,
-      tls: isTls, sni: sni, alpn: alpn, fingerprint: fp
-    };
-
-    node.singboxObj = {
-      tag: name,
-      type: 'shadowsocks',
-      server: node.server,
-      server_port: node.port,
-      method: node.cipher,
-      password: node.password
-    };
-    
-    if (method.toLowerCase().includes('2022')) { node.singboxObj.udp_over_tcp = true; }
-
-    node.clashObj = {
-      name: name, type: 'ss', server: node.server, port: node.port, cipher: node.cipher, password: node.password, udp: true,
-      plugin: pluginStr ? pluginStr.split(';')[0] : undefined,
-      'plugin-opts': pluginStr ? parsePluginParams(pluginStr.split(';').slice(1).join(';')) : undefined
-    };
-    if (isTls) { node.clashObj.smux = { enabled: true }; }
-
-    return node;
-  } catch (e) { return null; }
+export interface ProxyNode {
+  type: string;
+  name: string;
+  server: string;
+  port: number;
+  uuid?: string;
+  password?: string;
+  cipher?: string;
+  udp?: boolean;
+  tls?: boolean;
+  sni?: string;
+  alpn?: string[];
+  fingerprint?: string;
+  flow?: string;
+  network?: string;
+  wsPath?: string;
+  wsHeaders?: Record<string, string>;
+  reality?: { publicKey: string; shortId: string };
+  obfs?: string;
+  obfsPassword?: string;
+  skipCertVerify?: boolean;
+  singboxObj?: any; 
+  clashObj?: any;
+  congestion_control?: string;
+  udp_relay_mode?: string;
 }
 
-// --- 解析 VLESS ---
-function parseVless(urlStr: string): ProxyNode | null {
-  try {
-    const fakeUrlStr = urlStr.replace(/^[^:]+:\/\//i, 'http://');
-    const url = new URL(fakeUrlStr); 
-    const params = url.searchParams; 
-    const name = tryDecodeURIComponent(url.hash.slice(1)) || 'VLESS';
-    
-    let wsPath = params.get('path') || '/';
-    if (!wsPath.startsWith('/')) wsPath = '/' + wsPath;
+````
 
-    const node: ProxyNode = { type: 'vless', name, server: url.hostname, port: parseInt(url.port) || 443, uuid: url.username, tls: params.get('security') === 'tls' || params.get('security') === 'reality', flow: params.get('flow') || undefined, network: params.get('type') || 'tcp', sni: params.get('sni') || params.get('host') || undefined, fingerprint: params.get('fp') || 'chrome', skipCertVerify: params.get('allowInsecure') === '1' };
-    if (params.get('security') === 'reality') { node.reality = { publicKey: params.get('pbk') || '', shortId: params.get('sid') || '' }; if (!node.sni) node.sni = node.server; }
-    if (node.network === 'ws') { node.wsPath = wsPath; node.wsHeaders = { Host: params.get('host') || node.server }; }
-    
-    const sb: any = { tag: name, type: 'vless', server: node.server, server_port: node.port, uuid: node.uuid };
-    sb.tls = { enabled: node.tls, server_name: node.sni || node.server, insecure: node.skipCertVerify, utls: { enabled: true, fingerprint: node.fingerprint }};
-    if(node.flow) sb.flow = node.flow;
-    if(node.reality) sb.tls.reality = { enabled: true, public_key: node.reality.publicKey, short_id: node.reality.shortId };
-    if(node.network === 'ws') sb.transport = { type: 'ws', path: node.wsPath, headers: node.wsHeaders };
-    node.singboxObj = sb;
-    
-    const cl: any = { name, type: 'vless', server: node.server, port: node.port, uuid: node.uuid, udp: true, tls: node.tls, servername: node.sni || node.server, 'skip-cert-verify': node.skipCertVerify, 'client-fingerprint': node.fingerprint };
-    if(node.flow) cl.flow = node.flow; 
-    if(node.reality) { cl.reality = true; cl['reality-opts'] = { 'public-key': node.reality.publicKey, 'short-id': node.reality.shortId }; }
-    if(node.network === 'ws') { cl.network = 'ws'; cl['ws-opts'] = { path: node.wsPath, headers: node.wsHeaders }; }
-    node.clashObj = cl;
+## File: Clash_Rules.YAML
+````YAML
+port: 7890
+socks-port: 7891
+mixed-port: 7893
+redir-port: 7892
+tproxy-port: 7895
+allow-lan: true
+bind-address: "*"
+mode: rule
+log-level: info
+ipv6: false
+external-controller: 0.0.0.0:9090
+tcp-concurrent: true
+unified-delay: true
 
-    return node;
-  } catch (e) { return null; }
+# ==================== 設定檔快取 ====================
+profile:
+  store-selected: true
+  store-fake-ip: true
+
+# ==================== 流量嗅探器 Sniffer ====================
+sniffer:
+  enable: true
+  override-destination: true
+  sniff:
+    QUIC:
+      ports:
+        - 443
+    TLS:
+      ports:
+        - 443
+        - 8443
+    HTTP:
+      ports:
+        - 80
+        - 8080-8880
+      override-destination: true
+  force-domain:
+    - "+.netflix.com"
+    - "+.nflxvideo.net"
+    - "+.amazonaws.com"
+    - "+.media.dssott.com"
+  skip-domain:
+    - "+.apple.com"
+    - "Mijia Cloud"
+    - "dlg.io.mi.com"
+    - "+.oray.com"
+    - "+.sunlogin.net"
+    - "+.push.apple.com"
+  parse-pure-ip: true
+  force-dns-mapping: true
+
+# ==================== 進階 DNS 設定 (中港兩地智能切換版) ====================
+dns:
+  enable: true
+  ipv6: false
+  listen: 0.0.0.0:1053
+  enhanced-mode: fake-ip
+  fake-ip-range: 198.18.0.1/16
+  fake-ip-filter-mode: blacklist
+  respect-rules: true  # 開啟：讓兜底的 DoH 解析也能精準走分流規則，在大陸完美防污染
+  fake-ip-filter:
+    - '*.lan'
+    - '*.local'
+    - '*.localhost'
+    - '*.home.arpa'
+    - 'captive.apple.com'
+    - 'time.apple.com'
+    - 'time.*.apple.com'
+    - 'time.*.com'
+    - 'time.*.gov'
+    - 'time.*.edu.cn'
+    - 'ntp.*.com'
+    # 讓國內網站與蘋果服務強制返回真實 IP
+    - 'rule-set:meta-cn,meta-private,meta-apple' 
+  
+  # 基礎 DNS (解析 DoH 網域用，混合中外 DNS 確保兩地皆通)
+  default-nameserver:
+    - 223.5.5.5
+    - 119.29.29.29
+    - 8.8.8.8
+    - 1.1.1.1
+
+  # 節點專用 DNS (只用來找機場的 IP，防止在大陸找不到海外機場，或在香港被擋)
+  proxy-server-nameserver:
+    - 223.5.5.5
+    - 8.8.8.8
+
+  nameserver-policy:
+    # 國內網站強制使用國內公共 DNS (阿里、騰訊)
+    "rule-set:meta-cn":
+      - 223.5.5.5
+      - 119.29.29.29
+    # 蘋果服務：中外 DNS 並發競爭！香港 8.8.8.8 回應快得 HK CDN；大陸 223.5.5.5 回應快得 CN CDN
+    "rule-set:meta-apple":
+      - 223.5.5.5
+      - 8.8.8.8
+
+  # 國外網站兜底 DNS (使用加密 DoH。在大陸會自動走代理防污染，香港直連極速)
+  nameserver:
+    - https://dns.google/dns-query
+    - https://cloudflare-dns.com/dns-query
+
+# ==================================================
+# 代理節點設定
+# ==================================================
+proxies:
+
+proxy-groups:
+  - name: 🚀 節點選擇
+    type: select
+    proxies:
+      - ⚡ 自動選擇
+      - DIRECT
+
+  - name: ⚡ 自動選擇
+    type: url-test
+    url: http://www.gstatic.com/generate_204
+    interval: 300
+    proxies:
+
+  - name: 💬 AI 服務
+    type: select
+    proxies:
+      - ⚡ 自動選擇
+      - 🚀 節點選擇
+
+  - name: 🍎 蘋果服務
+    type: select
+    proxies:
+      - DIRECT
+      - 🚀 節點選擇
+
+  - name: Ⓜ️ 微軟服務
+    type: select
+    proxies:
+      - DIRECT
+      - 🚀 節點選擇
+
+  - name: 🎮 遊戲平台
+    type: select
+    proxies:
+      - DIRECT
+      - 🚀 節點選擇
+
+  - name: 🌐 非中國
+    type: select
+    proxies:
+      - 🚀 節點選擇
+      - DIRECT
+
+  - name: 🇨🇳 國內服務
+    type: select
+    proxies:
+      - DIRECT
+      - 🚀 節點選擇
+
+  - name: 🏠 私有網絡
+    type: select
+    proxies:
+      - DIRECT
+
+  - name: 🐟 漏網之魚
+    type: select
+    proxies:
+      - 🚀 節點選擇
+      - DIRECT
+
+  - name: 🛑 廣告攔截
+    type: select
+    proxies:
+      - REJECT
+      - DIRECT
+
+# ==================================================
+# 規則集 Rule Providers
+# ==================================================
+rule-providers:
+  my-ai:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://github.com/sammy0101/myself/raw/refs/heads/main/geosite_ai_hk_proxy.mrs"
+    path: ./ruleset/my-ai.mrs
+    interval: 86400
+
+  meta-apple:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geosite/apple.mrs"
+    path: ./ruleset/apple.mrs
+    interval: 86400
+
+  meta-microsoft:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geosite/microsoft.mrs"
+    path: ./ruleset/microsoft.mrs
+    interval: 86400
+
+  meta-steam:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geosite/steam.mrs"
+    path: ./ruleset/steam.mrs
+    interval: 86400
+
+  meta-epicgames:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geosite/epicgames.mrs"
+    path: ./ruleset/epicgames.mrs
+    interval: 86400
+
+  meta-ea:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geosite/ea.mrs"
+    path: ./ruleset/ea.mrs
+    interval: 86400
+
+  meta-ubisoft:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geosite/ubisoft.mrs"
+    path: ./ruleset/ubisoft.mrs
+    interval: 86400
+
+  meta-blizzard:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geosite/blizzard.mrs"
+    path: ./ruleset/blizzard.mrs
+    interval: 86400
+
+  meta-geolocation-!cn:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geosite/geolocation-!cn.mrs"
+    path: ./ruleset/geolocation-!cn.mrs
+    interval: 86400
+
+  meta-cn:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geosite/cn.mrs"
+    path: ./ruleset/cn.mrs
+    interval: 86400
+
+  meta-cn-ip:
+    type: http
+    behavior: ipcidr
+    format: mrs
+    url: "https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geoip/cn.mrs"
+    path: ./ruleset/cn-ip.mrs
+    interval: 86400
+
+  meta-ads:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geosite/category-ads-all.mrs"
+    path: ./ruleset/ads.mrs
+    interval: 86400
+
+  meta-private:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geosite/private.mrs"
+    path: ./ruleset/private.mrs
+    interval: 86400
+
+  meta-ip-private:
+    type: http
+    behavior: ipcidr
+    format: mrs
+    url: "https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geoip/private.mrs"
+    path: ./ruleset/ip-private.mrs
+    interval: 86400
+
+# ==================================================
+# 流量路由 Rules
+# ==================================================
+rules:
+  # 1. 廣告與內網
+  - RULE-SET,meta-ads,🛑 廣告攔截
+  - RULE-SET,meta-private,🏠 私有網絡
+  - RULE-SET,meta-ip-private,🏠 私有網絡,no-resolve
+
+  # 2. 強制代理業務
+  - RULE-SET,my-ai,💬 AI 服務
+
+  # 3. Microsoft 服務分流
+  - RULE-SET,meta-microsoft,Ⓜ️ 微軟服務
+
+  # 4. 遊戲平台分流
+  - RULE-SET,meta-steam,🎮 遊戲平台
+  - RULE-SET,meta-epicgames,🎮 遊戲平台
+  - RULE-SET,meta-ea,🎮 遊戲平台
+  - RULE-SET,meta-ubisoft,🎮 遊戲平台
+  - RULE-SET,meta-blizzard,🎮 遊戲平台
+
+  # 5. Apple 服務分流
+  - RULE-SET,meta-apple,🍎 蘋果服務
+
+  # 6. 非中國網站：走代理
+  - RULE-SET,meta-geolocation-!cn,🌐 非中國
+
+  # 7. 中國國內網域與 IP：走直連
+  - RULE-SET,meta-cn,🇨🇳 國內服務
+  - RULE-SET,meta-cn-ip,🇨🇳 國內服務,no-resolve
+
+  # 8. 國外網站兜底：全走代理
+  - MATCH,🐟 漏網之魚
+
+````
+
+## File: scripts/argo-converter.ts
+````ts
+// scripts/argo-converter.ts
+import fs from 'fs';
+import path from 'path';
+import readline from 'readline';
+import { Buffer } from 'buffer';
+
+const rl = readline.createInterface({
+  input: process.stdin,
+  output: process.stdout
+});
+
+const question = (query: string): Promise<string> => {
+  return new Promise((resolve) => rl.question(query, resolve));
+};
+
+interface VlessNode {
+  originalLink: string;
+  uuid: string;
+  server: string;
+  port: string;
+  type: string;
+  path: string;
+  host: string;
+  sni: string;
+  name: string;
 }
 
-// --- 解析 Hysteria2 ---
-function parseHysteria2(urlStr: string): ProxyNode | null {
+// 簡易 VLESS 連結解析器
+function parseVlessLink(link: string): VlessNode | null {
   try {
-    const fakeUrlStr = urlStr.replace(/^[^:]+:\/\//i, 'http://');
-    const url = new URL(fakeUrlStr); 
-    const params = url.searchParams; 
-    const name = tryDecodeURIComponent(url.hash.slice(1)) || 'Hy2';
-    
-    const node: ProxyNode = { type: 'hysteria2', name, server: url.hostname, port: parseInt(url.port) || 443, password: url.username, tls: true, sni: params.get('sni') || url.hostname, skipCertVerify: params.get('insecure') === '1', obfs: params.get('obfs') || undefined, obfsPassword: params.get('obfs-password') || undefined };
-    const sb: any = { tag: name, type: 'hysteria2', server: node.server, server_port: node.port, password: node.password };
-    sb.tls = { enabled: true, server_name: node.sni, insecure: node.skipCertVerify }; if(node.obfs) sb.obfs = { type: node.obfs, password: node.obfsPassword }; node.singboxObj = sb;
-    const cl: any = { name, type: 'hysteria2', server: node.server, port: node.port, password: node.password, sni: node.sni, 'skip-cert-verify': node.skipCertVerify };
-    if(node.obfs) { cl.obfs = node.obfs; cl['obfs-password'] = node.obfsPassword; } node.clashObj = cl;
-    return node;
-  } catch (e) { return null; }
-}
-
-// --- 解析 TUIC ---
-function parseTuic(urlStr: string): ProxyNode | null {
-  try {
-    const fakeUrlStr = urlStr.replace(/^[^:]+:\/\//i, 'http://');
-    const url = new URL(fakeUrlStr);
+    const urlStr = link.replace('vless://', 'http://');
+    const url = new URL(urlStr);
     const params = url.searchParams;
-    const name = tryDecodeURIComponent(url.hash.slice(1)) || 'TUIC';
-
-    const congestion_control = params.get('congestion_control') || 'bbr';
-    const udp_relay_mode = params.get('udp_relay_mode') || 'native';
-    const alpnStr = params.get('alpn');
-    const skipCertVerify = params.get('allow_insecure') === '1' || params.get('insecure') === '1';
-
-    const node: ProxyNode = {
-      type: 'tuic',
-      name,
-      server: url.hostname,
-      port: parseInt(url.port) || 443,
+    return {
+      originalLink: link,
       uuid: url.username,
-      password: url.password,
-      tls: true,
-      sni: params.get('sni') || url.hostname,
-      alpn: alpnStr ? alpnStr.split(',') : ['h3'],
-      skipCertVerify,
-      congestion_control,
-      udp_relay_mode
-    };
-
-    const sb: any = { tag: name, type: 'tuic', server: node.server, server_port: node.port, uuid: node.uuid, password: node.password, congestion_control: node.congestion_control, udp_relay_mode: node.udp_relay_mode, tls: { enabled: true, server_name: node.sni, alpn: node.alpn, insecure: node.skipCertVerify } };
-    node.singboxObj = sb;
-
-    const cl: any = { name, type: 'tuic', server: node.server, port: node.port, uuid: node.uuid, password: node.password, sni: node.sni, alpn: node.alpn, 'skip-cert-verify': node.skipCertVerify, 'congestion-controller': node.congestion_control, 'udp-relay-mode': node.udp_relay_mode };
-    node.clashObj = cl;
-
-    return node;
-  } catch (e) { return null; }
-}
-
-// --- 解析 AnyTLS ---
-function parseAnytls(urlStr: string): ProxyNode | null {
-  try {
-    const fakeUrlStr = urlStr.replace(/^[^:]+:\/\//i, 'http://');
-    const url = new URL(fakeUrlStr);
-    const params = url.searchParams;
-    const name = tryDecodeURIComponent(url.hash.slice(1)) || 'AnyTLS';
-    
-    const uuid = url.username; 
-    const skipCertVerify = params.get('allowInsecure') === '1' || params.get('insecure') === '1';
-    const alpnStr = params.get('alpn');
-
-    const node: ProxyNode = {
-      type: 'anytls',
-      name,
       server: url.hostname,
-      port: parseInt(url.port) || 443,
-      uuid: uuid,
-      password: uuid,
-      tls: true,
+      port: url.port,
+      type: params.get('type') || 'ws',
+      path: params.get('path') || '/',
+      host: params.get('host') || params.get('sni') || url.hostname,
       sni: params.get('sni') || url.hostname,
-      fingerprint: params.get('fp') || 'chrome',
-      skipCertVerify: skipCertVerify,
-      alpn: alpnStr ? alpnStr.split(',') : undefined
+      name: decodeURIComponent(url.hash.slice(1)) || 'VLESS Node'
     };
-
-    const sb: any = { tag: name, type: 'vless', server: node.server, server_port: node.port, uuid: node.uuid, tls: { enabled: true, server_name: node.sni, insecure: node.skipCertVerify, utls: { enabled: true, fingerprint: node.fingerprint } } };
-    if (node.alpn) sb.tls.alpn = node.alpn;
-    node.singboxObj = sb;
-
-    const cl: any = { name, type: 'anytls', server: node.server, port: node.port, password: node.password, sni: node.sni, 'skip-cert-verify': node.skipCertVerify, 'client-fingerprint': node.fingerprint, udp: true };
-    if (node.alpn) cl.alpn = node.alpn;
-    node.clashObj = cl;
-
-    return node;
-  } catch (e) { return null; }
-}
-
-// --- 解析 VMess ---
-function parseVmess(vmessUrl: string): ProxyNode | null {
-  try {
-    const b64 = vmessUrl.replace('vmess://', ''); const jsonStr = safeBase64Decode(b64); const config = JSON.parse(jsonStr); const name = config.ps || 'VMess';
-    let wsPath = config.path || '/';
-    if (!wsPath.startsWith('/')) wsPath = '/' + wsPath;
-
-    const node: ProxyNode = { type: 'vmess', name, server: config.add, port: parseInt(config.port) || 443, uuid: config.id, cipher: 'auto', tls: config.tls === 'tls', sni: config.sni || config.host, network: config.net || 'tcp', wsPath: wsPath, wsHeaders: config.host ? { Host: config.host } : undefined, skipCertVerify: true };
-    
-    const sb: any = { tag: name, type: 'vmess', server: node.server, server_port: node.port, uuid: node.uuid, security: 'auto' };
-    sb.tls = { enabled: node.tls, server_name: node.sni || node.server, insecure: true }; if(node.network === 'ws') sb.transport = { type: 'ws', path: node.wsPath, headers: node.wsHeaders }; node.singboxObj = sb;
-    
-    const cl: any = { name, type: 'vmess', server: node.server, port: node.port, uuid: node.uuid, alterId: parseInt(config.aid) || 0, cipher: config.scy || 'auto', udp: true, tls: node.tls, servername: node.sni || config.host || node.server, network: node.network };
-    if(node.network === 'ws') cl['ws-opts'] = { path: wsPath, headers: node.wsHeaders }; 
-    node.clashObj = cl;
-
-    return node;
-  } catch (e) { return null; }
-}
-
-// 💥 【全新：解析 Trojan】
-function parseTrojan(urlStr: string): ProxyNode | null {
-  try {
-    const fakeUrlStr = urlStr.replace(/^[^:]+:\/\//i, 'http://');
-    const url = new URL(fakeUrlStr); 
-    const params = url.searchParams; 
-    const name = tryDecodeURIComponent(url.hash.slice(1)) || 'Trojan';
-
-    const node: ProxyNode = {
-      type: 'trojan',
-      name,
-      server: url.hostname,
-      port: parseInt(url.port) || 443,
-      password: url.username,
-      tls: true, // Trojan 必定啟用 TLS
-      sni: params.get('sni') || params.get('peer') || url.hostname,
-      skipCertVerify: params.get('allowInsecure') === '1' || params.get('insecure') === '1'
-    };
-
-    const sb: any = {
-      tag: name,
-      type: 'trojan',
-      server: node.server,
-      server_port: node.port,
-      password: node.password,
-      tls: {
-        enabled: true,
-        server_name: node.sni,
-        insecure: node.skipCertVerify
-      }
-    };
-    node.singboxObj = sb;
-
-    const cl: any = {
-      name,
-      type: 'trojan',
-      server: node.server,
-      port: node.port,
-      password: node.password,
-      sni: node.sni,
-      'skip-cert-verify': node.skipCertVerify,
-      udp: true
-    };
-    node.clashObj = cl;
-
-    return node;
-  } catch (e) { return null; }
-}
-
-// --- 主解析函數 ---
-export async function parseContent(content: string): Promise<ProxyNode[]> {
-  let plainText = content.replace(/^\uFEFF/, '').trim(); 
-  
-  const protocols = ['ss://', 'vmess://', 'vless://', 'trojan://', 'tuic://', 'hysteria2://', 'hy2://', 'anytls://'];
-  const firstLine = plainText.split(/\r?\n/)[0].trim();
-  const isPlainText = protocols.some(p => firstLine.startsWith(p));
-  
-  if (!isPlainText) { 
-    try {
-      let b64 = plainText.replace(/[\s\r\n]+/g, '').replace(/-/g, '+').replace(/_/g, '/');
-      b64 = b64.replace(/=+$/, '');
-      while (b64.length % 4 > 0) b64 += '=';
-      
-      const binaryStr = atob(b64);
-      const bytes = new Uint8Array(binaryStr.length);
-      for (let i = 0; i < binaryStr.length; i++) {
-        bytes[i] = binaryStr.charCodeAt(i);
-      }
-      const decoded = new TextDecoder('utf-8').decode(bytes);
-      
-      if (decoded && protocols.some(p => decoded.includes(p))) {
-        plainText = decoded.replace(/^\uFEFF/, '').trim(); 
-      } else {
-        throw new Error("Base64 解碼成功，但內容並非有效的代理節點。");
-      }
-    } catch (err: any) {
-      throw new Error(`Base64 暴力解碼失敗: ${err.message}`);
-    }
-  }
-  
-  const lines = plainText.split(/\r?\n/); 
-  const nodes: ProxyNode[] = [];
-  
-  for (const line of lines) { 
-    let l = line.replace(/^[\s\uFEFF\xA0\u200B\u200C\u200D\u200E\u200F]+|[\s\uFEFF\xA0\u200B\u200C\u200D\u200E\u200F]+$/g, ''); 
-    if (!l) continue;
-    
-    if (l.startsWith('ss://')) { const n = parseShadowsocks(l); if (n) nodes.push(n); } 
-    else if (l.startsWith('vless://')) { const n = parseVless(l); if (n) nodes.push(n); } 
-    else if (l.startsWith('hysteria2://') || l.startsWith('hy2://')) { const n = parseHysteria2(l); if (n) nodes.push(n); } 
-    else if (l.startsWith('vmess://')) { const n = parseVmess(l); if (n) nodes.push(n); }
-    else if (l.startsWith('tuic://')) { const n = parseTuic(l); if (n) nodes.push(n); }
-    else if (l.startsWith('anytls://')) { const n = parseAnytls(l); if (n) nodes.push(n); }
-    // 💥 註冊 Trojan 路由
-    else if (l.startsWith('trojan://')) { const n = parseTrojan(l); if (n) nodes.push(n); }
-  } 
-  
-  if (nodes.length === 0) {
-    throw new Error("資料獲取成功，但未能成功配對到任何支援的節點格式。");
-  }
-  
-  return nodes;
-}
-
-````
-
-## File: src/index.ts
-````ts
-// @ts-ignore
-import packageJson from '../package.json';
-import { Env, ProxyNode } from './types';
-import { HTML_PAGE } from './constants';
-import { parseContent } from './parser';
-import { toSingBoxWithTemplate, toClashWithTemplate, toBase64 } from './generator';
-// 引入最新的國旗智慧分群與去重演算法
-import { deduplicateNodeNames, groupNodesByFlag } from './utils';
-
-const version = packageJson.version || '2.5.0';
-
-// 輔助載入與解析節點（不含流量統計，專供 API 使用）
-async function loadNodes(urlParam: string): Promise<ProxyNode[]> {
-  const inputs = urlParam.split(/[\n\r|]+/); 
-  const allNodes: ProxyNode[] = [];
-
-  for (const input of inputs) {
-    const trimmed = input.trim(); 
-    if (!trimmed) continue;
-    
-    if (trimmed.startsWith('http')) { 
-      try { 
-        const separator = trimmed.includes('?') ? '&' : '?';
-        const fetchUrl = `${trimmed}${separator}t=${Date.now()}`;
-        
-        const resp = await fetch(fetchUrl, { 
-          headers: { 
-            'User-Agent': 'v2rayNG/1.8.5',
-            'Accept': '*/*'
-          } 
-        }); 
-        
-        if (resp.ok) { 
-          const text = await resp.text(); 
-          if (!text.trim().startsWith('<')) {
-             try {
-               const parsed = await parseContent(text);
-               allNodes.push(...parsed);
-             } catch(err) {}
-          }
-        }
-      } catch (e) {} 
-    } else { 
-      try {
-        const parsed = await parseContent(trimmed);
-        allNodes.push(...parsed); 
-      } catch(err) {}
-    }
-  }
-  return allNodes;
-}
-
-// 安全的 Base64 編碼，防止中文節點名解析錯誤
-function safeBtoa(str: string): string {
-  try {
-    return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, (match, p1) => {
-      return String.fromCharCode(parseInt(p1, 16));
-    }));
   } catch (e) {
-    return btoa(str);
+    return null;
   }
 }
 
-// 動態從 GitHub 獲取模板腳本並進行變數置換 (網址增加動態時間戳，消除 Cloudflare 緩存)
-async function getArgoScriptFromGithub(node: ProxyNode, port: string, token: string, domain: string): Promise<string> {
-  const GITHUB_TEMPLATE_URL = `https://raw.githubusercontent.com/sammy0101/cf-sub-converter/main/argo.sh?t=${Date.now()}`;
-  let template = "";
-  
-  try {
-    const res = await fetch(GITHUB_TEMPLATE_URL, { headers: { 'User-Agent': 'v2rayNG/1.8.5' } });
-    if (res.ok) {
-      template = await res.text();
-    } else {
-      throw new Error("GitHub Fetch Failed");
-    }
-  } catch(e) {
-    // 降級備用本地極簡模板 
-    template = `#!/bin/bash
-echo "警告: 無法從 GitHub 獲取最新 argo.sh 模板，正在使用降級極簡部署..."
-if ! command -v cloudflared &> /dev/null; then
-  curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o /usr/local/bin/cloudflared
-  chmod +x /usr/local/bin/cloudflared
-fi
-cloudflared tunnel --url http://127.0.0.1:{{VLESS_PORT}}
-`;
-  }
-
-  const vlessType = node.network || 'ws';
-  const vlessPath = node.wsPath || '/';
-  
-  // 統一節點名稱格式為：[原節點名]_Argo
-  const argoNodeName = `${node.name}_Argo`;
-  const isTls = node.tls ? "true" : "false";
-  const realHost = node.wsHeaders?.Host || node.sni || node.server; 
-
-  // 替換模板中的自訂佔位符
-  return template
-    .replace("{{NODE_TYPE}}", node.type)
-    .replace("{{VLESS_UUID}}", node.uuid || '')
-    .replace("{{VLESS_PATH}}", vlessPath)
-    .replace("{{VLESS_TYPE}}", vlessType)
-    .replace("{{VLESS_PORT}}", port)
-    .replace("{{NODE_NAME}}", argoNodeName)
-    .replace("{{TUNNEL_TOKEN}}", token.trim())
-    .replace("{{CUSTOM_DOMAIN}}", domain.trim())
-    .replace("{{VLESS_TLS}}", isTls)
-    .replace("{{ORIGIN_HOST}}", realHost);
-}
-
-export default {
-async fetch(request: Request, env: Env, ctx: any): Promise<Response> {
-const url = new URL(request.url);
-
-// 跨域預檢
-if (request.method === 'OPTIONS') {
-  return new Response(null, {
-    headers: {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type',
-    }
-  });
-}
-
-// GET /argo/sh/:id 路由 (供 VPS 執行 wget/curl 讀取一鍵安裝腳本)
-if (request.method === 'GET' && url.pathname.startsWith('/argo/sh/')) {
-  const scriptId = url.pathname.split('/').pop();
-  if (env.SUB_CACHE && scriptId) {
-    const script = await env.SUB_CACHE.get(`script:${scriptId}`);
-    if (script) {
-      return new Response(script, {
-        headers: { 
-          'Content-Type': 'text/plain; charset=utf-8', 
-          'Access-Control-Allow-Origin': '*' 
-        }
-      });
-    }
-  }
-  return new Response('# 錯誤: 該腳本不存在或已過期 (有效期 1 小時)，請重新在網頁上生成。\nexit 1\n', { 
-    status: 404,
-    headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Access-Control-Allow-Origin': '*' }
-  });
-}
-
-// POST /api/parse-argo (同時解析並篩選 VLESS 和 VMess 節點)
-if (request.method === 'POST' && (url.pathname === '/api/parse-vless' || url.pathname === '/api/parse-argo')) {
-  try {
-    const body: any = await request.json();
-    const rawUrl = body.url || '';
-    if (!rawUrl.trim()) {
-      return new Response(JSON.stringify({ error: '請輸入有效的節點內容' }), { 
-        status: 400, 
-        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } 
-      });
-    }
-
-    const allNodes = await loadNodes(rawUrl);
-    // 篩選 VLESS & VMess
-    const argoCompatibleNodes = allNodes.filter(n => n.type === 'vless' || n.type === 'vmess').map((n, idx) => ({
-      index: idx,
-      name: n.name,
-      server: n.server,
-      port: n.port,
-      type: n.type,
-      host: n.wsHeaders?.Host || n.sni || n.server
-    }));
-
-    return new Response(JSON.stringify(argoCompatibleNodes), {
-      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
-    });
-  } catch (e: any) {
-    return new Response(JSON.stringify({ error: e.message }), { 
-      status: 500, 
-      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } 
-    });
-  }
-}
-
-// POST /api/argo-generate (生成 VPS 腳本與獨立 Argo 明文節點)
-if (request.method === 'POST' && url.pathname === '/api/argo-generate') {
-  try {
-    const body: any = await request.json();
-    const rawUrl = body.url || '';
-    const selectedIndices: number[] = body.indices || [];
-    const port = body.port || '8080';
-    const token = body.token || '';
-    const domain = body.domain || '';
-
-    if (!rawUrl.trim() || selectedIndices.length === 0) {
-      return new Response(JSON.stringify({ error: '無效的參數或未選擇 any 節點' }), { 
-        status: 400, 
-        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } 
-      });
-    }
-
-    const allNodes = await loadNodes(rawUrl);
-    const compatibleNodes = allNodes.filter(n => n.type === 'vless' || n.type === 'vmess');
-    const selectedObjects = selectedIndices.map(idx => compatibleNodes[idx]).filter(Boolean);
-
-    if (selectedObjects.length === 0) {
-      return new Response(JSON.stringify({ error: '選擇的節點不存在' }), { 
-        status: 400, 
-        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } 
-      });
-    }
-
-    let scripts = '';
-    const generatedNodesData: any[] = [];
-
-    for (let i = 0; i < selectedObjects.length; i++) {
-      const node = selectedObjects[i];
-      const originalIndex = selectedIndices[i];
-      
-      scripts += await getArgoScriptFromGithub(node, port, token, domain) + '\n\n';
-
-      const targetDomain = (token.trim() && domain.trim()) ? domain.trim() : "請在VPS執行一鍵安裝腳本獲取臨時域名.trycloudflare.com";
-      
-      // 格式優化：統一變更節點名字後置：[原節點名]_Argo
-      const argoNodeName = `${node.name}_Argo`;
-
-      let argoLink = '';
-      if (node.type === 'vless') {
-        argoLink = `vless://${node.uuid}@${targetDomain}:443?encryption=none&security=tls&type=${node.network || 'ws'}&host=${targetDomain}&path=${node.wsPath || '/'}#${encodeURIComponent(argoNodeName)}`;
-      } else {
-        const vmessObj = {
-          v: "2", ps: argoNodeName, add: targetDomain, port: 443, id: node.uuid,
-          aid: 0, scy: "auto", net: node.network || 'ws', type: "none",
-          host: targetDomain, path: node.wsPath || '/', tls: "tls", sni: targetDomain
-        };
-        argoLink = 'vmess://' + safeBtoa(JSON.stringify(vmessObj));
-      }
-
-      generatedNodesData.push({ originalIndex, link: argoLink });
-    }
-
-    // 將 Bash 腳本存入 KV 中 (保留 1 小時)
-    let scriptId = '';
-    if (env.SUB_CACHE) {
-      scriptId = crypto.randomUUID();
-      await env.SUB_CACHE.put(`script:${scriptId}`, scripts, { expirationTtl: 3600 });
-    }
-
-    return new Response(JSON.stringify({ 
-      scriptId: scriptId, 
-      argoNodes: generatedNodesData 
-    }), {
-      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
-    });
-  } catch (e: any) {
-    return new Response(JSON.stringify({ error: e.message }), { 
-      status: 500, 
-      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } 
-    });
-  }
-}
-
-// 0. GET /version 
-if (request.method === 'GET' && url.pathname === '/version') {
-  return new Response(`subconverter v${version} ${url.host} backend\n`, {
-    headers: { 
-      'Content-Type': 'text/plain; charset=utf-8', 
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Headers': '*'
-    } 
-  });
-}
-
-// 1. POST /save 
-if (request.method === 'POST' && url.pathname === '/save') {
-  try {
-    const body: any = await request.json();
-    if (!body.path || !body.content) return new Response('Missing path or content', { status: 400 });
-    
-    const saveData = {
-      content: body.content,
-      include: body.include || '',
-      exclude: body.exclude || '',
-      rename: body.rename || ''
-    };
-    await env.SUB_CACHE.put(body.path, JSON.stringify(saveData));
-    
-    const redirectUrl = `/?url=${encodeURIComponent(body.content)}&target=singbox&include=${encodeURIComponent(body.include || '')}&exclude=${encodeURIComponent(body.exclude || '')}&rename=${encodeURIComponent(body.rename || '')}`;
-    return new Response(null, { 
-      status: 302, 
-      headers: { 'Location': redirectUrl } 
-    });
-  } catch (e) { return new Response('Error saving profile', { status: 500 }); }
-}
-
-// 2. KV 收藏 API
-const FAVS_KEY = 'favorites';
-
-async function getFavs(): Promise<any[]> {
-  const data = await env.SUB_CACHE.get(FAVS_KEY);
-  return data ? JSON.parse(data) : [];
-}
-
-async function saveFavs(favs: any[]): Promise<void> {
-  await env.SUB_CACHE.put(FAVS_KEY, JSON.stringify(favs));
-}
-
-if (request.method === 'GET' && url.pathname === '/favs') {
-  const favs = await getFavs();
-  return new Response(JSON.stringify(favs), { 
-    headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } 
-  });
-}
-
-if (request.method === 'POST' && url.pathname === '/favs') {
-  try {
-    const body: any = await request.json();
-    if (!body.name || !body.url) return new Response('Missing name or url', { status: 400 });
-    const favs = await getFavs();
-    favs.push({ 
-      name: body.name, 
-      url: body.url, 
-      include: body.include || '', 
-      exclude: body.exclude || '',
-      rename: body.rename || ''
-    });
-    await saveFavs(favs);
-    return new Response('OK', { status: 200 });
-  } catch (e) { return new Response('Error saving favorite', { status: 500 }); }
-}
-
-if (request.method === 'PUT' && url.pathname === '/favs') {
-  try {
-    const body: any = await request.json();
-    if (body.index === undefined || !body.name || !body.url) return new Response('Missing data', { status: 400 });
-    const favs = await getFavs();
-    if (body.index >= 0 && body.index < favs.length) {
-      favs[body.index] = { 
-        name: body.name, 
-        url: body.url, 
-        include: body.include || '', 
-        exclude: body.exclude || '',
-        rename: body.rename || ''
-      };
-      await saveFavs(favs);
-    }
-    return new Response('OK', { status: 200 });
-  } catch (e) { return new Response('Error updating favorite', { status: 500 }); }
-}
-
-if (request.method === 'DELETE' && url.pathname === '/favs') {
-  try {
-    const body: any = await request.json();
-    if (body.index === undefined) return new Response('Missing index', { status: 400 });
-    const favs = await getFavs();
-    if (body.index >= 0 && body.index < favs.length) {
-      favs.splice(body.index, 1);
-      await saveFavs(favs);
-    }
-    return new Response('OK', { status: 200 });
-  } catch (e) { return new Response('Error deleting favorite', { status: 500 }); }
-}
-
-// 3. GET /path (讀取短連結或一般轉換)
-let urlParam = url.searchParams.get('url') || '';
-let includeParam = url.searchParams.get('include') || '';
-let excludeParam = url.searchParams.get('exclude') || '';
-let renameParam = url.searchParams.get('rename') || '';
-
-const path = decodeURIComponent(url.pathname.slice(1)); 
-
-if (path && path !== 'sub' && path !== 'favicon.ico' && path !== '') {
-  const stored = await env.SUB_CACHE.get(path);
-  if (stored) { 
+// 獲取並解析訂閱
+async function fetchAndParse(input: string): Promise<VlessNode[]> {
+  let content = input.trim();
+  if (input.startsWith('http')) {
+    console.log('正在獲取網址內容...');
     try {
-      const parsed = JSON.parse(stored);
-      if (parsed && parsed.content) {
-        urlParam = parsed.content;
-        if (!includeParam) includeParam = parsed.include || '';
-        if (!excludeParam) excludeParam = parsed.exclude || '';
-        if (!renameParam) renameParam = parsed.rename || '';
-      }
-    } catch (e) {
-      urlParam = stored; 
-    }
-  }
-}
-
-if (!urlParam || urlParam.trim() === '') {
-  if (path === 'sub') {
-    return new Response('Error: Missing parameter "url"', { status: 400, headers: { 'Access-Control-Allow-Origin': '*' } });
-  }
-  const dynamicHtml = HTML_PAGE.replace('v2.5.0', `v${version}`);
-  return new Response(dynamicHtml, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
-}
-
-// 4. 解析並下載 
-const inputs = urlParam.split(/[\n\r|]+/); 
-const allNodes: ProxyNode[] = [];
-const errors: string[] = [];
-
-let totalUpload = 0;
-let totalDownload = 0;
-let totalTotal = 0;
-let minExpire = 0;
-let hasTrafficInfo = false;
-
-for (const input of inputs) {
-  const trimmed = input.trim(); 
-  if (!trimmed) continue;
-  
-  if (trimmed.startsWith('http')) { 
-    try { 
-      const separator = trimmed.includes('?') ? '&' : '?';
-      const fetchUrl = `${trimmed}${separator}t=${Date.now()}`;
-      
-      const resp = await fetch(fetchUrl, { 
-        headers: { 
-          'User-Agent': 'v2rayNG/1.8.5',
-          'Accept': '*/*'
-        } 
-      }); 
-      
-      if (resp.ok) { 
-        const text = await resp.text(); 
-        
-        const userInfo = resp.headers.get('subscription-userinfo');
-        if (userInfo) {
-          hasTrafficInfo = true;
-          const uploadMatch = userInfo.match(/upload=(\d+)/i);
-          const downloadMatch = userInfo.match(/download=(\d+)/i);
-          const totalMatch = userInfo.match(/total=(\d+)/i);
-          const expireMatch = userInfo.match(/expire=(\d+)/i);
-
-          totalUpload += uploadMatch ? parseInt(uploadMatch[1]) : 0;
-          totalDownload += downloadMatch ? parseInt(downloadMatch[1]) : 0;
-          totalTotal += totalMatch ? parseInt(totalMatch[1]) : 0;
-          
-          const expireVal = expireMatch ? parseInt(expireMatch[1]) : 0;
-          if (expireVal > 0) {
-            if (minExpire === 0 || expireVal < minExpire) {
-              minExpire = expireVal; 
-            }
-          }
-        }
-
-        if (text.trim().startsWith('<')) {
-           errors.push(`❌ [${trimmed}]\n失敗原因: 伺服器回傳了 HTML 網頁而不是訂閱代碼。`);
-        } else {
-           try {
-             const parsed = await parseContent(text);
-             allNodes.push(...parsed);
-           } catch(err: any) {
-             errors.push(`⚠️ [${trimmed}]\n失敗原因: ${err.message}\n內容預覽: ${text.substring(0, 100)}...`);
-           }
-        }
-      } else {
-        errors.push(`❌ [${trimmed}]\n失敗原因: HTTP 狀態碼 ${resp.status} ${resp.statusText}`);
-      }
+      const res = await fetch(input, {
+        headers: { 'User-Agent': 'v2rayNG/1.8.5' }
+      });
+      if (!res.ok) throw new Error(`HTTP 狀態碼 ${res.status}`);
+      content = await res.text();
     } catch (e: any) {
-      errors.push(`❌ [${trimmed}]\n連線錯誤: ${e.message}`);
-    } 
-  } else { 
-    try {
-      const parsed = await parseContent(trimmed);
-      allNodes.push(...parsed); 
-    } catch(err: any) {
-      errors.push(`⚠️ [手動輸入內容]\n失敗原因: ${err.message}`);
+      console.log(`獲取訂閱失敗: ${e.message}`);
+      return [];
     }
   }
-}
 
-if (allNodes.length === 0) {
-  const errorReport = `未解析到任何有效節點。\n\n🔍 詳細錯誤診斷報告：\n-------------------------\n${errors.join('\n\n-------------------------\n')}`;
-  return new Response(errorReport, { 
-    status: 400, 
-    headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Access-Control-Allow-Origin': '*' } 
-  });
-}
-
-let filteredNodes = allNodes;
-
-if (renameParam) {
+  // 嘗試 Base64 解碼
+  let decoded = content;
   try {
-    const rules = renameParam.split('|');
-    for (const rule of rules) {
-      const trimmedRule = rule.trim();
-      if (!trimmedRule) continue;
+    const cleaned = content.replace(/[\s\r\n]+/g, '');
+    decoded = Buffer.from(cleaned, 'base64').toString('utf8');
+  } catch (e) {
+    // 解碼失敗則視為純文字
+  }
 
-      if (trimmedRule.startsWith('DEL-')) {
-        const search = trimmedRule.substring(4); 
-        if (search) {
-          filteredNodes.forEach(node => {
-            if (node.name) {
-              node.name = node.name.split(search).join('');
-            }
-          });
-        }
-      } else if (trimmedRule.includes('-')) {
-        const index = trimmedRule.indexOf('-');
-        const search = trimmedRule.substring(0, index).trim();
-        const replace = trimmedRule.substring(index + 1).trim();
-        if (search && replace !== undefined) {
-          filteredNodes.forEach(node => {
-            if (node.name) {
-              node.name = node.name.split(search).join(replace);
-            }
-          });
-        }
-      }
+  const lines = decoded.split(/\r?\n/);
+  const vlessNodes: VlessNode[] = [];
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (trimmed.startsWith('vless://')) {
+      const parsed = parseVlessLink(trimmed);
+      if (parsed) vlessNodes.push(parsed);
     }
-  } catch (e) {
-    console.error('Rename replacement failed:', e);
   }
+  return vlessNodes;
 }
 
-const buildFilterRegex = (param: string): RegExp => {
-  const safePattern = param.replace(/[xXｘＸ]/g, '[xXｘＸ×]').replace(/×/g, '[xXｘＸ×]');
-  return new RegExp(safePattern, 'i');
-};
+// 生成 VPS 安裝腳本模板
+function generateVpsScript(node: VlessNode, port: string, token: string, domain: string): string {
+  return `#!/bin/bash
+# Cloudflare Argo Tunnel 一鍵部署腳本 (由 cf-sub-converter 自動生成)
+# 適用於已使用 mack-a v2ray-agent 部署之 Xray/Sing-box 環境
 
-if (includeParam) {
-  try {
-    const includeRegex = buildFilterRegex(includeParam);
-    filteredNodes = filteredNodes.filter(node => includeRegex.test(node.name));
-  } catch (e) {
-    console.error('Invalid include regex:', e);
-  }
-}
+GREEN='\\033[0;32m'
+RED='\\033[0;31m'
+NC='\\033[0m'
 
-if (excludeParam) {
-  try {
-    const excludeRegex = buildFilterRegex(excludeParam);
-    filteredNodes = filteredNodes.filter(node => !excludeRegex.test(node.name));
-  } catch (e) {
-    console.error('Invalid exclude regex:', e);
-  }
-}
+echo -e "\${GREEN}=== 開始部署 Cloudflare Argo 隧道 ===\${NC}"
 
-if (filteredNodes.length === 0) {
-  return new Response('篩選與替換後，未剩下 any 有效節點。', { 
-    status: 400, 
-    headers: { 'Content-Type': 'text/plain; charset=utf-8' } 
-  });
-}
+if [ "$EUID" -ne 0 ]; then
+  echo -e "\${RED}錯誤: 請使用 root 權限執行此腳本！\${NC}"
+  exit 1
+fi
 
-// 💥 對齊：對篩選過後的節點先進行「極簡國旗智慧排序歸類」，再進行「去重複命名自動補國旗」
-const sortedNodes = groupNodesByFlag(filteredNodes);
-const uniqueNodes = deduplicateNodeNames(sortedNodes);
+# 節點參數配置
+VLESS_UUID="${node.uuid}"
+VLESS_PATH="${node.path}"
+VLESS_TYPE="${node.type}"
+VLESS_PORT="${port}"
+NODE_NAME="${node.name}"
+TUNNEL_TOKEN="${token.trim()}"
+CUSTOM_DOMAIN="${domain.trim()}"
 
-const target = url.searchParams.get('target');
+# 下載安裝 cloudflared
+if ! command -v cloudflared &> /dev/null; then
+    echo "正在下載安裝 cloudflared..."
+    curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o /usr/local/bin/cloudflared
+    chmod +x /usr/local/bin/cloudflared
+    echo "cloudflared 安裝完成！"
+else
+    echo "cloudflared 已存在，跳過安裝。"
+fi
 
-if (!target) {
-  const host = `https://${url.host}`;
-  const encodedUrl = encodeURIComponent(urlParam);
-  let filterQuery = '';
-  if (includeParam) filterQuery += `&include=${encodeURIComponent(includeParam)}`;
-  if (excludeParam) filterQuery += `&exclude=${encodeURIComponent(excludeParam)}`;
-  if (renameParam) filterQuery += `&rename=${encodeURIComponent(renameParam)}`;
+# 判斷是否使用固定隧道
+if [ -n "$TUNNEL_TOKEN" ]; then
+    echo -e "\${GREEN}【固定隧道模式】正在配置服務...\${NC}"
+    cloudflared service uninstall &> /dev/null
+    cloudflared service install "$TUNNEL_TOKEN"
+    systemctl daemon-reload
+    systemctl enable cloudflared
+    systemctl restart cloudflared
+    
+    echo -e "\${GREEN}部署成功！\${NC}"
+    echo "請確保已在 Cloudflare Dashboard 中將網域 '$CUSTOM_DOMAIN' 指向本地 'http://localhost:$VLESS_PORT'"
+    
+    # 輸出用戶端連結
+    FINAL_LINK="vless://$VLESS_UUID@$CUSTOM_DOMAIN:443?encryption=none&security=tls&type=$VLESS_TYPE&host=$CUSTOM_DOMAIN"
+    if [ "$VLESS_TYPE" = "ws" ]; then
+        FINAL_LINK="$FINAL_LINK&path=$(echo -n "$VLESS_PATH" | jq -s -R -r @uri 2>/dev/null || echo -n "$VLESS_PATH")"
+    fi
+    FINAL_LINK="$FINAL_LINK#Argo-$NODE_NAME"
+    echo -e "\n\${GREEN}您的 Argo VLESS 訂閱連結為:\${NC}"
+    echo -e "\${GREEN}$FINAL_LINK\${NC}\n"
+else
+    echo -e "\${GREEN}【臨時隧道模式】正在啟動 Quick Tunnel...\${NC}"
+    systemctl stop cloudflared-argo &> /dev/null
+    
+    # 寫入 systemd 臨時隧道服務
+    cat <<EOF > /etc/systemd/system/cloudflared-argo.service
+[Unit]
+Description=Cloudflare Argo Temporary Tunnel for VLESS
+After=network.target
 
-  const htmlInfo = `
-<!DOCTYPE html>
-<html lang="zh-TW">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>訂閱轉換結果</title>
-  <style>
-    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0f172a; color: #f8fafc; padding: 40px 20px; display: flex; justify-content: center; }
-    .container { background: #1e293b; padding: 2rem; border-radius: 16px; max-width: 600px; width: 100%; }
-    h1 { margin: 0 0 1.5rem 0; font-size: 1.5rem; text-align: center; }
-    .result { background: #0f172a; padding: 1rem; border-radius: 8px; margin-bottom: 1rem; }
-    .result-title { font-weight: 600; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 8px; }
-    .result-link { background: #334155; padding: 0.8rem; border-radius: 6px; word-break: break-all; font-family: monospace; font-size: 0.85rem; }
-    .btn { display: block; background: #22c55e; color: white; text-align: center; padding: 1rem; border-radius: 8px; text-decoration: none; font-weight: 600; margin-top: 1.5rem; }
-    .btn:hover { background: #16a34a; }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <h1>⚡ 篩選並轉換完成 (${uniqueNodes.length} 節點)</h1>
-    <div class="result">
-      <div class="result-title">📄 Sing-Box (JSON)</div>
-      <div class="result-link">${host}/?url=${encodedUrl}&target=singbox</div>
-    </div>
-    <div class="result">
-      <div class="result-title">📋 Clash Meta (YAML)</div>
-      <div class="result-link">${host}/?url=${encodedUrl}&target=clash</div>
-    </div>
-    <div class="result">
-      <div class="result-title">🔗 Base64 (原始)</div>
-      <div class="result-link">${host}/?url=${encodedUrl}&target=base64</div>
-    </div>
-    <a class="btn" href="${host}/?url=${encodedUrl}&target=singbox">📥 下載 Sing-Box 訂閱</a>
-  </div>
-</body>
-</html>
+[Service]
+Type=simple
+User=root
+ExecStart=/usr/local/bin/cloudflared tunnel --url http://127.0.0.1:$VLESS_PORT
+Restart=always
+RestartSec=5
+StandardOutput=file:/var/log/cloudflared-argo.log
+StandardError=file:/var/log/cloudflared-argo.log
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    touch /var/log/cloudflared-argo.log
+    systemctl daemon-reload
+    systemctl enable cloudflared-argo
+    systemctl start cloudflared-argo
+    
+    echo "正在等待 Cloudflare 分配臨時域名 (約需 10-15 秒)..."
+    TEMP_DOMAIN=""
+    for i in {1..15}; do
+        sleep 1
+        TEMP_DOMAIN=$(grep -oE 'https://[a-zA-Z0-9-]+\\.trycloudflare\\.com' /var/log/cloudflared-argo.log | head -n 1 | sed 's/https:\\/\\///')
+        if [ -n "$TEMP_DOMAIN" ]; then
+            break
+        fi
+    done
+    
+    if [ -n "$TEMP_DOMAIN" ]; then
+        echo -e "\${GREEN}獲取域名成功: \$TEMP_DOMAIN\${NC}"
+        FINAL_LINK="vless://$VLESS_UUID@\$TEMP_DOMAIN:443?encryption=none&security=tls&type=$VLESS_TYPE&host=\$TEMP_DOMAIN"
+        if [ "$VLESS_TYPE" = "ws" ]; then
+            FINAL_LINK="$FINAL_LINK&path=$(echo -n "$VLESS_PATH" | jq -s -R -r @uri 2>/dev/null || echo -n "$VLESS_PATH")"
+        fi
+        FINAL_LINK="$FINAL_LINK#Argo-Temp-$NODE_NAME"
+        
+        echo -e "\n\${GREEN}=== 部署成功 ===\${NC}"
+        echo -e "原節點名稱: $NODE_NAME"
+        echo -e "轉發連接埠: $VLESS_PORT"
+        echo -e "您的臨時 Argo 節點 VLESS 連結為 (注意：VPS 重啟或重開服務後域名會刷新):"
+        echo -e "\${GREEN}\$FINAL_LINK\${NC}\n"
+    else
+        echo -e "\${RED}錯誤: 獲取臨時域名超時！請執行 'cat /var/log/cloudflared-argo.log' 檢查日誌。\${NC}"
+    fi
+fi
 `;
-  return new Response(htmlInfo, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
 }
 
-let result = '';
-let contentType = 'text/plain';
-let fileExt = '.txt';
+async function main() {
+  console.log('==============================================');
+  console.log('      VLESS -> Cloudflare Argo 轉換工具');
+  console.log('==============================================');
 
-if (target === 'clash') { 
-  result = await toClashWithTemplate(uniqueNodes); 
-  contentType = 'text/yaml'; 
-  fileExt = '.yaml';
-} else if (target === 'base64') { 
-  result = toBase64(uniqueNodes); 
-  contentType = 'text/plain'; 
-  fileExt = '.txt';
-} else { 
-  result = await toSingBoxWithTemplate(uniqueNodes); 
-  contentType = 'application/json'; 
-  fileExt = '.json';
-}
-
-const filename = `subscription${fileExt}`;
-
-const responseHeaders: Record<string, string> = {
-  'Content-Type': `${contentType}; charset=utf-8`, 
-  'Access-Control-Allow-Origin': '*', 
-  'Cache-Control': 'no-store, no-cache, must-revalidate',
-  'profile-title': filename, 
-  'subscription-title': filename,
-  'Content-Disposition': `inline; filename="${filename}"`,
-  'Profile-Update-Interval': '3600',
-};
-
-if (hasTrafficInfo) {
-  let userInfoHeader = `upload=${totalUpload}; download=${totalDownload}; total=${totalTotal}`;
-  if (minExpire > 0) {
-    userInfoHeader += `; expire=${minExpire}`;
+  const input = await question('請輸入訂閱地址、多個 VLESS 節點、或儲存配置的訂閱網址:\n> ');
+  if (!input.trim()) {
+    console.log('輸入不能為空。');
+    rl.close();
+    return;
   }
-  responseHeaders['subscription-userinfo'] = userInfoHeader;
+
+  const nodes = await fetchAndParse(input);
+  if (nodes.length === 0) {
+    console.log('未找到任何有效的 VLESS 節點。');
+    rl.close();
+    return;
+  }
+
+  console.log(`\n成功解析出 ${nodes.length} 個 VLESS 節點:`);
+  nodes.forEach((node, i) => {
+    console.log(`  [${i + 1}] ${node.name} (${node.server}:${node.port}, 傳輸協定: ${node.type})`);
+  });
+
+  const select = await question('\n請選擇要複製並轉換的節點 (輸入數字並用逗號隔開，例如: 1,3 ；或輸入 all 代表全部):\n> ');
+  let selectedNodes: VlessNode[] = [];
+  if (select.trim().toLowerCase() === 'all') {
+    selectedNodes = nodes;
+  } else {
+    const indices = select.split(',').map(s => parseInt(s.trim()) - 1);
+    selectedNodes = indices.map(idx => nodes[idx]).filter(Boolean);
+  }
+
+  if (selectedNodes.length === 0) {
+    console.log('選擇無效，程式結束。');
+    rl.close();
+    return;
+  }
+
+  console.log(`\n已選擇 ${selectedNodes.length} 個節點進行轉換...`);
+
+  // 本地連接埠設定
+  const port = await question('\n1. 請輸入該 VLESS 節點在 VPS 上監聽的本地連接埠 (預設 8080，請與 mack-a 配置一致):\n> ') || '8080';
+
+  // Argo Tunnel 授權設定
+  console.log('\n2. 隧道設定（直接斷行即代表隨機生成臨時隧道）：');
+  const token = await question('   請貼上您的 Cloudflare Tunnel Token (選填):\n   > ');
+
+  let domain = '';
+  if (token.trim()) {
+    domain = await question('   請輸入該隧道綁定的自訂域名 (例如: vless.domain.com):\n   > ');
+    if (!domain.trim()) {
+      console.log('   錯誤: 固定隧道模式必須提供自訂域名。');
+      rl.close();
+      return;
+    }
+  }
+
+  // 建立腳本存放目錄
+  const outputDir = path.join(process.cwd(), 'argo_outputs');
+  if (!fs.existsSync(outputDir)) {
+    fs.mkdirSync(outputDir);
+  }
+
+  const generatedNodes: string[] = [];
+
+  for (const node of selectedNodes) {
+    // 保留原本節點
+    generatedNodes.push(node.originalLink);
+
+    // 生成並寫入一鍵 VPS 腳本
+    const vpsScript = generateVpsScript(node, port, token, domain);
+    const safeNodeName = node.name.replace(/[^a-zA-Z0-9\u4e00-\u9fa5]/g, '_');
+    const scriptPath = path.join(outputDir, `argo-install-${safeNodeName}.sh`);
+    
+    fs.writeFileSync(scriptPath, vpsScript, { encoding: 'utf8', mode: 0o755 });
+    console.log(`\n[✓] 成功生成 VPS 安裝腳本: ${scriptPath}`);
+
+    // 如果是固定隧道，可以直接在本地計算出新的 Argo 節點
+    if (token.trim() && domain.trim()) {
+      const argoLink = `vless://${node.uuid}@${domain.trim()}:443?encryption=none&security=tls&type=${node.type}&host=${domain.trim()}${node.type === 'ws' ? `&path=${encodeURIComponent(node.path)}` : ''}#Argo-${node.name}`;
+      generatedNodes.push(argoLink);
+      console.log(`    └─ 同步生成 Argo 節點連結: ${argoLink}`);
+    } else {
+      console.log(`    └─ 臨時隧道模式：節點連結需在 VPS 上執行腳本後動態輸出。`);
+    }
+  }
+
+  // 如果有生成固定隧道的節點，將新舊節點整合寫入訂閱文件
+  if (generatedNodes.length > selectedNodes.length) {
+    const subPath = path.join(outputDir, 'argo_subscription.txt');
+    fs.writeFileSync(subPath, generatedNodes.join('\n'), 'utf8');
+    const base64Sub = Buffer.from(generatedNodes.join('\n')).toString('base64');
+    fs.writeFileSync(path.join(outputDir, 'argo_subscription_base64.txt'), base64Sub, 'utf8');
+    
+    console.log(`\n[✓] 整合訂閱已生成（含原節點 + 新 Argo 節點）:`);
+    console.log(`    - 明文列表: ${path.join(outputDir, 'argo_subscription.txt')}`);
+    console.log(`    - Base64 格式: ${path.join(outputDir, 'argo_subscription_base64.txt')}`);
+  }
+
+  console.log('\n==============================================');
+  console.log('部署說明：');
+  console.log('1. 請將 argo_outputs 目錄內對應的 .sh 腳本上傳至您的 VPS。');
+  console.log('2. 執行命令賦予執行權限並啟動：');
+  console.log('   chmod +x argo-install-*.sh && ./argo-install-*.sh');
+  console.log('==============================================');
+
+  rl.close();
 }
 
-return new Response(result, { headers: responseHeaders });
-}
-};
-
-````
-
-## File: wrangler.toml
-````toml
-name = "my-sub-converter"
-main = "src/index.ts"
-compatibility_date = "2024-04-01"
-
-[placement]
-mode = "smart"
-
-[[kv_namespaces]]
-binding = "SUB_CACHE"
-id = "KV_ID_PLACEHOLDER"
+main();
 
 ````
 
@@ -3100,321 +3252,171 @@ id = "KV_ID_PLACEHOLDER"
 
 ````
 
-## File: argo.sh
-````sh
-#!/bin/bash
-# Cloudflare Argo Tunnel 一鍵部署腳本 (由 cf-sub-converter 動態配置)
-# 專案網址: https://github.com/sammy0101/cf-sub-converter
+## File: wrangler.toml
+````toml
+name = "my-sub-converter"
+main = "src/index.ts"
+compatibility_date = "2024-04-01"
 
-GREEN='\033[0;32m'
-RED='\033[0;31m'
-NC='\033[0m'
+[placement]
+mode = "smart"
 
-# 動態變數佔位符 (由 Worker 自動替換)
-NODE_TYPE="{{NODE_TYPE}}"
-VLESS_UUID="{{VLESS_UUID}}"
-VLESS_PATH="{{VLESS_PATH}}"
-VLESS_TYPE="{{VLESS_TYPE}}"
-VLESS_PORT="{{VLESS_PORT}}"
-NODE_NAME="{{NODE_NAME}}"
-TUNNEL_TOKEN="{{TUNNEL_TOKEN}}"
-CUSTOM_DOMAIN="{{CUSTOM_DOMAIN}}"
-VLESS_TLS="{{VLESS_TLS}}"
-ORIGIN_HOST="{{ORIGIN_HOST}}"
-
-echo -e "${GREEN}=== 開始部署 Cloudflare Argo 隧道 (${NODE_NAME}) ===${NC}"
-
-if [ "$EUID" -ne 0 ]; then
-  echo -e "${RED}錯誤: 請使用 root 權限執行此腳本！${NC}"
-  exit 1
-fi
-
-# 1. 安裝 cloudflared
-if ! command -v cloudflared &> /dev/null; then
-    echo "正在下載安裝 cloudflared..."
-    curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o /usr/local/bin/cloudflared
-    chmod +x /usr/local/bin/cloudflared
-else
-    echo "cloudflared 已存在，跳過安裝。"
-fi
-
-SAFE_NODE_NAME=$(echo "$NODE_NAME" | sed 's/[^a-zA-Z0-9]/_/g')
-
-# 2. 雙重保險：VPS 本地執行期自動檢測並修正連接埠與 TLS 加密衝突
-DETECTED_PORT="$VLESS_PORT"
-
-if command -v ss &> /dev/null; then
-    if ! ss -tln | grep -qE ":$VLESS_PORT([[:space:]]|$)"; then
-        echo -e "${RED}警告: 本地轉發埠 $VLESS_PORT 似乎未在本地監聽。正在探測常用埠...${NC}"
-        if ss -tln | grep -qE ":443([[:space:]]|$)"; then
-            echo -e "${GREEN}自動修正成功：偵測到 VPS 本地 Nginx/443 埠正在運行！已將轉發目標自動修正為: 443 埠。${NC}"
-            DETECTED_PORT="443"
-        elif ss -tln | grep -qE ":80([[:space:]]|$)"; then
-            echo -e "${GREEN}自動修正成功：偵測到 VPS 本地 80 埠正在運行！已將轉發目標自動修正為: 80 埠。${NC}"
-            DETECTED_PORT="80"
-        fi
-    fi
-fi
-
-# 智慧探測：自動探測目標連接埠是否啟用 TLS 加密
-DETECTED_TLS="false"
-if curl -s -k --connect-timeout 2 "https://127.0.0.1:$DETECTED_PORT" &>/dev/null; then
-    echo "偵測到本地轉發埠 $DETECTED_PORT 為 TLS 加密連接埠，自動開啟 HTTPS 轉發與 SNI 對齊模式。"
-    DETECTED_TLS="true"
-else
-    echo "偵測到本地轉發埠 $DETECTED_PORT 為明文連接埠，自動開啟 HTTP 轉發模式。"
-fi
-
-LOCAL_URL="http://127.0.0.1:$DETECTED_PORT"
-EXTRA_ARGS=""
-if [ "$DETECTED_TLS" = "true" ]; then
-    LOCAL_URL="https://127.0.0.1:$DETECTED_PORT"
-    EXTRA_ARGS="--no-tls-verify"
-fi
-
-# 重寫 Host Header 與 TLS SNI
-if [ -n "$ORIGIN_HOST" ]; then
-    echo "已自動啟用 HTTP 主機頭部重寫 (Host Header 重寫為: $ORIGIN_HOST)"
-    EXTRA_ARGS="$EXTRA_ARGS --http-host-header $ORIGIN_HOST"
-    if [ "$DETECTED_TLS" = "true" ]; then
-        echo "已自動啟用 TLS SNI 重寫為: $ORIGIN_HOST"
-        EXTRA_ARGS="$EXTRA_ARGS --origin-server-name $ORIGIN_HOST"
-    fi
-fi
-
-# 4. 判斷並執行部署
-if [ -n "$TUNNEL_TOKEN" ]; then
-    echo -e "${GREEN}【固定隧道模式】正在配置服務...${NC}"
-    cloudflared service uninstall &> /dev/null
-    cloudflared service install "$TUNNEL_TOKEN"
-    systemctl daemon-reload
-    systemctl enable cloudflared
-    systemctl restart cloudflared
-    
-    echo -e "\n${GREEN}=== 部署成功 【固定域名模式】 ===${NC}"
-    echo -e "原節點名稱: $NODE_NAME"
-    echo -e "轉發連接埠: $DETECTED_PORT"
-    echo -e "綁定自訂域名: $CUSTOM_DOMAIN"
-    
-    if [ "$NODE_TYPE" = "vless" ]; then
-        FINAL_LINK="vless://$VLESS_UUID@$CUSTOM_DOMAIN:443?encryption=none&security=tls&type=$VLESS_TYPE&host=$CUSTOM_DOMAIN"
-        if [ "$VLESS_TYPE" = "ws" ]; then
-            FINAL_LINK="$FINAL_LINK&path=$VLESS_PATH"
-        fi
-        FINAL_LINK="$FINAL_LINK#$NODE_NAME"
-    else
-        VMESS_JSON="{\"v\":\"2\",\"ps\":\"$NODE_NAME\",\"add\":\"$CUSTOM_DOMAIN\",\"port\":443,\"id\":\"$VLESS_UUID\",\"aid\":0,\"scy\":\"auto\",\"net\":\"$VLESS_TYPE\",\"type\":\"none\",\"host\":\"$CUSTOM_DOMAIN\",\"path\":\"$VLESS_PATH\",\"tls\":\"tls\",\"sni\":\"$CUSTOM_DOMAIN\"}"
-        VMESS_B64=$(echo -n "$VMESS_JSON" | base64 | tr -d '\n')
-        FINAL_LINK="vmess://$VMESS_B64"
-    fi
-    echo -e "\n${GREEN}您的 Argo $NODE_TYPE 訂閱連結為:${NC}"
-    echo -e "${GREEN}$FINAL_LINK${NC}\n"
-else
-    echo -e "${GREEN}【臨時隧道模式】正在啟動 Quick Tunnel...${NC}"
-    systemctl stop cloudflared-argo-${SAFE_NODE_NAME} &> /dev/null
-    
-    cat <<EOF > /etc/systemd/system/cloudflared-argo-${SAFE_NODE_NAME}.service
-[Unit]
-Description=Cloudflare Argo Temporary Tunnel for ${NODE_NAME}
-After=network.target
-
-[Service]
-Type=simple
-User=root
-ExecStart=/usr/local/bin/cloudflared tunnel --url $LOCAL_URL $EXTRA_ARGS
-Restart=always
-RestartSec=5
-StandardOutput=journal
-StandardError=journal
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-    systemctl daemon-reload
-    systemctl enable cloudflared-argo-${SAFE_NODE_NAME}
-    systemctl start cloudflared-argo-${SAFE_NODE_NAME}
-    
-    echo "正在等待 Cloudflare 分配臨時域名 (約需 10-15 秒)..."
-    TEMP_DOMAIN=""
-    for i in {1..15}; do
-        sleep 1
-        # 💥 核心修正：改用系統級 journalctl 探測，並搭配 tail -n 1 永遠提取最新活著的網域，徹底解決 530 緩存！
-        TEMP_DOMAIN=$(journalctl -u cloudflared-argo-${SAFE_NODE_NAME} -n 50 --no-pager 2>/dev/null | grep -o 'https://[a-zA-Z0-9-]*\.trycloudflare\.com' | tail -n 1 | cut -d'/' -f3)
-        if [ -n "$TEMP_DOMAIN" ]; then
-            break
-        fi
-    done
-    
-    if [ -n "$TEMP_DOMAIN" ]; then
-        echo -e "${GREEN}獲取臨時域名成功: $TEMP_DOMAIN${NC}"
-        if [ "$NODE_TYPE" = "vless" ]; then
-            FINAL_LINK="vless://$VLESS_UUID@$TEMP_DOMAIN:443?encryption=none&security=tls&type=$VLESS_TYPE&host=$TEMP_DOMAIN"
-            if [ "$VLESS_TYPE" = "ws" ]; then
-                FINAL_LINK="$FINAL_LINK&path=$VLESS_PATH"
-            fi
-            FINAL_LINK="$FINAL_LINK#$NODE_NAME"
-        else
-            VMESS_JSON="{\"v\":\"2\",\"ps\":\"$NODE_NAME\",\"add\":\"$TEMP_DOMAIN\",\"port\":443,\"id\":\"$VLESS_UUID\",\"aid\":0,\"scy\":\"auto\",\"net\":\"$VLESS_TYPE\",\"type\":\"none\",\"host\":\"$TEMP_DOMAIN\",\"path\":\"$VLESS_PATH\",\"tls\":\"tls\",\"sni\":\"$TEMP_DOMAIN\"}"
-            VMESS_B64=$(echo -n "$VMESS_JSON" | base64 | tr -d '\n')
-            FINAL_LINK="vmess://$VMESS_B64"
-        fi
-        
-        echo -e "\n${GREEN}=== 部署成功 【臨時域名模式】 ===${NC}"
-        echo -e "原節點名稱: $NODE_NAME"
-        echo -e "轉發連接埠: $DETECTED_PORT"
-        echo -e "分配的臨時域名: $TEMP_DOMAIN"
-        echo -e "您的臨時 Argo 節點 $NODE_TYPE 連結為 (注意：VPS 重啟或重開服務後域名會刷新):"
-        echo -e "${GREEN}$FINAL_LINK${NC}\n"
-    else
-        echo -e "${RED}錯誤: 獲取臨時域名超時！請執行 'journalctl -u cloudflared-argo-${SAFE_NODE_NAME} -n 30' 檢查日誌。${NC}"
-    fi
-fi
+[[kv_namespaces]]
+binding = "SUB_CACHE"
+id = "KV_ID_PLACEHOLDER"
 
 ````
 
-## File: package.json
-````json
-{
-  "name": "cf-sub-converter",
-  "version": "3.0.1",
-  "private": true,
-  "scripts": {
-    "deploy": "wrangler deploy",
-    "dev": "wrangler dev",
-    "start": "wrangler dev",
-    "argo": "tsx scripts/argo-converter.ts"
-  },
-  "dependencies": {
-    "js-yaml": "^4.1.0"
-  },
-  "devDependencies": {
-    "@cloudflare/workers-types": "^4.20240208.0",
-    "@types/js-yaml": "^4.0.9",
-    "tsx": "^4.7.1",
-    "typescript": "^5.3.3",
-    "wrangler": "^3.28.1"
-  }
-}
+## File: README.md
+````md
+# ⚡ CF Sub Converter Pro
 
-````
+基於 Cloudflare Workers 的 Serverless 訂閱轉換工具。擁有全新專業級的無廣告深色 UI，內建智慧過濾、替換、智慧國旗萬國對齊系統，以及 **Argo 隧道一鍵生成器**。一鍵將雜亂的訂閱或節點轉換為 Sing-Box / Clash Meta (Mihomo) / Base64 格式，亦可直接作為第三方轉換網頁（如 `sub-web`）的自定義後端。
 
-## File: .github/workflows/deploy.yml
-````yml
-name: Deploy to Cloudflare Workers
+[![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/sammy0101/cf-sub-converter)
 
-on:
-  # 1. 當推送到 main 或 master 分支時自動執行
-  push:
-    branches:
-      - main
-      - master
-  
-  # 2. 保留手動執行按鈕
-  workflow_dispatch:
+## 🌟 特性
 
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    name: Deploy
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Install dependencies
-        run: npm install
+- 🎨 **專業級 UI** - 全新深色主題設計 (Slate/Zinc)，無廣告、純淨排版，搭配流暢的互動動畫與一鍵掃碼功能。
+- 🌀 **Argo 隧道一鍵生成器** - 
+  - **自動化克隆轉換**：一鍵載入貼入的節點，勾選 VLESS 或 VMess 節點，系統自動拷貝並轉換為對應的 Argo 隧道節點。
+  - **超簡短一鍵 VPS 命令**：結合 Cloudflare KV 雲端動態腳本快取技術與 `curl | bash` 機制，產生超簡短的 VPS 一鍵部署命令。
+  - **雙層智慧探測校正**：VPS 部署時自動檢測本地連接埠與 TLS 加密，智慧避免 Proxy Protocol / TLS 握手衝突，並自動重寫 Host Header 與 TLS SNI。
+- 📊 **流量與到期日智慧透傳** - 自動從上游多個機場擷取並**加總多個訂閱的流量（上傳、下載、總量），並自動計算最近的到期時間**，透過標準 `subscription-userinfo` 標頭透傳，完美點亮客戶端的流量條！
+- ⚡ **標準 SubConverter 後端支援** - 內建 **`/sub`** 和 **`/version`** API 路由，回傳與您專案版本和網域動態對齊的標準格式（如 `subconverter v2.5.0 <your-worker-domain> backend`）並全面支援跨域 (CORS)。這使其可以直接做為任何第三方訂閱前端網頁（如 `sub-web`）的自定義後端。
+- 🔍 **智慧過濾與替換** - 
+  - **節點篩選**：支援「僅保留」與「排除」雙向過濾（使用 `|` 隔開，如 `HK|TW` 或 `5x`）。後端內建字元智慧相容技術，自動將 `x`、`X`、全形 `ｘ` 與數學乘號 `×` 進行互通匹配。
+  - **名稱替換**：支援極簡統一的替換與刪除語法。刪除請用 `DEL-關鍵字`，替換請用 `尋找-替換`，多組規則請用 `|` 隔開（例如：`DEL-[69云]|移动优化-專線`）。
+- 🚩 **自動國旗與萬國標註** - 內建智慧辨識系統，自動為節點名稱補上對應的國家國旗 Emoji (如 🇹🇼、🇭🇰、🇯🇵、🇲🇴、🇰🇭、🇬🇷、🇵🇱 等 40+ 國家與常用機場縮寫)。**若遇到無對應國家的節點（如流量提示、機場官網），自動補上 🇺🇳 (聯合國國旗)**，達成 100% 工整排版。
+- 🔌 **全協議支援** - 完美解析 `Trojan`, `VLESS`, `VMess`, `Shadowsocks`, `Hysteria2 (hy2)`, `TUIC`, `AnyTLS` 等主流與新興協議。
+- 🚀 **極速路由與 DNS** - 轉換出的配置檔內建頂級路由規則：
+  - **Clash Meta**：流量嗅探 (Sniffer)、Fake-IP、TProxy 軟路由最佳化、中外 DNS 智慧解析。
+  - **Sing-Box**：Mixed TUN 堆疊優化、獨立 DNS 快取、蘋果/國內服務精準直連。
+- ☁️ **雲端與配置同步** - 運行在 Cloudflare 邊緣網絡，零成本運維。生成短連結時，**系統會將「資料來源、過濾規則、替換規則」打包存入 KV**，客戶端直接更新短連結即可自動套用所有規則，不需在客戶端 URL 後手動外掛複雜參數。
 
-      # 替換 KV ID
-      - name: Inject KV ID from Secrets
-        run: |
-          sed -i 's/KV_ID_PLACEHOLDER/${{ secrets.CF_KV_ID }}/g' wrangler.toml
+## 🚀 部署教學
 
-      # 部署步驟
-      - name: Deploy
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CF_API_TOKEN }}
-          accountId: ${{ secrets.CF_ACCOUNT_ID }}
+### 方法一：GitHub Actions 自動部署 (推薦)
 
-````
+當您將專案 Fork 到您的帳號或 Push 至您的 GitHub 倉庫時，可以透過工作流自動編譯並部署至 Cloudflare Workers。
 
-## File: .github/workflows/combine-code.yml
-````yml
-name: Generate All Codebase to MD
+#### 🔑 設定 GitHub Repository Secrets：
+請前往您的 GitHub 專案頁面，依次點擊 **`Settings`** -> **`Secrets and variables`** -> **`Actions`** -> **`New repository secret`**，並添加以下三個密鑰：
 
-on:
-  push:
-    branches:
-      - main
-    paths-ignore:
-      - 'combined_project_code.md' # 避免此檔案自身更新引發無限循環
-  workflow_dispatch: # 支援在 GitHub 網頁上手動觸發執行
+* **`CF_API_TOKEN`**：您的 Cloudflare API 令牌（Token）。
+  * *獲取方式*：前往 Cloudflare 帳戶 -> 我的個人資料 -> API 令牌 -> 建立具有「編輯 Cloudflare Workers 與 KV」權限的權杖。
+* **`CF_ACCOUNT_ID`**：您的 Cloudflare 帳戶 ID。
+  * *獲取方式*：可在 Cloudflare 儀表板首頁右側或 Worker 頁面右側找到。
+* **`CF_KV_ID`**：您在 Cloudflare 上為此專案建立的 KV 空間 ID (SUB_CACHE)。
+  * *獲取方式*：可在 Cloudflare 儀表板 -> 網域與組織 -> 鍵值儲存 (KV) 中建立一個命名空間（例如 `SUB_CACHE`），並複製其 ID。
 
-permissions:
-  contents: write
+設定完成後，每次推送到 `main` 或 `master` 分支，GitHub Actions 將會自動替換專案中的 KV 佔位符，並將最新代碼安全部署。
 
-jobs:
-  build:
-    runs-on: ubuntu-latest
+### 方法二：本地手動部署 (Wrangler CLI)
 
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+1. **克隆倉庫**
+   ```bash
+   git clone https://github.com/sammy0101/cf-sub-converter.git
+   cd cf-sub-converter
+   ```
 
-      - name: Combine All Files into MD
-        run: |
-          OUT_FILE="combined_project_code.md"
-          echo "# Complete Project Codebase" > "$OUT_FILE"
-          echo "Generated on: $(date)" >> "$OUT_FILE"
-          echo "" >> "$OUT_FILE"
+2. **上傳 `argo.sh` 腳本**
+   將專案根目錄的 `argo.sh` 上傳到您的 GitHub 專案 `sammy0101/cf-sub-converter` 的 `main` 分支。
 
-          # 遍歷專案內的所有檔案，排除依賴、Git 歷史、打包產物及二進位檔案
-          find . -type f \
-            -not -path "*/node_modules/*" \
-            -not -path "*/.git/*" \
-            -not -path "*/dist/*" \
-            -not -name "package-lock.json" \
-            -not -name "yarn.lock" \
-            -not -name "pnpm-lock.yaml" \
-            -not -name "$OUT_FILE" \
-            -not -name "*.png" \
-            -not -name "*.jpg" \
-            -not -name "*.jpeg" \
-            -not -name "*.gif" \
-            -not -name "*.ico" \
-            -not -name "*.woff*" \
-            -not -name "*.ttf" | while read -r file; do
-              
-              # 取得相對路徑與副檔名
-              rel_path="${file#./}"
-              ext="${file##*.}"
-              
-              # 如果無副檔名，清除變數避免格式混亂
-              if [ "$ext" = "$rel_path" ]; then
-                ext=""
-              fi
-              
-              # 寫入檔案標題
-              echo "## File: $rel_path" >> "$OUT_FILE"
-              # 使用四個反單引號（````）包裹，防止內部程式碼的三個反單引號造成排版衝突
-              echo "\`\`\`\`$ext" >> "$OUT_FILE"
-              cat "$file" >> "$OUT_FILE"
-              echo "" >> "$OUT_FILE"
-              echo "\`\`\`\`" >> "$OUT_FILE"
-              echo "" >> "$OUT_FILE"
-          done
+3. **安裝依賴**
+   ```bash
+   npm install
+   ```
 
-      - name: Commit and Push changes
-        run: |
-          git config --local user.email "github-actions[bot]@users.noreply.github.com"
-          git config --local user.name "github-actions[bot]"
-          git add combined_project_code.md
-          
-          if git diff --staged --quiet; then
-            echo "No changes in codebase."
-          else
-            git commit -m "docs: auto-generate complete codebase [skip ci]"
-            git push origin main
-          fi
+4. **創建 KV 命名空間**
+   ```bash
+   wrangler kv:namespace create SUB_CACHE
+   ```
+   *執行後，終端機會回傳一段配置代碼，請將其複製並貼上取代您 `wrangler.toml` 中的 `KV_ID_PLACEHOLDER`。*
+
+5. **部署到 Cloudflare**
+   ```bash
+   wrangler deploy
+   ```
+
+## 📖 使用指南
+
+訪問你部署完成的 Workers 網址即可進入視覺化面板。
+
+### 面板功能
+- **資料來源設定**：支援貼上機場訂閱連結、Base64 字串，或直接貼上多行節點 URI。支援多個訂閱地址換行輸入，系統將保持原始順序進行合併。
+- **Argo 隧道一鍵生成**：
+  1. 在資料來源貼入您的機場訂閱或明文連結。
+  2. 點選「解析並載入目前輸入的 VLESS / VMess 節點」，介面會自動拉出節點列表。
+  3. 勾選您要轉換的節點，系統會自動在下方同步該節點的原生埠號。
+  4. 設定 VPS 本地對接連接埠，點選「一鍵生成 Argo 節點與一鍵部署腳本」。
+  5. 複製產生的簡短 `curl` 或 `wget` 指令至您的 VPS 上執行。
+  6. 腳本成功執行後：
+     * **臨時域名模式**：請在您的 VPS 終端機內直接複製最終生成、連通的 VLESS/VMess 節點。
+     * **固定域名模式**：新生成的 Argo 節點（原節點名末尾加 `_Argo` 後綴）會直接顯示在網頁下方的明文列表框中，方便拷貝。
+- **過濾與替換**：
+  - **僅保留關鍵字**：只留下符合關鍵字的節點。例如輸入 `HK|TW`。
+  - **排除關鍵字**：過濾掉垃圾或高倍率節點。例如輸入 `5x`（系統會自動相容 `5×` 乘號）。
+  - **節點名稱替換**：刪除寫 `DEL-關鍵字`，替換寫 `尋找-替換`，多組規則用 `|` 隔開。例如輸入 `DEL-[69云]|移动优化-專線`。
+- **配置收藏**：常用的節點與過濾替換規則可以儲存到「已儲存的配置」區塊。卡片上會直觀地以綠色 `保`、紅色 `排` 和藍色 `替` 標籤顯示你所設定的規則，點擊卡片即可自動載入所有設定。
+
+### API 調用與外部前端對接
+
+#### 1. 當作標準 SubConverter 後端使用
+本專案內建對應 `/sub` 與 `/version` 端點。你可以打開 any 一個開源的 `sub-web` 網頁（例如：`sub.id9.cc` 或其他的轉換前端），並在**「後端地址 (Backend URL)」**中，填入你的 Cloudflare Workers 網址：
+```text
+https://your-worker.workers.dev
+```
+
+#### 2. 自訂 API 參數格式
+你也可以直接透過 URL 參數進行手動調用與過濾：
+
+```http
+# 轉換原始連結 + 僅保留港台 + 排除 5x 節點 + 移除 [69云] 廣告 + 將 移动优化 替換為 專線
+https://your-worker.workers.dev/sub?url=<URL編碼後的訂閱連結>&target=singbox&include=HK|TW&exclude=5x&rename=DEL-[69云]|移动优化-專線
+
+# 轉換短連結 + 自動套用在雲端 KV 中存好的過濾與名稱替換規則
+https://your-worker.workers.dev/<自訂短連結名稱>?target=clash
+```
+
+## 🛡️ 內建分流規則群組
+
+轉換出的 Sing-Box / Clash 配置文件預設包含以下精心設計的分流群組，開箱即用：
+
+| 圖標 | 群組名稱 | 路由說明 |
+| :--- | :--- | :--- |
+| 🚀 | 節點選擇 | 手動切換所有可用節點 |
+| ⚡ | 自動選擇 | 基於 URL Test 自動測速切換延遲最低的節點 |
+| 💬 | AI 服務 | ChatGPT / Gemini / Claude / Copilot 專屬分流 |
+| 🍎 | 蘋果服務 | Apple 相關服務直連或代理 (自動依據網路環境切換最快 CDN) |
+| Ⓜ️ | 微軟服務 | Microsoft 服務直連 or 代理 |
+| 🎮 | 遊戲平台 | Steam / Epic / EA / Ubisoft / Blizzard |
+| 🌐 | 非中國 | 全球主流網站 (Google, Telegram 等) |
+| 🇨🇳 | 國內服務 | 中國大陸 IP 與網域自動直連 (精準 IP 解析) |
+| 🏠 | 私有網絡 | 區域網路 (LAN / 內網) 直連 |
+| 🛑 | 廣告攔截 | 阻擋常見廣告、追蹤器 (AdBlock) |
+| 🐟 | 漏網之魚 | Final Match (未匹配規則的最終去向) |
+
+## 📁 專案結構
+
+```text
+cf-sub-converter/
+├── src/
+│   ├── index.ts          # Worker 主入口路由、並發請求控制、智慧過濾、雲端配置同步與 /version 後端模擬
+│   ├── constants.ts      # 專業版 HTML 視圖模板與遠端規則常數 (含過濾、收藏與 Argo 隧道 UI)
+│   ├── parser.ts         # 節點解析器 (支援 Trojan, AnyTLS, TUIC, Hy2 等)
+│   ├── generator.ts      # 格式生成器 (映射為 Sing-Box / Clash Meta / Base64 / 原始連結明文導出)
+│   ├── utils.ts          # Base64 淨化與智慧國旗自動標註系統 (豪華全球版 + 萬國 🇺🇳 對齊)
+│   └── types.ts          # TypeScript 類型定義
+├── argo.sh               # 上傳至 GitHub 倉庫的一鍵 VPS 隧道部署通用腳本
+├── Sing-Box_Rules.JSON   # 遠端 Sing-Box 路由規則範本 (極速混合堆疊版)
+├── Clash_Rules.YAML      # 遠端 Clash Meta 路由規則範本 (軟路由透明代理版)
+└── wrangler.toml         # Cloudflare Workers 設定檔
+```
+
+## ⚠️ 免責聲明
+
+本專案僅供技術交流與網路安全學習研究使用，不提供 any 節點服務。請使用者務必遵守當地法律法規，勿將其用於 any 違法用途，開發者對使用者的行為不承擔 any 責任。
 
 ````
 
