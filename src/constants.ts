@@ -8,7 +8,6 @@ export const HTML_PAGE = `
 <html lang="zh-TW">
 <head>
   <meta charset="UTF-8">
-  <!-- 💥 修正：支援手機端雙手縮放 -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>SubConverter Pro | 專業訂閱轉換器</title>
   
@@ -109,19 +108,23 @@ export const HTML_PAGE = `
       transform: translate3d(0,0,0);
       backface-visibility: hidden;
       -webkit-backface-visibility: hidden;
-      min-width: 0; /* 💥 修正：防止 Grid 子元素在手機端溢出 */
+      min-width: 0; 
     }
     .fav-card:hover { border-color: var(--primary); transform: translate3d(0, -2px, 0); box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
     .fav-title { font-weight: 600; font-size: 0.95rem; margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
     
-    /* 💥 修正：允許長網址在手機端完美自動換行，徹底解決撐破卡片邊界 Bug */
+    /* 💥 修正：智慧單行截斷。只顯示 1 行，超長部分顯示為 ...，完美恢復卡片黃金比例！ */
     .fav-url { 
       font-family: 'JetBrains Mono', monospace; 
       font-size: 0.75rem; 
       color: var(--text-muted); 
-      word-break: break-all;
-      white-space: normal;
       margin-bottom: 8px;
+      display: -webkit-box;
+      -webkit-line-clamp: 1;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      word-break: break-all;
     }
     
     .fav-actions { display: flex; gap: 8px; margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border); justify-content: flex-end; }
@@ -162,7 +165,6 @@ export const HTML_PAGE = `
     }
 
     @media (max-width: 768px) {
-      /* 💥 修正：強制手機端輸入框字體為 16px，完美杜絕 iOS 點擊輸入框時頁面被自動放大的討厭問題 */
       textarea, input[type="text"] {
         font-size: 16px !important;
       }
@@ -534,7 +536,7 @@ export const HTML_PAGE = `
         const renameBadge = f.rename ? \`<span class="badge" style="background: rgba(59, 130, 246, 0.1); color: var(--primary); border-color: rgba(59, 130, 246, 0.2)">替: \${f.rename}</span>\` : '';
         
         return \`
-          <div class="fav-card" onclick="useFav(\dots)">
+          <div class="fav-card" onclick="useFav(\${i})">
             <div class="fav-title">
               <svg viewBox="0 0 24 24" style="width:16px;height:16px;color:var(--primary)"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg>
               \${f.name}
