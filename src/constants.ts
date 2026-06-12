@@ -66,7 +66,27 @@ export const HTML_PAGE = `
     textarea { font-family: 'JetBrains Mono', monospace; font-size: 0.875rem; min-height: 140px; resize: vertical; line-height: 1.6; }
     textarea::placeholder, input::placeholder { color: #475569; }
     textarea:focus, input[type="text"]:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15); }
-    .hint { font-size: 0.8rem; color: var(--text-muted); margin-top: 0.4rem; display: flex; align-items: center; gap: 4px; }
+    
+    /* 💥 修正：將對齊方式改為頂部對齊，並優化間距，防止手機折行時圖示歪斜 */
+    .hint { 
+      font-size: 0.8rem; 
+      color: var(--text-muted); 
+      margin-top: 0.4rem; 
+      display: flex; 
+      align-items: flex-start; 
+      gap: 6px; 
+    }
+    .hint svg {
+      flex-shrink: 0;
+      margin-top: 2px; /* 微調高度，完美對齊第一行字 */
+      width: 14px;
+      height: 14px;
+    }
+    .hint span {
+      display: inline;
+      white-space: normal;
+      word-break: break-word;
+    }
     
     .btn {
       display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 0.75rem 1.25rem; border-radius: var(--radius-md); font-weight: 600; font-size: 0.95rem; border: none; cursor: pointer; 
@@ -139,7 +159,6 @@ export const HTML_PAGE = `
       overflow-y: auto;
     }
     
-    /* 💥 修正：優化彈窗頁尾排版 */
     .modal-footer { 
       display: flex; 
       gap: 12px; 
@@ -287,36 +306,40 @@ export const HTML_PAGE = `
       <div class="form-group" style="margin-top: 1.5rem;">
         <label for="includeKeywords">僅保留關鍵字節點 (選填，多個用 | 分隔)</label>
         <input type="text" id="includeKeywords" placeholder="例如: 🇭🇰|台灣|TW">
+        <!-- 💥 修正：將所有純文字與 code 標籤統一包在 span 內部阻斷 Flex 擠壓 -->
         <div class="hint">
-          <svg viewBox="0 0 24 24" style="width:14px;height:14px"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
-          只保留名稱符合關鍵字的節點。例如輸入 <code>HK|TW</code>。
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+          <span>只保留名稱符合關鍵字的節點。例如輸入 <code>HK|TW</code>。</span>
         </div>
       </div>
 
       <div class="form-group" style="margin-top: 1.5rem;">
         <label for="excludeKeywords">排除關鍵字節點 (選填，多個用 | 分隔)</label>
         <input type="text" id="excludeKeywords" placeholder="例如: 流量|官網|重置|5x">
+        <!-- 💥 修正：將所有純文字與 code 標籤統一包在 span 內部阻斷 Flex 擠壓 -->
         <div class="hint">
-          <svg viewBox="0 0 24 24" style="width:14px;height:14px"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
-          排除名稱符合關鍵字的節點（過濾垃圾廣告）。例如輸入 <code>5x</code>。
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+          <span>排除名稱符合關鍵字的節點（過濾垃圾廣告）。例如輸入 <code>5x</code>。</span>
         </div>
       </div>
 
       <div class="form-group" style="margin-top: 1.5rem;">
         <label for="renameKeywords">節點名稱替換 (選填，多個用 | 分隔)</label>
         <input type="text" id="renameKeywords" placeholder="例如: DEL-[69云]|移动优化-專線">
+        <!-- 💥 修正：將所有純文字與 code 標籤統一包在 span 內部阻斷 Flex 擠壓 -->
         <div class="hint">
-          <svg viewBox="0 0 24 24" style="width:14px;height:14px"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
-          刪除請用 <code>DEL-關鍵字</code>，替換請用 <code>尋找-替換</code>。多組規則請用 <code>|</code> 隔開。
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+          <span>刪除請用 <code>DEL-關鍵字</code>，替換請用 <code>尋找-替換</code>。多組規則請用 <code>|</code> 隔開。</span>
         </div>
       </div>
       
       <div class="form-group" style="margin-top: 1.5rem;">
         <label for="shortCode">自訂路徑短連結 (選填)</label>
         <input type="text" id="shortCode" placeholder="例如: my-sub-2026">
+        <!-- 💥 修正：將所有純文字與 code 標籤統一包在 span 內部阻斷 Flex 擠壓 -->
         <div class="hint">
-          <svg viewBox="0 0 24 24" style="width:14px;height:14px"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
-          設定後將儲存於雲端，生成固定不變的短連結
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+          <span>設定後將儲存於雲端，生成固定不變的短連結</span>
         </div>
       </div>
       
@@ -407,9 +430,10 @@ export const HTML_PAGE = `
           <label style="color: var(--text-main); font-weight: 600;">🔗 第二步：新產生的 Argo 明文節點連結列表 (僅固定域名模式生效，臨時域名模式請直接在 VPS 複製)：</label>
           <textarea id="argoBase64Sub" placeholder="臨時域名具有動態性，一鍵指令部署成功後請直接於您 VPS 的終端機內進行拷貝..." readonly style="min-height: 140px; font-size: 0.8rem; font-family: 'JetBrains Mono', monospace; line-height:1.6;"></textarea>
           <button class="btn btn-ghost" onclick="copyText('argoBase64Sub')" style="margin-top: 0.5rem; width: 100%; justify-content: center;">複製明文節點列表</button>
+          <!-- 💥 修正：將所有純文字與 code 標籤統一包在 span 內部阻斷 Flex 擠壓 -->
           <div class="hint" style="margin-top: 8px; color: var(--success);">
             <svg viewBox="0 0 24 24" style="width:14px;height:14px;color: var(--success);"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
-            💡 提示：請複製第一步的指令至您的 VPS 執行。如果是臨時隧道，運行成功後請直接在您 VPS 終端機複製最終連線連結！
+            <span>💡 提示：請複製第一步的指令至您的 VPS 執行。如果是臨時隧道，運行成功後請直接在您 VPS 終端機複製最終連線連結！</span>
           </div>
         </div>
       </div>
@@ -508,7 +532,6 @@ export const HTML_PAGE = `
         <input type="text" id="favRename" placeholder="例如: DEL-[69云]|移动优化-專線">
       </div>
       
-      <!-- 💥 修正：將彈窗底部的「取消」與「儲存配置」完全重構並對齊至全局 .btn 樣式系統 -->
       <div class="modal-footer">
         <button class="btn btn-ghost" onclick="closeModal()">取消</button>
         <button class="btn btn-primary" onclick="saveFav()" style="width: auto; padding: 0.6rem 1.25rem; font-size: 0.9rem;">儲存配置</button>
@@ -574,8 +597,6 @@ export const HTML_PAGE = `
       if (!name || !url) return showToast('請完整填寫名稱與內容', false);
       
       const editIndex = document.getElementById('modal').dataset.edit;
-      const originalBtnText = document.querySelector('.modal-btn-save').textContent;
-      // 💥 修正：同步優化為載入中的 UI 對齊
       const saveBtn = document.querySelector('.modal-footer .btn-primary');
       const originalSaveText = saveBtn.textContent;
       saveBtn.textContent = '儲存中...';
@@ -727,7 +748,7 @@ export const HTML_PAGE = `
         listEl.innerHTML = nodes.map(n => \`
           <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.05);">
             <input type="checkbox" class="vless-chk" value="\${n.index}" data-port="\${n.port}" data-server="\${n.server}" data-host="\${n.host}" checked style="width: auto; height: auto; cursor: pointer;" onchange="syncDefaultPort()">
-            <span style="font-size: 0.9rem; color: var(--text-main);">\${n.name} <span style="color: var(--text-muted); font-size: 0.8rem;">(\${n.server}:\s\${n.port} - \${n.type.toUpperCase()})</span></span>
+            <span style="font-size: 0.9rem; color: var(--text-main);">\${n.name} <span style="color: var(--text-muted); font-size: 0.8rem;">(\${n.server}:\${n.port} - \${n.type.toUpperCase()})</span></span>
           </label>
         \`).join('');
         
