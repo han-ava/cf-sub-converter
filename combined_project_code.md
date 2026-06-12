@@ -1,5 +1,5 @@
 # Complete Project Codebase
-Generated on: Fri Jun 12 13:28:31 UTC 2026
+Generated on: Fri Jun 12 13:37:40 UTC 2026
 
 ## File: scripts/argo-converter.ts
 ````ts
@@ -961,7 +961,6 @@ export const HTML_PAGE = `
     .fav-card:hover { border-color: var(--primary); transform: translate3d(0, -2px, 0); box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
     .fav-title { font-weight: 600; font-size: 0.95rem; margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
     
-    /* 💥 修正：智慧單行截斷。只顯示 1 行，超長部分顯示為 ...，完美恢復卡片黃金比例！ */
     .fav-url { 
       font-family: 'JetBrains Mono', monospace; 
       font-size: 0.75rem; 
@@ -987,6 +986,15 @@ export const HTML_PAGE = `
       max-height: 90vh;
       overflow-y: auto;
     }
+    
+    /* 💥 修正：優化彈窗頁尾排版 */
+    .modal-footer { 
+      display: flex; 
+      gap: 12px; 
+      margin-top: 2rem; 
+      justify-content: flex-end; 
+    }
+    
     .toast {
       position: fixed; bottom: 2rem; left: 50%; transform: translateX(-50%) translateY(20px); background: var(--bg-panel); color: var(--text-main); border: 1px solid var(--border); padding: 0.8rem 1.5rem; border-radius: 999px; font-weight: 500; font-size: 0.9rem; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3); opacity: 0; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); z-index: 200; display: flex; align-items: center; gap: 8px;
     }
@@ -1347,9 +1355,11 @@ export const HTML_PAGE = `
         <label>節點名稱替換 (選填，多個用 | 分隔)</label>
         <input type="text" id="favRename" placeholder="例如: DEL-[69云]|移动优化-專線">
       </div>
+      
+      <!-- 💥 修正：將彈窗底部的「取消」與「儲存配置」完全重構並對齊至全局 .btn 樣式系統 -->
       <div class="modal-footer">
-        <button class="modal-btn modal-btn-cancel" onclick="closeModal()">取消</button>
-        <button class="modal-btn modal-btn-save" onclick="saveFav()">儲存配置</button>
+        <button class="btn btn-ghost" onclick="closeModal()">取消</button>
+        <button class="btn btn-primary" onclick="saveFav()" style="width: auto; padding: 0.6rem 1.25rem; font-size: 0.9rem;">儲存配置</button>
       </div>
     </div>
   </div>
@@ -1413,7 +1423,10 @@ export const HTML_PAGE = `
       
       const editIndex = document.getElementById('modal').dataset.edit;
       const originalBtnText = document.querySelector('.modal-btn-save').textContent;
-      document.querySelector('.modal-btn-save').textContent = '儲存中...';
+      // 💥 修正：同步優化為載入中的 UI 對齊
+      const saveBtn = document.querySelector('.modal-footer .btn-primary');
+      const originalSaveText = saveBtn.textContent;
+      saveBtn.textContent = '儲存中...';
       
       try {
         if (editIndex !== '') {
@@ -1435,7 +1448,7 @@ export const HTML_PAGE = `
       } catch(e) { 
         showToast('儲存失敗，請重試', false); 
       } finally {
-        document.querySelector('.modal-btn-save').textContent = originalBtnText;
+        saveBtn.textContent = originalSaveText;
       }
     }
     
@@ -1562,7 +1575,7 @@ export const HTML_PAGE = `
         listEl.innerHTML = nodes.map(n => \`
           <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.05);">
             <input type="checkbox" class="vless-chk" value="\${n.index}" data-port="\${n.port}" data-server="\${n.server}" data-host="\${n.host}" checked style="width: auto; height: auto; cursor: pointer;" onchange="syncDefaultPort()">
-            <span style="font-size: 0.9rem; color: var(--text-main);">\${n.name} <span style="color: var(--text-muted); font-size: 0.8rem;">(\${n.server}:\${n.port} - \${n.type.toUpperCase()})</span></span>
+            <span style="font-size: 0.9rem; color: var(--text-main);">\${n.name} <span style="color: var(--text-muted); font-size: 0.8rem;">(\${n.server}:\s\${n.port} - \${n.type.toUpperCase()})</span></span>
           </label>
         \`).join('');
         
