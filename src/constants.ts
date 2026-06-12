@@ -8,7 +8,7 @@ export const HTML_PAGE = `
 <html lang="zh-TW">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>SubConverter Pro | 專業訂閱轉換器</title>
   
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -48,8 +48,6 @@ export const HTML_PAGE = `
     .brand svg { color: var(--primary); width: 1.75rem; height: 1.75rem; }
     .badge { background: rgba(59, 130, 246, 0.1); color: var(--primary); font-size: 0.75rem; padding: 4px 8px; border-radius: 9999px; font-weight: 600; border: 1px solid rgba(59, 130, 246, 0.2); }
     .container { max-width: 860px; margin: 2.5rem auto; padding: 0 1.5rem; display: flex; flex-direction: column; gap: 1.5rem; }
-    
-    /* 💥 優化：配置面板強制開啟 GPU 複合層與字體優化 */
     .panel { 
       background-color: var(--bg-panel); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 1.75rem; box-shadow: var(--shadow); 
       transform: translate3d(0,0,0);
@@ -70,7 +68,6 @@ export const HTML_PAGE = `
     textarea:focus, input[type="text"]:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15); }
     .hint { font-size: 0.8rem; color: var(--text-muted); margin-top: 0.4rem; display: flex; align-items: center; gap: 4px; }
     
-    /* 💥 優化：按鈕 transition 限制特定屬性，並強制常駐 GPU 加速層避免影響附近文字 */
     .btn {
       display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 0.75rem 1.25rem; border-radius: var(--radius-md); font-weight: 600; font-size: 0.95rem; border: none; cursor: pointer; 
       transition: background-color 0.2s ease, transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease; 
@@ -102,9 +99,8 @@ export const HTML_PAGE = `
     .result-input-wrapper { flex: 2; position: relative; }
     .result-input-wrapper input { width: 100%; padding: 0.6rem 0.8rem; background: var(--bg-panel); font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text-muted); }
     .result-actions { display: flex; gap: 6px; }
-    .fav-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 1rem; margin-top: 1rem; }
     
-    /* 💥 優化：收藏卡片 transition 限制特定屬性，常駐 3D 加速層，完美杜絕 subpixel 重繪抖動 */
+    .fav-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 1rem; margin-top: 1rem; }
     .fav-card {
       background: var(--bg-input); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 1.25rem; cursor: pointer; 
       transition: border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease; 
@@ -118,21 +114,16 @@ export const HTML_PAGE = `
     .fav-url { font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .fav-actions { display: flex; gap: 8px; margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border); justify-content: flex-end; }
     .empty-state { text-align: center; padding: 2rem; color: var(--text-muted); font-size: 0.9rem; border: 1px dashed var(--border); border-radius: var(--radius-md); }
+    
     .modal-overlay {
       position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(15, 23, 42, 0.8); backdrop-filter: blur(4px); z-index: 100; display: none; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.2s ease;
     }
     .modal-overlay.show { display: flex; opacity: 1; }
     .modal-content {
-      background: var(--bg-panel); border: 1px solid var(--border); border-radius: var(--radius-lg); width: 90%; max-width: 480px; padding: 2rem; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5); transform: scale(0.95); transition: transform 0.2s ease;
+      background: var(--bg-panel); border: 1px solid var(--border); border-radius: var(--radius-lg); width: 92%; max-width: 480px; padding: 2rem; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5); transform: scale(0.95); transition: transform 0.2s ease;
+      max-height: 90vh;
+      overflow-y: auto;
     }
-    .modal-overlay.show .modal-content { transform: scale(1); }
-    .modal-title { font-size: 1.25rem; font-weight: 600; margin-bottom: 1.5rem; }
-    .modal-footer { display: flex; gap: 12px; margin-top: 2rem; justify-content: flex-end; }
-    .modal-btn { padding: 0.6rem 1.25rem; border-radius: var(--radius-md); font-weight: 500; font-size: 0.9rem; cursor: pointer; border: none; }
-    .modal-btn-cancel { background: var(--bg-input); color: var(--text-main); border: 1px solid var(--border); }
-    .modal-btn-cancel:hover { background: var(--bg-hover); }
-    .modal-btn-save { background: var(--primary); color: white; }
-    .modal-btn-save:hover { background: var(--primary-hover); }
     .toast {
       position: fixed; bottom: 2rem; left: 50%; transform: translateX(-50%) translateY(20px); background: var(--bg-panel); color: var(--text-main); border: 1px solid var(--border); padding: 0.8rem 1.5rem; border-radius: 999px; font-weight: 500; font-size: 0.9rem; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3); opacity: 0; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); z-index: 200; display: flex; align-items: center; gap: 8px;
     }
@@ -141,7 +132,113 @@ export const HTML_PAGE = `
     @keyframes slideUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
     @keyframes spin { to { transform: rotate(360deg); } }
     .spinner { animation: spin 1s linear infinite; }
-    @media (max-width: 640px) { .result-item { flex-direction: column; align-items: stretch; } .result-icon-box { display: none; } .result-info { margin-bottom: 0.5rem; } }
+
+    /* 💥 新增：智慧型響應式一鍵指令佈局（手機端自動垂直堆疊） */
+    .cmd-group {
+      display: flex;
+      gap: 8px;
+      margin-top: 8px;
+      align-items: center;
+      width: 100%;
+    }
+    .cmd-group input {
+      flex: 1;
+      min-width: 0;
+    }
+    .cmd-group .btn {
+      flex-shrink: 0;
+      min-width: 110px;
+    }
+
+    /* ==================================================
+       💥 全新：極致 RWD 手機版響應式 RWD 適配 CSS 樣式
+       ================================================== */
+    @media (max-width: 640px) {
+      .header {
+        padding: 0.85rem 1.25rem;
+      }
+      .brand {
+        font-size: 1.1rem;
+      }
+      .container {
+        margin: 1.25rem auto;
+        padding: 0 0.85rem;
+        gap: 1rem;
+      }
+      .panel {
+        padding: 1.25rem;
+      }
+      .panel-title {
+        font-size: 1rem;
+      }
+      textarea {
+        min-height: 110px;
+      }
+      textarea, input[type="text"] {
+        padding: 0.75rem 0.85rem;
+        font-size: 0.9rem;
+      }
+      .cmd-group {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 6px;
+      }
+      .cmd-group .btn {
+        width: 100%;
+      }
+      
+      /* 💥 結果項目手機端自適應大網格按鈕 */
+      .result-item {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 8px;
+        padding: 1rem;
+      }
+      .result-icon-box { 
+        display: none; 
+      }
+      .result-info {
+        margin-bottom: 2px;
+      }
+      .result-name {
+        font-size: 0.9rem;
+      }
+      .result-desc {
+        font-size: 0.75rem;
+      }
+      .result-input-wrapper input {
+        font-size: 0.75rem;
+        padding: 0.5rem;
+      }
+      .result-actions {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+        width: 100%;
+        margin-top: 4px;
+      }
+      .result-actions .btn-icon {
+        width: 100%;
+        height: 38px;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+      }
+    }
+
+    @media (max-width: 520px) {
+      /* 💥 儲存卡片在窄螢幕手機上自動改為更清晰的單欄呈現 */
+      .fav-grid {
+        grid-template-columns: 1fr;
+        gap: 0.85rem;
+      }
+      .fav-card {
+        padding: 1rem;
+      }
+      .modal-content {
+        padding: 1.25rem;
+      }
+    }
   </style>
 </head>
 <body>
@@ -267,17 +364,17 @@ export const HTML_PAGE = `
           <label style="color: var(--text-main); font-weight: 600;">📋 第一步：請在您的 VPS 上執行以下「一鍵極速安裝指令」【二選一，效果完全相同】(以 root 權限)：</label>
           
           <!-- curl 方案 -->
-          <div style="display: flex; gap: 8px; margin-top: 8px;">
+          <div class="cmd-group">
             <input type="text" id="argoCurlCmd" readonly style="font-family: monospace; font-size: 0.85rem; padding: 0.6rem 0.8rem; background: var(--bg-input);">
-            <button class="btn btn-ghost" onclick="copyText('argoCurlCmd')" style="padding: 0 1rem; font-size: 0.85rem; min-width: 130px;">複製 curl 指令</button>
+            <button class="btn btn-ghost" onclick="copyText('argoCurlCmd')">複製 curl 指令</button>
           </div>
           
           <div style="text-align: center; margin: 6px 0; font-size: 0.8rem; color: var(--text-muted); font-weight: bold;">或 (OR)</div>
           
           <!-- wget 方案 -->
-          <div style="display: flex; gap: 8px; margin-bottom: 10px;">
+          <div class="cmd-group">
             <input type="text" id="argoWgetCmd" readonly style="font-family: monospace; font-size: 0.85rem; padding: 0.6rem 0.8rem; background: var(--bg-input);">
-            <button class="btn btn-ghost" onclick="copyText('argoWgetCmd')" style="padding: 0 1rem; font-size: 0.85rem; min-width: 130px;">複製 wget 指令</button>
+            <button class="btn btn-ghost" onclick="copyText('argoWgetCmd')">複製 wget 指令</button>
           </div>
           
           <div class="hint" style="margin-top: 5px;">
