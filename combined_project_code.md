@@ -1,5 +1,5 @@
 # Complete Project Codebase
-Generated on: Fri Jun 12 12:32:37 UTC 2026
+Generated on: Fri Jun 12 13:21:37 UTC 2026
 
 ## File: scripts/argo-converter.ts
 ````ts
@@ -856,7 +856,8 @@ export const HTML_PAGE = `
 <html lang="zh-TW">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <!-- 💥 修正：支援手機端雙手縮放 -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>SubConverter Pro | 專業訂閱轉換器</title>
   
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -956,10 +957,21 @@ export const HTML_PAGE = `
       transform: translate3d(0,0,0);
       backface-visibility: hidden;
       -webkit-backface-visibility: hidden;
+      min-width: 0; /* 💥 修正：防止 Grid 子元素在手機端溢出 */
     }
     .fav-card:hover { border-color: var(--primary); transform: translate3d(0, -2px, 0); box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
     .fav-title { font-weight: 600; font-size: 0.95rem; margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
-    .fav-url { font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    
+    /* 💥 修正：允許長網址在手機端完美自動換行，徹底解決撐破卡片邊界 Bug */
+    .fav-url { 
+      font-family: 'JetBrains Mono', monospace; 
+      font-size: 0.75rem; 
+      color: var(--text-muted); 
+      word-break: break-all;
+      white-space: normal;
+      margin-bottom: 8px;
+    }
+    
     .fav-actions { display: flex; gap: 8px; margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border); justify-content: flex-end; }
     .empty-state { text-align: center; padding: 2rem; color: var(--text-muted); font-size: 0.9rem; border: 1px dashed var(--border); border-radius: var(--radius-md); }
     
@@ -981,7 +993,6 @@ export const HTML_PAGE = `
     @keyframes spin { to { transform: rotate(360deg); } }
     .spinner { animation: spin 1s linear infinite; }
 
-    /* 💥 新增：智慧型響應式一鍵指令佈局（手機端自動垂直堆疊） */
     .cmd-group {
       display: flex;
       gap: 8px;
@@ -998,9 +1009,13 @@ export const HTML_PAGE = `
       min-width: 110px;
     }
 
-    /* ==================================================
-       💥 全新：極致 RWD 手機版響應式 RWD 適配 CSS 樣式
-       ================================================== */
+    @media (max-width: 768px) {
+      /* 💥 修正：強制手機端輸入框字體為 16px，完美杜絕 iOS 點擊輸入框時頁面被自動放大的討厭問題 */
+      textarea, input[type="text"] {
+        font-size: 16px !important;
+      }
+    }
+
     @media (max-width: 640px) {
       .header {
         padding: 0.85rem 1.25rem;
@@ -1022,10 +1037,6 @@ export const HTML_PAGE = `
       textarea {
         min-height: 110px;
       }
-      textarea, input[type="text"] {
-        padding: 0.75rem 0.85rem;
-        font-size: 0.9rem;
-      }
       .cmd-group {
         flex-direction: column;
         align-items: stretch;
@@ -1035,7 +1046,6 @@ export const HTML_PAGE = `
         width: 100%;
       }
       
-      /* 💥 結果項目手機端自適應大網格按鈕 */
       .result-item {
         flex-direction: column;
         align-items: stretch;
@@ -1075,7 +1085,6 @@ export const HTML_PAGE = `
     }
 
     @media (max-width: 520px) {
-      /* 💥 儲存卡片在窄螢幕手機上自動改為更清晰的單欄呈現 */
       .fav-grid {
         grid-template-columns: 1fr;
         gap: 0.85rem;
@@ -1373,12 +1382,12 @@ export const HTML_PAGE = `
         const renameBadge = f.rename ? \`<span class="badge" style="background: rgba(59, 130, 246, 0.1); color: var(--primary); border-color: rgba(59, 130, 246, 0.2)">替: \${f.rename}</span>\` : '';
         
         return \`
-          <div class="fav-card" onclick="useFav(\${i})">
+          <div class="fav-card" onclick="useFav(\dots)">
             <div class="fav-title">
               <svg viewBox="0 0 24 24" style="width:16px;height:16px;color:var(--primary)"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg>
               \${f.name}
             </div>
-            <div class="fav-url" style="margin-bottom: 8px;">\${f.url}</div>
+            <div class="fav-url">\${f.url}</div>
             <div style="display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px;">
               \${includeBadge}
               \${excludeBadge}
