@@ -1,5 +1,5 @@
 # Complete Project Codebase
-Generated on: Mon Jun 15 18:14:19 UTC 2026
+Generated on: Mon Jun 15 18:18:27 UTC 2026
 
 ## File: scripts/argo-converter.ts
 ````ts
@@ -2040,7 +2040,7 @@ export function addFlag(name: string): string {
   return "🇺🇳 " + name;
 }
 
-// 💥 按國旗進行歸類排序（💥 修正：將 🇺🇳 置於最頂部，其餘依黃金順序排布）
+// 按國旗進行歸類排序（🇺🇳 置於最頂部，其餘依黃金順序排布）
 export function groupNodesByFlag(nodes: ProxyNode[]): ProxyNode[] {
   const groups = new Map<string, ProxyNode[]>();
   const flagOrder: string[] = [];
@@ -2069,11 +2069,11 @@ export function groupNodesByFlag(nodes: ProxyNode[]): ProxyNode[] {
     '🇭🇰', '🇹🇼', '🇯🇵', '🇸🇬', '🇰🇷',  // 1. 亞太一線核心
     '🇺🇸', '🇬🇧', '🇨🇦', '🇦🇺',        // 2. 歐美主流大戶
     '🇲🇴', '🇨🇳', '🇹🇭', '🇻🇳', '🇲🇾', '🇵🇭', '🇮🇩', // 3. 特區與東南亞
-    '🇩🇪', '🇫🇷', '🇳🇱', '🇷🇺', '🇮🇳', '🇹睿'  // 4. 歐洲與全球主流
+    '🇩🇪', '🇫🇷', '🇳🇱', '🇷🇺', '🇮🇳', '🇹🇷'  // 4. 歐洲與全球主流
   ];
   
   flagOrder.sort((a, b) => {
-    // 💥 修正：🇺🇳 (聯合國國旗/臨時佔位符/官網提示) 優先排序在最前面
+    // 🇺🇳 (聯合國國旗/臨時佔位符/官網提示) 優先排序在最前面
     if (a === '🇺🇳' && b !== '🇺🇳') return -1;
     if (b === '🇺🇳' && a !== '🇺🇳') return 1;
     
@@ -2114,7 +2114,8 @@ export function deduplicateNodeNames(nodes: ProxyNode[]): ProxyNode[] {
     } else {
       const count = nameCount.get(baseName)! + 1;
       nameCount.set(baseName, count);
-      node.name = `${baseName} (${count})`;
+      // 💥 修正：將原本的 " (count)" 格式修改為 "_count"
+      node.name = `${baseName}_${count}`;
     }
     
     if (node.singboxObj) node.singboxObj.tag = node.name;
