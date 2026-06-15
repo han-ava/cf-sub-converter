@@ -1,5 +1,5 @@
 # Complete Project Codebase
-Generated on: Mon Jun 15 13:22:01 UTC 2026
+Generated on: Mon Jun 15 13:27:40 UTC 2026
 
 ## File: scripts/argo-converter.ts
 ````ts
@@ -1373,10 +1373,8 @@ export const HTML_PAGE = `
         <label>節點名稱替換 (選填，多個用 | 分隔)</label>
         <input type="text" id="favRename" placeholder="例如: DEL-[69云]|移动优化-專線">
       </div>
-      
       <div class="modal-footer">
         <button class="btn btn-ghost" onclick="closeModal()">取消</button>
-        <!-- 💥 修正：完美微調彈出視窗按鈕在行動端的縮放相容性 -->
         <button class="btn btn-primary" onclick="saveFav()" style="width: auto; padding: 0.6rem 1.25rem; font-size: 16px;">儲存配置</button>
       </div>
     </div>
@@ -1590,7 +1588,7 @@ export const HTML_PAGE = `
         
         listEl.innerHTML = nodes.map(n => \`
           <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.05);">
-            <input type="checkbox" class="vless-chk" value="\${n.index}" data-port="\${n.port}" data-server="\${n.server}" data-host="\${n.host}" checked style="width: auto; height: auto; cursor: pointer;" onchange="syncDefaultPort()">
+            <input type="checkbox" class="vless-chk" value="\${n.index}" data-port="\${n.port}" data-server="\${n.server}" data-host="\${n.host}" style="width: auto; height: auto; cursor: pointer;" onchange="syncDefaultPort()">
             <span style="font-size: 0.9rem; color: var(--text-main);">\${n.name} <span style="color: var(--text-muted); font-size: 0.8rem;">(\${n.server}:\${n.port} - \${n.type.toUpperCase()})</span></span>
           </label>
         \`).join('');
