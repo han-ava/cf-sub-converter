@@ -1,5 +1,5 @@
 # Complete Project Codebase
-Generated on: Mon Jun 15 18:09:59 UTC 2026
+Generated on: Mon Jun 15 18:14:19 UTC 2026
 
 ## File: scripts/argo-converter.ts
 ````ts
@@ -3481,7 +3481,7 @@ fi
 ````json
 {
   "name": "cf-sub-converter",
-  "version": "3.0.2",
+  "version": "3.0.3",
   "private": true,
   "scripts": {
     "deploy": "wrangler deploy",
