@@ -1,5 +1,5 @@
 # Complete Project Codebase
-Generated on: Mon Jun 15 13:27:40 UTC 2026
+Generated on: Mon Jun 15 17:47:29 UTC 2026
 
 ## File: scripts/argo-converter.ts
 ````ts
@@ -730,7 +730,7 @@ rules:
 
 ## 📖 使用指南
 
-訪問你部署完成的 Workers 網址即可進入視覺化面板。
+訪問你部署完成 of Workers 網址即可進入視覺化面板。
 
 ### 面板功能
 - **資料來源設定**：支援貼上機場訂閱連結、Base64 字串，或直接貼上多行節點 URI。支援多個訂閱地址換行輸入，系統將保持原始順序進行合併。
@@ -749,10 +749,54 @@ rules:
   - **節點名稱替換**：刪除寫 `DEL-關鍵字`，替換寫 `尋找-替換`，多組規則用 `|` 隔開。例如輸入 `DEL-[69云]|移动优化-專線`。
 - **配置收藏**：常用的節點與過濾替換規則可以儲存到「已儲存的配置」區塊。卡片上會直觀地以綠色 `保`、紅色 `排` 和藍色 `替` 標籤顯示你所設定的規則，點擊卡片即可自動載入所有設定。
 
+---
+
+### 🔑 Cloudflare 固定隧道 (免費) 申請與配置教學
+
+臨時隨機隧道（trycloudflare）雖然完全免設定，但缺點是每次 VPS 重啟或服務重開時，網域名稱都會改變。如果您想要擁有**永久固定不變的網域**，請依照以下步驟免費建立 Cloudflare 固定隧道：
+
+#### 準備工作：
+1. 一個 Cloudflare 帳戶。
+2. 一個已成功託管（啟用橘色雲端 CDN）在您 Cloudflare 帳戶下的自訂域名（例如：`yourdomain.com`）。
+
+#### 申請與設定步驟：
+
+1. **進入 Zero Trust 面板**：
+   登入 Cloudflare 儀表板，點擊左側選單中的 **`Zero Trust`**（首次進入需要點擊訂閱，選擇 Free 0元計劃並綁定卡片，完全不會扣款）。
+
+2. **建立 Tunnel 隧道**：
+   在 Zero Trust 介面中，點擊左側選單的 **`Networks`** -> **`Tunnels`**，然後點擊 **`Create a Tunnel`**。
+
+3. **選擇安裝方式並複製 Token**：
+   * 選擇 **`cloudflared`**，並為您的隧道取個名字（例如 `my-vps-tunnel`），點擊 Next。
+   * 在安裝指令頁面，您會看到一串安裝指令。**請注意指令最末端的一長串 Base64 字元（這就是您的 Tunnel Token）**，將其複製下來，例如：
+     `eyJhIjoiY2... (約 100~200 字元的超長字串)`
+
+4. **配置域名路由（Public Hostname）**：
+   * 在同一個頁面下方（或點擊已建立隧道的 Edit -> Public Hostname 標籤），點擊 **`Add a public hostname`**。
+   * **Domain**：填入您要分配給此節點的子網域，例如：`vless.yourdomain.com`。
+   * **Service**：
+     * **Type（服務類型）**：
+       * 如果您在網頁端對接的是 TLS 埠（如 **`8443`** 或 **`443`**）➔ 選擇 **`HTTPS`**。
+       * 如果對接的是無加密明文埠（如 **`27110`** 或 **`31297`**）➔ 選擇 **`HTTP`**。
+     * **URL**：輸入本地地址與埠，例如：`127.0.0.1:8443` 或 `127.0.0.1:27110`。
+   * **💥 極致關鍵（HTTPS 模式必填）**：
+     如果您在 Type 選擇了 `HTTPS`，請展開下方的 **`Additional HTTP settings`**，**並將 `No TLS Verify` 選項開啟（設定為 Enabled）**！這是為了允許隧道跳過 VPS 本地自我簽署證書的安全驗證，否則會出現 `530` 錯誤。
+   * 設定完成後，點擊 **`Save hostname`** 保存。
+
+5. **在網頁端生成固定隧道指令**：
+   回到您部署的 **SubConverter Pro** 網頁：
+   * 本地監聽連接埠：填入您 VPS 的真實埠（例如 `8443` 或 `27110`）。
+   * Cloudflare Tunnel Token：貼上您剛才複製的超長 Token。
+   * 自訂綁定域名：輸入您剛才在第 4 步綁定的網域（如 `vless.yourdomain.com`）。
+   * 點擊生成指令，貼上 VPS 執行。您的固定安全隧道即告部署完成，節點將永遠不變！
+
+---
+
 ### API 調用與外部前端對接
 
 #### 1. 當作標準 SubConverter 後端使用
-本專案內建對應 `/sub` 與 `/version` 端點。你可以打開任何一個開源的 `sub-web` 網頁（例如：`sub.id9.cc` 或其他的轉換前端），並在**「後端地址 (Backend URL)」**中，填入你的 Cloudflare Workers 網址：
+本專案內建對應 `/sub` 與 `/version` 端點。你可以打開 any 一個開源的 `sub-web` 網頁（例如：`sub.id9.cc` 或其他的轉換前端），並在**「後端地址 (Backend URL)」**中，填入你的 Cloudflare Workers 網址：
 ```text
 https://your-worker.workers.dev
 ```
