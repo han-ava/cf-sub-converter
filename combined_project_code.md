@@ -1,5 +1,5 @@
 # Complete Project Codebase
-Generated on: Mon Jun 15 17:54:05 UTC 2026
+Generated on: Mon Jun 15 18:00:43 UTC 2026
 
 ## File: scripts/argo-converter.ts
 ````ts
@@ -2490,7 +2490,7 @@ import { Env, ProxyNode } from './types';
 import { HTML_PAGE } from './constants';
 import { parseContent } from './parser';
 import { toSingBoxWithTemplate, toClashWithTemplate, toBase64 } from './generator';
-// 引入最新的國旗智慧分群與去重演算法
+// 引入國旗智慧分群與去重演算法
 import { deduplicateNodeNames, groupNodesByFlag } from './utils';
 
 const version = packageJson.version || '2.5.0';
@@ -2723,7 +2723,7 @@ if (request.method === 'POST' && url.pathname === '/api/argo-generate') {
     let scriptId = '';
     if (env.SUB_CACHE) {
       scriptId = crypto.randomUUID();
-      await env.SUB_CACHE.put(`script:${scriptId}`, scripts, { expirationTtl: 3600 });
+      await env.SUB_CACHE.put('script:' + scriptId, scripts, { expirationTtl: 3600 });
     }
 
     return new Response(JSON.stringify({ 
@@ -2960,6 +2960,7 @@ if (allNodes.length === 0) {
 
 let filteredNodes = allNodes;
 
+// 💥 修改：智慧節點名稱替換邏輯（全面支援 ALL- 語法一鍵重新命名）
 if (renameParam) {
   try {
     const rules = renameParam.split('|');
@@ -2980,12 +2981,20 @@ if (renameParam) {
         const index = trimmedRule.indexOf('-');
         const search = trimmedRule.substring(0, index).trim();
         const replace = trimmedRule.substring(index + 1).trim();
+        
         if (search && replace !== undefined) {
-          filteredNodes.forEach(node => {
-            if (node.name) {
-              node.name = node.name.split(search).join(replace);
-            }
-          });
+          // 💥 支援 ALL- 語法：直接將整個節點名稱替換為目標名稱
+          if (search.toUpperCase() === 'ALL') {
+            filteredNodes.forEach(node => {
+              node.name = replace;
+            });
+          } else {
+            filteredNodes.forEach(node => {
+              if (node.name) {
+                node.name = node.name.split(search).join(replace);
+              }
+            });
+          }
         }
       }
     }
@@ -3024,7 +3033,7 @@ if (filteredNodes.length === 0) {
   });
 }
 
-// 💥 對齊：對篩選過後的節點先進行「極簡國旗智慧排序歸類」，再進行「去重複命名自動補國旗」
+// 智慧分群：對節點先進行「極簡國旗智慧排序歸類」，再進行「去重複命名自動補國旗」
 const sortedNodes = groupNodesByFlag(filteredNodes);
 const uniqueNodes = deduplicateNodeNames(sortedNodes);
 
