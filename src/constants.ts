@@ -320,12 +320,13 @@ export const HTML_PAGE = `
         </div>
       </div>
 
+      <!-- 💥 修正：前台 UI 說明同步更新，融入 ALL- 新名稱改名教學 -->
       <div class="form-group" style="margin-top: 1.5rem;">
         <label for="renameKeywords">節點名稱替換 (選填，多個用 | 分隔)</label>
         <input type="text" id="renameKeywords" placeholder="例如: DEL-[69云]|移动优化-專線">
         <div class="hint">
           <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
-          <span>刪除請用 <code>DEL-關鍵字</code>，替換請用 <code>尋找-替換</code>。多組規則請用 <code>|</code> 隔開。</span>
+          <span>刪除用 <code>DEL-關鍵字</code>，替換用 <code>尋找-替換</code>。若要將所有節點統一改名，請用 <code>ALL-新名稱</code>（例如 <code>ALL-JP</code>）。多組規則用 <code>|</code> 隔開。</span>
         </div>
       </div>
       
@@ -804,7 +805,7 @@ export const HTML_PAGE = `
         const hasKv = res.scriptId && res.scriptId.trim() !== '';
         if (hasKv) {
           document.getElementById('argoCurlCmd').value = \`curl -sSL \${host}/argo/sh/\${res.scriptId} | bash\`;
-          document.getElementById('argoWgetCmd').value = \`wget -qO- \${host}/argo/sh/\${res.scriptId} | bash\`;
+          document.getElementById('argoWgetCmd').value = \`wget -qO- \${host}/argo/sh/\---\${res.scriptId} | bash\`;
         } else {
           document.getElementById('argoCurlCmd').value = "請綁定 KV 命名空間以解鎖極簡一鍵命令";
           document.getElementById('argoWgetCmd').value = "或在 wrangler.toml 中設定並部署。";
