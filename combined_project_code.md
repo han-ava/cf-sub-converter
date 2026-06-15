@@ -1,5 +1,5 @@
 # Complete Project Codebase
-Generated on: Mon Jun 15 17:51:43 UTC 2026
+Generated on: Mon Jun 15 17:54:05 UTC 2026
 
 ## File: scripts/argo-converter.ts
 ````ts
@@ -849,7 +849,7 @@ cf-sub-converter/
 
 ## ⚠️ 免責聲明
 
-本專案僅供技術交流與網路安全學習研究使用，不提供 any 節點服務。請使用者務必遵守當地法律法規，勿將其用於 any 違法用途，開發者對使用者的行為不承擔 any 責任。
+本專案僅供技術交流與網路安全學習研究使用，不提供任何節點服務。請使用者務必遵守當地法律法規，勿將其用於任何違法用途，開發者對使用者的行為不承擔任何責任。
 
 ````
 
