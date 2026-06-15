@@ -1,5 +1,5 @@
 # Complete Project Codebase
-Generated on: Mon Jun 15 17:47:29 UTC 2026
+Generated on: Mon Jun 15 17:51:43 UTC 2026
 
 ## File: scripts/argo-converter.ts
 ````ts
@@ -730,7 +730,7 @@ rules:
 
 ## 📖 使用指南
 
-訪問你部署完成 of Workers 網址即可進入視覺化面板。
+訪問你部署完成的 Workers 網址即可進入視覺化面板。
 
 ### 面板功能
 - **資料來源設定**：支援貼上機場訂閱連結、Base64 字串，或直接貼上多行節點 URI。支援多個訂閱地址換行輸入，系統將保持原始順序進行合併。
