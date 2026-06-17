@@ -102,8 +102,8 @@
   ],
   "route": {
     "rule_set": [
-      // 💥 修正：將所有規則集類型變更為 local，並指向本地的 .srs 二進位資料庫檔
-      { "type": "local", "tag": "rs-ai", "format": "binary", "path": "srs/ai.srs" },
+      // 💥 修正：保留您的專屬 AI 遠端規則集，其餘全數走本地極速 SRS
+      { "type": "remote", "tag": "rs-ai", "format": "binary", "url": "https://raw.githubusercontent.com/sammy0101/myself/refs/heads/main/geosite_ai_hk_proxy.srs", "download_detour": "direct" },
       { "type": "local", "tag": "rs-apple", "format": "binary", "path": "srs/apple.srs" },
       { "type": "local", "tag": "rs-microsoft", "format": "binary", "path": "srs/microsoft.srs" },
       { "type": "local", "tag": "rs-steam", "format": "binary", "path": "srs/steam.srs" },
