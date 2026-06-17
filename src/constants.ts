@@ -314,7 +314,7 @@ export const HTML_PAGE = `
 
       <div class="form-group" style="margin-top: 1.5rem;">
         <label for="excludeKeywords">排除關鍵字節點 (選填，多個用 | 分隔)</label>
-        <input type="text" id="excludeKeywords" placeholder="例如: 流量|官網|重置|5x">
+        <input type="text" id="excludeKeywords" placeholder="examples: 流量|官網|重置|5x">
         <div class="hint">
           <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
           <span>排除名稱符合關鍵字的節點（過濾垃圾廣告）。例如輸入 <code>5x</code>。</span>
@@ -346,7 +346,7 @@ export const HTML_PAGE = `
       </button>
     </main>
 
-    <!-- ⚡ 轉換結果面板 (名稱已精簡為「自適應」，排序：自適應 -> Base64 -> Clash Meta -> Sing-Box) -->
+    <!-- ⚡ 轉換結果面板 (QR Code 圖示已美化為 Lucide 標準 QR-Code 規格圖示) -->
     <section class="results-wrapper" id="results">
       <div class="panel">
         <div class="panel-header">
@@ -368,11 +368,26 @@ export const HTML_PAGE = `
           <div class="result-input-wrapper"><input type="text" id="adaptiveUrl" readonly></div>
           <div class="result-actions">
             <button class="btn-icon" onclick="copyResult('adaptiveUrl')" title="複製連結"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg></button>
-            <button class="btn-icon" onclick="showQr('adaptiveUrl')" title="顯示 QR Code"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg></button>
+            <button class="btn-icon" onclick="showQr('adaptiveUrl')" title="顯示 QR Code">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect width="5" height="5" x="3" y="3" rx="1"></rect>
+                <rect width="5" height="5" x="16" y="3" rx="1"></rect>
+                <rect width="5" height="5" x="3" y="16" rx="1"></rect>
+                <path d="M21 16h-3a2 2 0 0 0-2 2v3"></path>
+                <path d="M21 21v.01"></path>
+                <path d="M12 7v3a2 2 0 0 1-2 2H7"></path>
+                <path d="M3 12h.01"></path>
+                <path d="M12 3h.01"></path>
+                <path d="M12 16v.01"></path>
+                <path d="M16 12h1"></path>
+                <path d="M21 12v.01"></path>
+                <path d="M12 21v-1"></path>
+              </svg>
+            </button>
           </div>
         </div>
 
-        <!-- 2. Base64 (名稱已精簡為 Base64) -->
+        <!-- 2. Base64 -->
         <div class="result-item">
           <div class="result-icon-box"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg></div>
           <div class="result-info">
@@ -382,7 +397,22 @@ export const HTML_PAGE = `
           <div class="result-input-wrapper"><input type="text" id="base64Url" readonly></div>
           <div class="result-actions">
             <button class="btn-icon" onclick="copyResult('base64Url')" title="複製連結"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg></button>
-            <button class="btn-icon" onclick="showQr('base64Url')" title="顯示 QR Code"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg></button>
+            <button class="btn-icon" onclick="showQr('base64Url')" title="顯示 QR Code">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect width="5" height="5" x="3" y="3" rx="1"></rect>
+                <rect width="5" height="5" x="16" y="3" rx="1"></rect>
+                <rect width="5" height="5" x="3" y="16" rx="1"></rect>
+                <path d="M21 16h-3a2 2 0 0 0-2 2v3"></path>
+                <path d="M21 21v.01"></path>
+                <path d="M12 7v3a2 2 0 0 1-2 2H7"></path>
+                <path d="M3 12h.01"></path>
+                <path d="M12 3h.01"></path>
+                <path d="M12 16v.01"></path>
+                <path d="M16 12h1"></path>
+                <path d="M21 12v.01"></path>
+                <path d="M12 21v-1"></path>
+              </svg>
+            </button>
           </div>
         </div>
 
@@ -396,7 +426,22 @@ export const HTML_PAGE = `
           <div class="result-input-wrapper"><input type="text" id="clashUrl" readonly></div>
           <div class="result-actions">
             <button class="btn-icon" onclick="copyResult('clashUrl')" title="複製連結"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg></button>
-            <button class="btn-icon" onclick="showQr('clashUrl')" title="顯示 QR Code"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg></button>
+            <button class="btn-icon" onclick="showQr('clashUrl')" title="顯示 QR Code">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect width="5" height="5" x="3" y="3" rx="1"></rect>
+                <rect width="5" height="5" x="16" y="3" rx="1"></rect>
+                <rect width="5" height="5" x="3" y="16" rx="1"></rect>
+                <path d="M21 16h-3a2 2 0 0 0-2 2v3"></path>
+                <path d="M21 21v.01"></path>
+                <path d="M12 7v3a2 2 0 0 1-2 2H7"></path>
+                <path d="M3 12h.01"></path>
+                <path d="M12 3h.01"></path>
+                <path d="M12 16v.01"></path>
+                <path d="M16 12h1"></path>
+                <path d="M21 12v.01"></path>
+                <path d="M12 21v-1"></path>
+              </svg>
+            </button>
           </div>
         </div>
 
@@ -410,7 +455,22 @@ export const HTML_PAGE = `
           <div class="result-input-wrapper"><input type="text" id="singboxUrl" readonly></div>
           <div class="result-actions">
             <button class="btn-icon" onclick="copyResult('singboxUrl')" title="複製連結"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg></button>
-            <button class="btn-icon" onclick="showQr('singboxUrl')" title="顯示 QR Code"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg></button>
+            <button class="btn-icon" onclick="showQr('singboxUrl')" title="顯示 QR Code">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect width="5" height="5" x="3" y="3" rx="1"></rect>
+                <rect width="5" height="5" x="16" y="3" rx="1"></rect>
+                <rect width="5" height="5" x="3" y="16" rx="1"></rect>
+                <path d="M21 16h-3a2 2 0 0 0-2 2v3"></path>
+                <path d="M21 21v.01"></path>
+                <path d="M12 7v3a2 2 0 0 1-2 2H7"></path>
+                <path d="M3 12h.01"></path>
+                <path d="M12 3h.01"></path>
+                <path d="M12 16v.01"></path>
+                <path d="M16 12h1"></path>
+                <path d="M21 12v.01"></path>
+                <path d="M12 21v-1"></path>
+              </svg>
+            </button>
           </div>
         </div>
 
