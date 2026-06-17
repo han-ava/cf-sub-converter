@@ -1,5 +1,5 @@
 # Complete Project Codebase
-Generated on: Wed Jun 17 14:46:45 UTC 2026
+Generated on: Wed Jun 17 14:47:29 UTC 2026
 
 ## File: scripts/argo-converter.ts
 ````ts
@@ -2416,13 +2416,13 @@ export async function parseContent(content: string): Promise<ProxyNode[]> {
 
 ## File: src/index.ts
 ````ts
+// src/index.ts
 // @ts-ignore
 import packageJson from '../package.json';
 import { Env, ProxyNode } from './types';
 import { HTML_PAGE } from './constants';
 import { parseContent } from './parser';
 import { toSingBoxWithTemplate, toClashWithTemplate, toBase64 } from './generator';
-// 引入國旗智慧分群與去重演算法
 import { deduplicateNodeNames, groupNodesByFlag } from './utils';
 
 const version = packageJson.version || '2.5.0';
@@ -2697,7 +2697,7 @@ if (request.method === 'POST' && url.pathname === '/save') {
     };
     await env.SUB_CACHE.put(body.path, JSON.stringify(saveData));
     
-    const redirectUrl = `/?url=${encodeURIComponent(body.content)}&target=singbox&include=${encodeURIComponent(body.include || '')}&exclude=${encodeURIComponent(body.exclude || '')}&rename=${encodeURIComponent(body.rename || '')}`;
+    const redirectUrl = `/?url=${encodeURIComponent(body.content)}&include=${encodeURIComponent(body.include || '')}&exclude=${encodeURIComponent(body.exclude || '')}&rename=${encodeURIComponent(body.rename || '')}`;
     return new Response(null, { 
       status: 302, 
       headers: { 'Location': redirectUrl } 
@@ -2892,7 +2892,7 @@ if (allNodes.length === 0) {
 
 let filteredNodes = allNodes;
 
-// 💥 修改：智慧節點名稱替換邏輯（全面支援 ALL- 語法一鍵重新命名）
+// 智慧節點名稱替換邏輯
 if (renameParam) {
   try {
     const rules = renameParam.split('|');
@@ -2915,7 +2915,6 @@ if (renameParam) {
         const replace = trimmedRule.substring(index + 1).trim();
         
         if (search && replace !== undefined) {
-          // 💥 支援 ALL- 語法：直接將整個節點名稱替換為目標名稱
           if (search.toUpperCase() === 'ALL') {
             filteredNodes.forEach(node => {
               node.name = replace;
@@ -2965,11 +2964,39 @@ if (filteredNodes.length === 0) {
   });
 }
 
-// 智慧分群：對節點先進行「極簡國旗智慧排序歸類」，再進行「去重複命名自動補國旗」
+// 智慧分群與去重複命名
 const sortedNodes = groupNodesByFlag(filteredNodes);
 const uniqueNodes = deduplicateNodeNames(sortedNodes);
 
-const target = url.searchParams.get('target');
+let target = url.searchParams.get('target');
+
+// 💥 自適應 User-Agent 偵測邏輯 (適用於自適應/短連結)
+if (!target) {
+  const ua = (request.headers.get('User-Agent') || '').toLowerCase();
+  
+  // 檢查是否為代理客戶端，若不是代理客戶端（例如普通瀏覽器），則繼續輸出網頁摘要介面
+  const isAgent = ua.includes('clash') || 
+                  ua.includes('mihomo') || 
+                  ua.includes('stash') || 
+                  ua.includes('sing-box') || 
+                  ua.includes('singbox') || 
+                  ua.includes('shadowrocket') || 
+                  ua.includes('v2ray') || 
+                  ua.includes('surfboard') || 
+                  ua.includes('quantumult') || 
+                  ua.includes('hiddify') || 
+                  ua.includes('subconverter');
+
+  if (isAgent) {
+    if (ua.includes('clash') || ua.includes('mihomo') || ua.includes('stash') || ua.includes('surfboard')) {
+      target = 'clash';
+    } else if (ua.includes('sing-box') || ua.includes('singbox') || ua.includes('hiddify')) {
+      target = 'singbox';
+    } else {
+      target = 'base64'; // 其它客戶端降級為 Base64 格式
+    }
+  }
+}
 
 if (!target) {
   const host = `https://${url.host}`;
@@ -2978,6 +3005,8 @@ if (!target) {
   if (includeParam) filterQuery += `&include=${encodeURIComponent(includeParam)}`;
   if (excludeParam) filterQuery += `&exclude=${encodeURIComponent(excludeParam)}`;
   if (renameParam) filterQuery += `&rename=${encodeURIComponent(renameParam)}`;
+
+  const adaptiveLink = path ? `${host}/${path}` : `${host}/?url=${encodedUrl}${filterQuery}`;
 
   const htmlInfo = `
 <!DOCTYPE html>
@@ -3001,18 +3030,22 @@ if (!target) {
   <div class="container">
     <h1>⚡ 篩選並轉換完成 (${uniqueNodes.length} 節點)</h1>
     <div class="result">
+      <div class="result-title">🔗 自適應 / 短連結 (自動辨識客戶端)</div>
+      <div class="result-link">${adaptiveLink}</div>
+    </div>
+    <div class="result">
       <div class="result-title">📄 Sing-Box (JSON)</div>
-      <div class="result-link">${host}/?url=${encodedUrl}&target=singbox</div>
+      <div class="result-link">${host}/?url=${encodedUrl}${filterQuery}&target=singbox</div>
     </div>
     <div class="result">
       <div class="result-title">📋 Clash Meta (YAML)</div>
-      <div class="result-link">${host}/?url=${encodedUrl}&target=clash</div>
+      <div class="result-link">${host}/?url=${encodedUrl}${filterQuery}&target=clash</div>
     </div>
     <div class="result">
-      <div class="result-title">🔗 Base64 (原始)</div>
-      <div class="result-link">${host}/?url=${encodedUrl}&target=base64</div>
+      <div class="result-title">🔗 Base64</div>
+      <div class="result-link">${host}/?url=${encodedUrl}${filterQuery}&target=base64</div>
     </div>
-    <a class="btn" href="${host}/?url=${encodedUrl}&target=singbox">📥 下載 Sing-Box 訂閱</a>
+    <a class="btn" href="${host}/?url=${encodedUrl}${filterQuery}&target=singbox">📥 下載 Sing-Box 訂閱</a>
   </div>
 </body>
 </html>
