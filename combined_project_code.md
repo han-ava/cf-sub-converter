@@ -1,5 +1,5 @@
 # Complete Project Codebase
-Generated on: Wed Jun 17 09:28:52 UTC 2026
+Generated on: Wed Jun 17 14:46:45 UTC 2026
 
 ## File: scripts/argo-converter.ts
 ````ts
@@ -1142,7 +1142,7 @@ export const HTML_PAGE = `
       </button>
     </main>
 
-    <!-- ⚡ 轉換結果面板 (已移至來源設定下方，且重新排序為 Base64 -> Clash Meta -> Sing-Box) -->
+    <!-- ⚡ 轉換結果面板 (已移至來源設定下方，排序更新：自適應/短連結 -> Base64 -> Clash Meta -> Sing-Box) -->
     <section class="results-wrapper" id="results">
       <div class="panel">
         <div class="panel-header">
@@ -1152,11 +1152,27 @@ export const HTML_PAGE = `
           </h2>
         </div>
         
-        <!-- 1. Base64 (原始節點) -->
+        <!-- 1. 自適應 / 短連結 -->
+        <div class="result-item">
+          <div class="result-icon-box">
+            <svg viewBox="0 0 24 24"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"></path><path d="M2 12h20"></path><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>
+          </div>
+          <div class="result-info">
+            <div class="result-name">自適應 / 短連結</div>
+            <div class="result-desc">自動辨識客戶端 · 適用所有主流行動軟體</div>
+          </div>
+          <div class="result-input-wrapper"><input type="text" id="adaptiveUrl" readonly></div>
+          <div class="result-actions">
+            <button class="btn-icon" onclick="copyResult('adaptiveUrl')" title="複製連結"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg></button>
+            <button class="btn-icon" onclick="showQr('adaptiveUrl')" title="顯示 QR Code"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg></button>
+          </div>
+        </div>
+
+        <!-- 2. Base64 (精簡名稱) -->
         <div class="result-item">
           <div class="result-icon-box"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg></div>
           <div class="result-info">
-            <div class="result-name">Base64 (原始節點)</div>
+            <div class="result-name">Base64</div>
             <div class="result-desc">Base64 格式 · 適用 V2RayNG, PassWall</div>
           </div>
           <div class="result-input-wrapper"><input type="text" id="base64Url" readonly></div>
@@ -1166,7 +1182,7 @@ export const HTML_PAGE = `
           </div>
         </div>
 
-        <!-- 2. Clash Meta -->
+        <!-- 3. Clash Meta -->
         <div class="result-item">
           <div class="result-icon-box"><svg viewBox="0 0 24 24"><path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z"></path><line x1="16" y1="8" x2="2" y2="22"></line><line x1="17.5" y1="15" x2="9" y2="6.5"></line></svg></div>
           <div class="result-info">
@@ -1180,7 +1196,7 @@ export const HTML_PAGE = `
           </div>
         </div>
 
-        <!-- 3. Sing-Box -->
+        <!-- 4. Sing-Box -->
         <div class="result-item">
           <div class="result-icon-box"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg></div>
           <div class="result-info">
@@ -1492,9 +1508,13 @@ export const HTML_PAGE = `
           baseUrl = host + '/' + shortCode;
         } else {
           baseUrl = host + '/?url=' + encodeURIComponent(raw);
+          if (include) baseUrl += '&include=' + encodeURIComponent(include);
+          if (exclude) baseUrl += '&exclude=' + encodeURIComponent(exclude);
+          if (rename) baseUrl += '&rename=' + encodeURIComponent(rename);
         }
         
         const sep = baseUrl.includes('?') ? '&' : '?';
+        document.getElementById('adaptiveUrl').value = baseUrl;
         document.getElementById('singboxUrl').value = baseUrl + sep + 'target=singbox';
         document.getElementById('clashUrl').value = baseUrl + sep + 'target=clash';
         document.getElementById('base64Url').value = baseUrl + sep + 'target=base64';
