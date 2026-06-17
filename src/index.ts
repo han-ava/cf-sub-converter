@@ -552,7 +552,7 @@ const uniqueNodes = deduplicateNodeNames(sortedNodes);
 
 let target = url.searchParams.get('target');
 
-// 💥 自適應 User-Agent 偵測邏輯 (適用於自適應/短連結)
+// 自適應 User-Agent 偵測邏輯 (適用於自適應/短連結)
 if (!target) {
   const ua = (request.headers.get('User-Agent') || '').toLowerCase();
   
@@ -604,15 +604,15 @@ if (!target) {
     .result { background: #0f172a; padding: 1rem; border-radius: 8px; margin-bottom: 1rem; }
     .result-title { font-weight: 600; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 8px; }
     .result-link { background: #334155; padding: 0.8rem; border-radius: 6px; word-break: break-all; font-family: monospace; font-size: 0.85rem; }
-    .btn { display: block; background: #22c55e; color: white; text-align: center; padding: 1rem; border-radius: 8px; text-decoration: none; font-weight: 600; margin-top: 1.5rem; }
-    .btn:hover { background: #16a34a; }
+    .btn { display: block; color: white; text-align: center; padding: 1rem; border-radius: 8px; text-decoration: none; font-weight: 600; margin-top: 10px; transition: opacity 0.2s; }
+    .btn:hover { opacity: 0.9; }
   </style>
 </head>
 <body>
   <div class="container">
     <h1>⚡ 篩選並轉換完成 (${uniqueNodes.length} 節點)</h1>
     <div class="result">
-      <div class="result-title">🔗 自適應 / 短連結 (自動辨識客戶端)</div>
+      <div class="result-title">🔗 自適應 (自動辨識客戶端)</div>
       <div class="result-link">${adaptiveLink}</div>
     </div>
     <div class="result">
@@ -627,7 +627,13 @@ if (!target) {
       <div class="result-title">🔗 Base64</div>
       <div class="result-link">${host}/?url=${encodedUrl}${filterQuery}&target=base64</div>
     </div>
-    <a class="btn" href="${host}/?url=${encodedUrl}${filterQuery}&target=singbox">📥 下載 Sing-Box 訂閱</a>
+    
+    <!-- 提供三個平台的下載按鈕 -->
+    <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 1.5rem;">
+      <a class="btn" style="background: #3b82f6; margin-top: 0;" href="${host}/?url=${encodedUrl}${filterQuery}&target=base64">📥 下載 Base64 訂閱</a>
+      <a class="btn" style="background: #f59e0b; margin-top: 0;" href="${host}/?url=${encodedUrl}${filterQuery}&target=clash">📥 下載 Clash Meta 訂閱</a>
+      <a class="btn" style="background: #10b981; margin-top: 0;" href="${host}/?url=${encodedUrl}${filterQuery}&target=singbox">📥 下載 Sing-Box 訂閱</a>
+    </div>
   </div>
 </body>
 </html>
