@@ -1,5 +1,5 @@
 # Complete Project Codebase
-Generated on: Wed Jun 17 15:44:55 UTC 2026
+Generated on: Wed Jun 17 15:47:10 UTC 2026
 
 ## File: scripts/argo-converter.ts
 ````ts
@@ -3532,6 +3532,7 @@ fi
 
 ## File: .github/workflows/deploy.yml
 ````yml
+# .github/workflows/deploy.yml
 name: Deploy to Cloudflare Workers
 
 on:
@@ -3552,16 +3553,16 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
       
-      # 💥 新增：初始化 Node.js 環境並啟用 npm 快取，避免重複下載
+      # 已將 Node.js 環境升級至 Node 24 以消除棄用警告
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
-          cache: 'npm'
-      
-      # 💥 優化：改用 npm ci 進行極速安裝，並加入 --prefer-offline 優先讀取快取
+          node-version: 24
+          # 暫時移除 cache: 'npm'，避免因缺少 package-lock.json 報錯
+
+      # 替換成相容無鎖定檔的普通安裝（加入 --prefer-offline 稍微加速）
       - name: Install dependencies
-        run: npm ci --prefer-offline
+        run: npm install --prefer-offline
 
       # 替換 KV ID
       - name: Inject KV ID from Secrets
