@@ -73,7 +73,7 @@ dns:
     - 'time.*.gov'
     - 'time.*.edu.cn'
     - 'ntp.*.com'
-    # 💥 修正：改用本地 GeoSite 數據庫防漏
+    # 讓國內網站與蘋果服務強制返回真實 IP（配合本地 GeoSite 屬性）
     - 'geosite:cn'
     - 'geosite:private'
     - 'geosite:apple'
@@ -177,17 +177,28 @@ proxy-groups:
       - DIRECT
 
 # ==================================================
-# 流量路由 Rules規則 (💥 已全數升級為本地內建 GeoSite / GeoIP 規則)
+# 規則集 Rule Providers (僅保留您的專屬 AI 遠端規則集)
+# ==================================================
+rule-providers:
+  my-ai:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://raw.githubusercontent.com/sammy0101/myself/refs/heads/main/geosite_ai_hk_proxy.mrs"
+    path: ./ruleset/my-ai.mrs
+    interval: 86400
+
+# ==================================================
+# 流量路由 Rules
 # ==================================================
 rules:
-  # 1. 廣告與內網 (使用本地資料庫)
+  # 1. 廣告與內網
   - GEOSITE,category-ads-all,🛑 廣告攔截
   - GEOSITE,private,🏠 私有網絡
   - GEOIP,private,🏠 私有網絡,no-resolve
 
-  # 2. 強制代理業務 (AI 服務)
-  - GEOSITE,openai,💬 AI 服務
-  - GEOSITE,anthropic,💬 AI 服務
+  # 2. 強制代理業務 (💥 已恢復使用您的專屬 AI 規則集)
+  - RULE-SET,my-ai,💬 AI 服務
 
   # 3. Microsoft 服務分流
   - GEOSITE,microsoft,Ⓜ️ 微軟服務
