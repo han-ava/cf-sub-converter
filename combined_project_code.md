@@ -1,5 +1,5 @@
 # Complete Project Codebase
-Generated on: Wed Jun 17 08:58:21 UTC 2026
+Generated on: Wed Jun 17 08:59:06 UTC 2026
 
 ## File: scripts/argo-converter.ts
 ````ts
@@ -3159,7 +3159,6 @@ id = "KV_ID_PLACEHOLDER"
   ],
   "route": {
     "rule_set": [
-      // 💥 修正：保留您的專屬 AI 遠端規則集，其餘全數走本地極速 SRS
       { "type": "remote", "tag": "rs-ai", "format": "binary", "url": "https://raw.githubusercontent.com/sammy0101/myself/refs/heads/main/geosite_ai_hk_proxy.srs", "download_detour": "direct" },
       { "type": "local", "tag": "rs-apple", "format": "binary", "path": "srs/apple.srs" },
       { "type": "local", "tag": "rs-microsoft", "format": "binary", "path": "srs/microsoft.srs" },
