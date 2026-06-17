@@ -1,5 +1,5 @@
 # Complete Project Codebase
-Generated on: Wed Jun 17 15:09:24 UTC 2026
+Generated on: Wed Jun 17 15:44:55 UTC 2026
 
 ## File: scripts/argo-converter.ts
 ````ts
@@ -3549,10 +3549,19 @@ jobs:
     runs-on: ubuntu-latest
     name: Deploy
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout Repository
+        uses: actions/checkout@v4
       
+      # 💥 新增：初始化 Node.js 環境並啟用 npm 快取，避免重複下載
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+      
+      # 💥 優化：改用 npm ci 進行極速安裝，並加入 --prefer-offline 優先讀取快取
       - name: Install dependencies
-        run: npm install
+        run: npm ci --prefer-offline
 
       # 替換 KV ID
       - name: Inject KV ID from Secrets
