@@ -12,6 +12,9 @@ external-controller: 0.0.0.0:9090
 tcp-concurrent: true
 unified-delay: true
 
+# 啟用 TCP Fast Open，降低建立連線的握手延遲
+fast-open: true
+
 # ==================== 設定檔快取 ====================
 profile:
   store-selected: true
@@ -49,7 +52,7 @@ sniffer:
   parse-pure-ip: true
   force-dns-mapping: true
 
-# ==================== 進階 DNS 設定 (中港兩地智能切換版) ====================
+# ==================== 進階 DNS 設定 ====================
 dns:
   enable: true
   ipv6: false
@@ -57,7 +60,7 @@ dns:
   enhanced-mode: fake-ip
   fake-ip-range: 198.18.0.1/16
   fake-ip-filter-mode: blacklist
-  respect-rules: true  # 開啟：讓兜底的 DoH 解析也能精準走分流規則，在大陸完美防污染
+  respect-rules: true  # 開啟：讓海外 DoH 安全地走代理，防止國內 DNS 污染
   fake-ip-filter:
     - '*.lan'
     - '*.local'
@@ -70,32 +73,34 @@ dns:
     - 'time.*.gov'
     - 'time.*.edu.cn'
     - 'ntp.*.com'
-    # 讓國內網站與蘋果服務強制返回真實 IP
-    - 'rule-set:meta-cn,meta-private,meta-apple' 
+    # 💥 修正：改用本地 GeoSite 數據庫防漏
+    - 'geosite:cn'
+    - 'geosite:private'
+    - 'geosite:apple'
   
-  # 基礎 DNS (解析 DoH 網域用，混合中外 DNS 確保兩地皆通)
+  # 基礎 DNS (解析 DoH 網域用)
   default-nameserver:
     - 223.5.5.5
     - 119.29.29.29
     - 8.8.8.8
     - 1.1.1.1
 
-  # 節點專用 DNS (只用來找機場的 IP，防止在大陸找不到海外機場，或在香港被擋)
+  # 節點專用 DNS
   proxy-server-nameserver:
     - 223.5.5.5
     - 8.8.8.8
 
   nameserver-policy:
-    # 國內網站強制使用國內公共 DNS (阿里、騰訊)
-    "rule-set:meta-cn":
+    # 國內網站強制使用國內公共 DNS 直連解析
+    "geosite:cn":
       - 223.5.5.5
       - 119.29.29.29
-    # 蘋果服務：中外 DNS 並發競爭！香港 8.8.8.8 回應快得 HK CDN；大陸 223.5.5.5 回應快得 CN CDN
-    "rule-set:meta-apple":
+    # 蘋果服務：中外 DNS 並發競爭
+    "geosite:apple":
       - 223.5.5.5
       - 8.8.8.8
 
-  # 國外網站兜底 DNS (使用加密 DoH。在大陸會自動走代理防污染，香港直連極速)
+  # 國外網站兜底 DNS
   nameserver:
     - https://dns.google/dns-query
     - https://cloudflare-dns.com/dns-query
@@ -172,152 +177,37 @@ proxy-groups:
       - DIRECT
 
 # ==================================================
-# 規則集 Rule Providers
-# ==================================================
-rule-providers:
-  my-ai:
-    type: http
-    behavior: domain
-    format: mrs
-    url: "https://github.com/sammy0101/myself/raw/refs/heads/main/geosite_ai_hk_proxy.mrs"
-    path: ./ruleset/my-ai.mrs
-    interval: 86400
-
-  meta-apple:
-    type: http
-    behavior: domain
-    format: mrs
-    url: "https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geosite/apple.mrs"
-    path: ./ruleset/apple.mrs
-    interval: 86400
-
-  meta-microsoft:
-    type: http
-    behavior: domain
-    format: mrs
-    url: "https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geosite/microsoft.mrs"
-    path: ./ruleset/microsoft.mrs
-    interval: 86400
-
-  meta-steam:
-    type: http
-    behavior: domain
-    format: mrs
-    url: "https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geosite/steam.mrs"
-    path: ./ruleset/steam.mrs
-    interval: 86400
-
-  meta-epicgames:
-    type: http
-    behavior: domain
-    format: mrs
-    url: "https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geosite/epicgames.mrs"
-    path: ./ruleset/epicgames.mrs
-    interval: 86400
-
-  meta-ea:
-    type: http
-    behavior: domain
-    format: mrs
-    url: "https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geosite/ea.mrs"
-    path: ./ruleset/ea.mrs
-    interval: 86400
-
-  meta-ubisoft:
-    type: http
-    behavior: domain
-    format: mrs
-    url: "https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geosite/ubisoft.mrs"
-    path: ./ruleset/ubisoft.mrs
-    interval: 86400
-
-  meta-blizzard:
-    type: http
-    behavior: domain
-    format: mrs
-    url: "https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geosite/blizzard.mrs"
-    path: ./ruleset/blizzard.mrs
-    interval: 86400
-
-  meta-geolocation-!cn:
-    type: http
-    behavior: domain
-    format: mrs
-    url: "https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geosite/geolocation-!cn.mrs"
-    path: ./ruleset/geolocation-!cn.mrs
-    interval: 86400
-
-  meta-cn:
-    type: http
-    behavior: domain
-    format: mrs
-    url: "https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geosite/cn.mrs"
-    path: ./ruleset/cn.mrs
-    interval: 86400
-
-  meta-cn-ip:
-    type: http
-    behavior: ipcidr
-    format: mrs
-    url: "https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geoip/cn.mrs"
-    path: ./ruleset/cn-ip.mrs
-    interval: 86400
-
-  meta-ads:
-    type: http
-    behavior: domain
-    format: mrs
-    url: "https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geosite/category-ads-all.mrs"
-    path: ./ruleset/ads.mrs
-    interval: 86400
-
-  meta-private:
-    type: http
-    behavior: domain
-    format: mrs
-    url: "https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geosite/private.mrs"
-    path: ./ruleset/private.mrs
-    interval: 86400
-
-  meta-ip-private:
-    type: http
-    behavior: ipcidr
-    format: mrs
-    url: "https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geoip/private.mrs"
-    path: ./ruleset/ip-private.mrs
-    interval: 86400
-
-# ==================================================
-# 流量路由 Rules
+# 流量路由 Rules規則 (💥 已全數升級為本地內建 GeoSite / GeoIP 規則)
 # ==================================================
 rules:
-  # 1. 廣告與內網
-  - RULE-SET,meta-ads,🛑 廣告攔截
-  - RULE-SET,meta-private,🏠 私有網絡
-  - RULE-SET,meta-ip-private,🏠 私有網絡,no-resolve
+  # 1. 廣告與內網 (使用本地資料庫)
+  - GEOSITE,category-ads-all,🛑 廣告攔截
+  - GEOSITE,private,🏠 私有網絡
+  - GEOIP,private,🏠 私有網絡,no-resolve
 
-  # 2. 強制代理業務
-  - RULE-SET,my-ai,💬 AI 服務
+  # 2. 強制代理業務 (AI 服務)
+  - GEOSITE,openai,💬 AI 服務
+  - GEOSITE,anthropic,💬 AI 服務
 
   # 3. Microsoft 服務分流
-  - RULE-SET,meta-microsoft,Ⓜ️ 微軟服務
+  - GEOSITE,microsoft,Ⓜ️ 微軟服務
 
   # 4. 遊戲平台分流
-  - RULE-SET,meta-steam,🎮 遊戲平台
-  - RULE-SET,meta-epicgames,🎮 遊戲平台
-  - RULE-SET,meta-ea,🎮 遊戲平台
-  - RULE-SET,meta-ubisoft,🎮 遊戲平台
-  - RULE-SET,meta-blizzard,🎮 遊戲平台
+  - GEOSITE,steam,🎮 遊戲平台
+  - GEOSITE,epicgames,🎮 遊戲平台
+  - GEOSITE,ea,🎮 遊戲平台
+  - GEOSITE,ubisoft,🎮 遊戲平台
+  - GEOSITE,blizzard,🎮 遊戲平台
 
   # 5. Apple 服務分流
-  - RULE-SET,meta-apple,🍎 蘋果服務
+  - GEOSITE,apple,🍎 蘋果服務
 
   # 6. 非中國網站：走代理
-  - RULE-SET,meta-geolocation-!cn,🌐 非中國
+  - GEOSITE,geolocation-!cn,🌐 非中國
 
   # 7. 中國國內網域與 IP：走直連
-  - RULE-SET,meta-cn,🇨🇳 國內服務
-  - RULE-SET,meta-cn-ip,🇨🇳 國內服務,no-resolve
+  - GEOSITE,cn,🇨🇳 國內服務
+  - GEOIP,cn,🇨🇳 國內服務,no-resolve
 
   # 8. 國外網站兜底：全走代理
   - MATCH,🐟 漏網之魚
