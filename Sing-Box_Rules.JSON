@@ -102,20 +102,21 @@
   ],
   "route": {
     "rule_set": [
-      { "type": "remote", "tag": "rs-ai", "format": "binary", "url": "https://github.com/sammy0101/myself/raw/refs/heads/main/geosite_ai_hk_proxy.srs", "download_detour": "direct" },
-      { "type": "remote", "tag": "rs-apple", "format": "binary", "url": "https://github.com/MetaCubeX/meta-rules-dat/raw/sing/geo/geosite/apple.srs", "download_detour": "direct" },
-      { "type": "remote", "tag": "rs-microsoft", "format": "binary", "url": "https://github.com/MetaCubeX/meta-rules-dat/raw/sing/geo/geosite/microsoft.srs", "download_detour": "direct" },
-      { "type": "remote", "tag": "rs-steam", "format": "binary", "url": "https://github.com/MetaCubeX/meta-rules-dat/raw/sing/geo/geosite/steam.srs", "download_detour": "direct" },
-      { "type": "remote", "tag": "rs-epicgames", "format": "binary", "url": "https://github.com/MetaCubeX/meta-rules-dat/raw/sing/geo/geosite/epicgames.srs", "download_detour": "direct" },
-      { "type": "remote", "tag": "rs-ea", "format": "binary", "url": "https://github.com/MetaCubeX/meta-rules-dat/raw/sing/geo/geosite/ea.srs", "download_detour": "direct" },
-      { "type": "remote", "tag": "rs-ubisoft", "format": "binary", "url": "https://github.com/MetaCubeX/meta-rules-dat/raw/sing/geo/geosite/ubisoft.srs", "download_detour": "direct" },
-      { "type": "remote", "tag": "rs-blizzard", "format": "binary", "url": "https://github.com/MetaCubeX/meta-rules-dat/raw/sing/geo/geosite/blizzard.srs", "download_detour": "direct" },
-      { "type": "remote", "tag": "rs-geolocation-!cn", "format": "binary", "url": "https://github.com/MetaCubeX/meta-rules-dat/raw/sing/geo/geosite/geolocation-!cn.srs", "download_detour": "direct" },
-      { "type": "remote", "tag": "rs-cn", "format": "binary", "url": "https://github.com/MetaCubeX/meta-rules-dat/raw/sing/geo/geosite/geolocation-cn.srs", "download_detour": "direct" },
-      { "type": "remote", "tag": "ip-cn", "format": "binary", "url": "https://github.com/MetaCubeX/meta-rules-dat/raw/sing/geo/geoip/cn.srs", "download_detour": "direct" },
-      { "type": "remote", "tag": "rs-ads", "format": "binary", "url": "https://github.com/MetaCubeX/meta-rules-dat/raw/sing/geo/geosite/category-ads-all.srs", "download_detour": "direct" },
-      { "type": "remote", "tag": "rs-private", "format": "binary", "url": "https://github.com/MetaCubeX/meta-rules-dat/raw/sing/geo/geosite/private.srs", "download_detour": "direct" },
-      { "type": "remote", "tag": "ip-private", "format": "binary", "url": "https://github.com/MetaCubeX/meta-rules-dat/raw/sing/geo/geoip/private.srs", "download_detour": "direct" }
+      // 💥 修正：將所有規則集類型變更為 local，並指向本地的 .srs 二進位資料庫檔
+      { "type": "local", "tag": "rs-ai", "format": "binary", "path": "srs/ai.srs" },
+      { "type": "local", "tag": "rs-apple", "format": "binary", "path": "srs/apple.srs" },
+      { "type": "local", "tag": "rs-microsoft", "format": "binary", "path": "srs/microsoft.srs" },
+      { "type": "local", "tag": "rs-steam", "format": "binary", "path": "srs/steam.srs" },
+      { "type": "local", "tag": "rs-epicgames", "format": "binary", "path": "srs/epicgames.srs" },
+      { "type": "local", "tag": "rs-ea", "format": "binary", "path": "srs/ea.srs" },
+      { "type": "local", "tag": "rs-ubisoft", "format": "binary", "path": "srs/ubisoft.srs" },
+      { "type": "local", "tag": "rs-blizzard", "format": "binary", "path": "srs/blizzard.srs" },
+      { "type": "local", "tag": "rs-geolocation-!cn", "format": "binary", "path": "srs/geolocation-!cn.srs" },
+      { "type": "local", "tag": "rs-cn", "format": "binary", "path": "srs/geolocation-cn.srs" },
+      { "type": "local", "tag": "ip-cn", "format": "binary", "path": "srs/cn.srs" },
+      { "type": "local", "tag": "rs-ads", "format": "binary", "path": "srs/category-ads-all.srs" },
+      { "type": "local", "tag": "rs-private", "format": "binary", "path": "srs/private.srs" },
+      { "type": "local", "tag": "ip-private", "format": "binary", "path": "srs/private-ip.srs" }
     ],
     "rules": [
       { "protocol": "dns", "outbound": "dns-out" },
