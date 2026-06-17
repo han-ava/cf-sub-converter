@@ -1,5 +1,5 @@
 # Complete Project Codebase
-Generated on: Wed Jun 17 14:47:29 UTC 2026
+Generated on: Wed Jun 17 14:54:43 UTC 2026
 
 ## File: scripts/argo-converter.ts
 ````ts
@@ -1142,7 +1142,7 @@ export const HTML_PAGE = `
       </button>
     </main>
 
-    <!-- ⚡ 轉換結果面板 (已移至來源設定下方，排序更新：自適應/短連結 -> Base64 -> Clash Meta -> Sing-Box) -->
+    <!-- ⚡ 轉換結果面板 (名稱已精簡為「自適應」，排序：自適應 -> Base64 -> Clash Meta -> Sing-Box) -->
     <section class="results-wrapper" id="results">
       <div class="panel">
         <div class="panel-header">
@@ -1152,13 +1152,13 @@ export const HTML_PAGE = `
           </h2>
         </div>
         
-        <!-- 1. 自適應 / 短連結 -->
+        <!-- 1. 自適應 -->
         <div class="result-item">
           <div class="result-icon-box">
             <svg viewBox="0 0 24 24"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"></path><path d="M2 12h20"></path><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>
           </div>
           <div class="result-info">
-            <div class="result-name">自適應 / 短連結</div>
+            <div class="result-name">自適應</div>
             <div class="result-desc">自動辨識客戶端 · 適用所有主流行動軟體</div>
           </div>
           <div class="result-input-wrapper"><input type="text" id="adaptiveUrl" readonly></div>
@@ -1168,7 +1168,7 @@ export const HTML_PAGE = `
           </div>
         </div>
 
-        <!-- 2. Base64 (精簡名稱) -->
+        <!-- 2. Base64 (名稱已精簡為 Base64) -->
         <div class="result-item">
           <div class="result-icon-box"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg></div>
           <div class="result-info">
@@ -1292,7 +1292,7 @@ export const HTML_PAGE = `
         <!-- 第二步：顯示與複製整合後的明文列表 -->
         <div class="form-group" style="margin-top: 1.5rem;">
           <label style="color: var(--text-main); font-weight: 600;">🔗 第二步：新產生的 Argo 明文節點連結列表 (僅固定域名模式生效，臨時域名模式請直接在 VPS 複製)：</label>
-          <textarea id="argoBase64Sub" placeholder="臨時域名具有動態性，一鍵指令部署成功後請直接於您 VPS 的終端機內進行拷貝..." readonly style="min-height: 140px; font-size: 0.8rem; font-family: 'JetBrains Mono', monospace; line-height:1.6;"></textarea>
+          <textarea id="argoBase64Sub" placeholder="臨時域名具有動態性，一鍵指令部署成功後請直接於您 VPS 終端機內進行拷貝..." readonly style="min-height: 140px; font-size: 0.8rem; font-family: 'JetBrains Mono', monospace; line-height:1.6;"></textarea>
           <button class="btn btn-ghost" onclick="copyText('argoBase64Sub')" style="margin-top: 0.5rem; width: 100%; justify-content: center;">複製明文節點列表</button>
           <div class="hint" style="margin-top: 8px; color: var(--success);">
             <svg viewBox="0 0 24 24" style="width:14px;height:14px;color: var(--success);"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
