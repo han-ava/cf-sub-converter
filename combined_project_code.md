@@ -1,5 +1,5 @@
 # Complete Project Codebase
-Generated on: Fri Jun 19 12:55:56 UTC 2026
+Generated on: Fri Jun 19 13:23:08 UTC 2026
 
 ## File: scripts/argo-converter.ts
 ````ts
@@ -395,10 +395,10 @@ dns:
     - 'time.*.gov'
     - 'time.*.edu.cn'
     - 'ntp.*.com'
-    # 讓國內網站與蘋果服務強制返回真實 IP（配合本地 GeoSite 屬性）
-    - 'geosite:cn'
-    - 'geosite:private'
-    - 'geosite:apple'
+    # 讓國內網站與蘋果服務強制返回真實 IP（配合 rule-set 屬性）
+    - 'rule-set:cn'
+    - 'rule-set:private'
+    - 'rule-set:apple'
   
   # 💥 1. 基礎 DNS：必須使用傳統實體 IP（不可改動）
   default-nameserver:
@@ -407,25 +407,25 @@ dns:
     - 8.8.8.8
     - 1.1.1.1
 
-  # 💥 2. 節點專用 DNS（全部使用 IP 型 DoH，免除任何域名解析，極速啟動）
+  # 💥 2. 節點專用 DNS
   proxy-server-nameserver:
     - https://223.5.5.5/dns-query
     - https://8.8.8.8/dns-query
 
-  # 💥 3. 網域特殊分流（國內、蘋果、微信獨立優化）
+  # 💥 3. 網域特殊分流
   nameserver-policy:
-    # 國內直連網站：使用阿里官方 IP 型 DoH + 騰訊官方域名 DoH（有 Anycast 優化）
-    "geosite:cn":
+    # 國內直連網站
+    "rule-set:cn":
       - https://223.5.5.5/dns-query
       - https://doh.pub/dns-query
 
-    # 蘋果服務：中外頂級 IP 型 DoH 競爭解析
-    "geosite:apple":
+    # 蘋果服務
+    "rule-set:apple":
       - https://223.5.5.5/dns-query
       - https://8.8.8.8/dns-query
 
-    # 微信/騰訊服務：在香港本地強制使用 Google/Cloudflare 實體 IP 型 DoH，以獲取香港本地極速 IP
-    "geosite:weixin,tencent,qq":
+    # 微信/騰訊服務
+    "rule-set:tencent":
       - https://8.8.8.8/dns-query
       - https://1.1.1.1/dns-query
       - https://doh.pub/dns-query
@@ -507,7 +507,7 @@ proxy-groups:
       - DIRECT
 
 # ==================================================
-# 規則集 Rule Providers (僅保留您的專屬 AI 遠端規則集)
+# 規則集 Rule Providers (採用 MetaCubeX meta 格式優化)
 # ==================================================
 rule-providers:
   my-ai:
@@ -518,37 +518,149 @@ rule-providers:
     path: ./ruleset/my-ai.mrs
     interval: 86400
 
+  category-ads-all:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/category-ads-all.mrs"
+    path: ./ruleset/category-ads-all.mrs
+    interval: 86400
+
+  private:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/private.mrs"
+    path: ./ruleset/private.mrs
+    interval: 86400
+
+  private-ip:
+    type: http
+    behavior: ipcidr
+    format: mrs
+    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/private.mrs"
+    path: ./ruleset/private-ip.mrs
+    interval: 86400
+
+  microsoft:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/microsoft.mrs"
+    path: ./ruleset/microsoft.mrs
+    interval: 86400
+
+  steam:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/steam.mrs"
+    path: ./ruleset/steam.mrs
+    interval: 86400
+
+  epicgames:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/epicgames.mrs"
+    path: ./ruleset/epicgames.mrs
+    interval: 86400
+
+  ea:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/ea.mrs"
+    path: ./ruleset/ea.mrs
+    interval: 86400
+
+  ubisoft:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/ubisoft.mrs"
+    path: ./ruleset/ubisoft.mrs
+    interval: 86400
+
+  blizzard:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/blizzard.mrs"
+    path: ./ruleset/blizzard.mrs
+    interval: 86400
+
+  apple:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/apple.mrs"
+    path: ./ruleset/apple.mrs
+    interval: 86400
+
+  tencent:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/tencent.mrs"
+    path: ./ruleset/tencent.mrs
+    interval: 86400
+
+  geolocation-non-cn:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/geolocation-!cn.mrs"
+    path: ./ruleset/geolocation-non-cn.mrs
+    interval: 86400
+
+  cn:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/cn.mrs"
+    path: ./ruleset/cn.mrs
+    interval: 86400
+
+  cn-ip:
+    type: http
+    behavior: ipcidr
+    format: mrs
+    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/cn.mrs"
+    path: ./ruleset/cn-ip.mrs
+    interval: 86400
+
 # ==================================================
 # 流量路由 Rules
 # ==================================================
 rules:
   # 1. 廣告與內網
-  - GEOSITE,category-ads-all,🛑 廣告攔截
-  - GEOSITE,private,🏠 私有網絡
-  - GEOIP,private,🏠 私有網絡,no-resolve
+  - RULE-SET,category-ads-all,🛑 廣告攔截
+  - RULE-SET,private,🏠 私有網絡
+  - RULE-SET,private-ip,🏠 私有網絡,no-resolve
 
-  # 2. 強制代理業務 (💥 已恢復使用您的專屬 AI 規則集)
+  # 2. 強制代理業務 (專屬 AI 規則集)
   - RULE-SET,my-ai,💬 AI 服務
 
   # 3. Microsoft 服務分流
-  - GEOSITE,microsoft,Ⓜ️ 微軟服務
+  - RULE-SET,microsoft,Ⓜ️ 微軟服務
 
   # 4. 遊戲平台分流
-  - GEOSITE,steam,🎮 遊戲平台
-  - GEOSITE,epicgames,🎮 遊戲平台
-  - GEOSITE,ea,🎮 遊戲平台
-  - GEOSITE,ubisoft,🎮 遊戲平台
-  - GEOSITE,blizzard,🎮 遊戲平台
+  - RULE-SET,steam,🎮 遊戲平台
+  - RULE-SET,epicgames,🎮 遊戲平台
+  - RULE-SET,ea,🎮 遊戲平台
+  - RULE-SET,ubisoft,🎮 遊戲平台
+  - RULE-SET,blizzard,🎮 遊戲平台
 
   # 5. Apple 服務分流
-  - GEOSITE,apple,🍎 蘋果服務
+  - RULE-SET,apple,🍎 蘋果服務
 
   # 6. 非中國網站：走代理
-  - GEOSITE,geolocation-!cn,🌐 非中國
+  - RULE-SET,geolocation-non-cn,🌐 非中國
 
   # 7. 中國國內網域與 IP：走直連
-  - GEOSITE,cn,🇨🇳 國內服務
-  - GEOIP,cn,🇨🇳 國內服務,no-resolve
+  - RULE-SET,cn,🇨🇳 國內服務
+  - RULE-SET,cn-ip,🇨🇳 國內服務,no-resolve
 
   # 8. 國外網站兜底：全走代理
   - MATCH,🐟 漏網之魚
