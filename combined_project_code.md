@@ -1,5 +1,5 @@
 # Complete Project Codebase
-Generated on: Fri Jun 19 13:27:38 UTC 2026
+Generated on: Fri Jun 19 13:27:58 UTC 2026
 
 ## File: scripts/argo-converter.ts
 ````ts
@@ -3330,13 +3330,6 @@ id = "KV_ID_PLACEHOLDER"
       },
       {
         "rule_set": [
-          "rs-tencent"
-        ],
-        "server": "remote-dns",
-        "disable_cache": true
-      },
-      {
-        "rule_set": [
           "rs-cn",
           "rs-private"
         ],
@@ -3405,7 +3398,6 @@ id = "KV_ID_PLACEHOLDER"
       { "type": "remote", "tag": "rs-ea", "format": "binary", "url": "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/ea.srs", "download_detour": "direct" },
       { "type": "remote", "tag": "rs-ubisoft", "format": "binary", "url": "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/ubisoft.srs", "download_detour": "direct" },
       { "type": "remote", "tag": "rs-blizzard", "format": "binary", "url": "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/blizzard.srs", "download_detour": "direct" },
-      { "type": "remote", "tag": "rs-tencent", "format": "binary", "url": "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/tencent.srs", "download_detour": "direct" },
       { "type": "remote", "tag": "rs-geolocation-!cn", "format": "binary", "url": "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/geolocation-!cn.srs", "download_detour": "direct" },
       { "type": "remote", "tag": "rs-cn", "format": "binary", "url": "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/cn.srs", "download_detour": "direct" },
       { "type": "remote", "tag": "ip-cn", "format": "binary", "url": "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geoip/cn.srs", "download_detour": "direct" },
