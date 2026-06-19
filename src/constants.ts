@@ -153,10 +153,18 @@ export const HTML_PAGE = `
       position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(15, 23, 42, 0.8); backdrop-filter: blur(4px); z-index: 100; display: none; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.2s ease;
     }
     .modal-overlay.show { display: flex; opacity: 1; }
+    
+    /* 💥 彈出視窗樣式優化：寬度放大到 720px，新增最大高度及滾動條 */
     .modal-content {
-      background: var(--bg-panel); border: 1px solid var(--border); border-radius: var(--radius-lg); width: 92%; max-width: 480px; padding: 2rem; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5); transform: scale(0.95); transition: transform 0.2s ease;
-      max-height: 90vh;
+      background: var(--bg-panel); border: 1px solid var(--border); border-radius: var(--radius-lg); width: 92%; max-width: 720px; padding: 2rem; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5); transform: scale(0.95); transition: transform 0.2s ease;
+      max-height: 92vh;
       overflow-y: auto;
+    }
+    
+    /* 💥 節點內容與訂閱連結加高、字型調整，看的更清楚 */
+    #favUrl {
+      min-height: 280px;
+      font-size: 0.85rem;
     }
     
     .modal-footer { 
@@ -657,7 +665,7 @@ export const HTML_PAGE = `
             </div>
             <div class="fav-actions">
               <button class="btn btn-ghost" onclick="event.stopPropagation(); editFav(\${i})">編輯</button>
-              <button class="btn btn-ghost btn-danger" onclick="event.stopPropagation(); deleteFav(\---\${i})">刪除</button>
+              <button class="btn btn-ghost btn-danger" onclick="event.stopPropagation(); deleteFav(\${i})">刪除</button>
             </div>
           </div>\`;
       }).join('');
@@ -747,7 +755,7 @@ export const HTML_PAGE = `
     
     async function generate() {
       const raw = document.getElementById('urlInput').value.trim();
-      if (!raw) return showToast('請先輸入節點連結或訂閱地址', false);
+      if (!raw) return showToast('請先輸入節點連結 or 訂閱地址', false);
       
       const btn = document.getElementById('generateBtn');
       const originalHTML = btn.innerHTML;
