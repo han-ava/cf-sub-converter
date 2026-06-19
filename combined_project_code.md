@@ -1,5 +1,5 @@
 # Complete Project Codebase
-Generated on: Wed Jun 17 15:47:10 UTC 2026
+Generated on: Fri Jun 19 12:55:56 UTC 2026
 
 ## File: scripts/argo-converter.ts
 ````ts
@@ -400,32 +400,40 @@ dns:
     - 'geosite:private'
     - 'geosite:apple'
   
-  # 基礎 DNS (解析 DoH 網域用)
+  # 💥 1. 基礎 DNS：必須使用傳統實體 IP（不可改動）
   default-nameserver:
     - 223.5.5.5
     - 119.29.29.29
     - 8.8.8.8
     - 1.1.1.1
 
-  # 節點專用 DNS
+  # 💥 2. 節點專用 DNS（全部使用 IP 型 DoH，免除任何域名解析，極速啟動）
   proxy-server-nameserver:
-    - 223.5.5.5
-    - 8.8.8.8
+    - https://223.5.5.5/dns-query
+    - https://8.8.8.8/dns-query
 
+  # 💥 3. 網域特殊分流（國內、蘋果、微信獨立優化）
   nameserver-policy:
-    # 國內網站強制使用國內公共 DNS 直連解析
+    # 國內直連網站：使用阿里官方 IP 型 DoH + 騰訊官方域名 DoH（有 Anycast 優化）
     "geosite:cn":
-      - 223.5.5.5
-      - 119.29.29.29
-    # 蘋果服務：中外 DNS 並發競爭
-    "geosite:apple":
-      - 223.5.5.5
-      - 8.8.8.8
+      - https://223.5.5.5/dns-query
+      - https://doh.pub/dns-query
 
-  # 國外網站兜底 DNS
+    # 蘋果服務：中外頂級 IP 型 DoH 競爭解析
+    "geosite:apple":
+      - https://223.5.5.5/dns-query
+      - https://8.8.8.8/dns-query
+
+    # 微信/騰訊服務：在香港本地強制使用 Google/Cloudflare 實體 IP 型 DoH，以獲取香港本地極速 IP
+    "geosite:weixin,tencent,qq":
+      - https://8.8.8.8/dns-query
+      - https://1.1.1.1/dns-query
+      - https://doh.pub/dns-query
+
+  # 💥 4. 國外網站兜底 DNS（推薦使用海外頂級 IP 型 DoH，自動走代理，防污染且速度最快）
   nameserver:
-    - https://dns.google/dns-query
-    - https://cloudflare-dns.com/dns-query
+    - https://8.8.8.8/dns-query
+    - https://1.1.1.1/dns-query
 
 # ==================================================
 # 代理節點設定
