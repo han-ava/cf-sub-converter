@@ -1,3 +1,4 @@
+// src/parser.ts
 import { ProxyNode } from "./types";
 import { safeBase64Decode, tryDecodeURIComponent } from "./utils";
 
@@ -105,7 +106,7 @@ function parseShadowsocks(urlStr: string): ProxyNode | null {
   } catch (e) { return null; }
 }
 
-// --- 解析 VLESS ---
+// --- 解析 VLESS (補上 packet_encoding: 'xudp'，修復 Reality/Vision 與普通 VLESS 連線) ---
 function parseVless(urlStr: string): ProxyNode | null {
   try {
     const fakeUrlStr = urlStr.replace(/^[^:]+:\/\//i, 'http://');
@@ -120,7 +121,8 @@ function parseVless(urlStr: string): ProxyNode | null {
     if (params.get('security') === 'reality') { node.reality = { publicKey: params.get('pbk') || '', shortId: params.get('sid') || '' }; if (!node.sni) node.sni = node.server; }
     if (node.network === 'ws') { node.wsPath = wsPath; node.wsHeaders = { Host: params.get('host') || node.server }; }
     
-    const sb: any = { tag: name, type: 'vless', server: node.server, server_port: node.port, uuid: node.uuid };
+    // 💥 補上 packet_encoding: 'xudp'，使 VLESS Vision & Reality 與 Xray-core 端完美協調握手
+    const sb: any = { tag: name, type: 'vless', server: node.server, server_port: node.port, uuid: node.uuid, packet_encoding: 'xudp' };
     sb.tls = { enabled: node.tls, server_name: node.sni || node.server, insecure: node.skipCertVerify, utls: { enabled: true, fingerprint: node.fingerprint }};
     if(node.flow) sb.flow = node.flow;
     if(node.reality) sb.tls.reality = { enabled: true, public_key: node.reality.publicKey, short_id: node.reality.shortId };
@@ -192,7 +194,7 @@ function parseTuic(urlStr: string): ProxyNode | null {
   } catch (e) { return null; }
 }
 
-// --- 解析 AnyTLS ---
+// --- 解析 AnyTLS (修正：Sing-Box 原生支援 anytls 類型出站) ---
 function parseAnytls(urlStr: string): ProxyNode | null {
   try {
     const fakeUrlStr = urlStr.replace(/^[^:]+:\/\//i, 'http://');
@@ -218,7 +220,23 @@ function parseAnytls(urlStr: string): ProxyNode | null {
       alpn: alpnStr ? alpnStr.split(',') : undefined
     };
 
-    const sb: any = { tag: name, type: 'vless', server: node.server, server_port: node.port, uuid: node.uuid, tls: { enabled: true, server_name: node.sni, insecure: node.skipCertVerify, utls: { enabled: true, fingerprint: node.fingerprint } } };
+    // 💥 修正：Sing-Box 原生支援 "anytls" 類型！直接映射為標準 anytls 出站格式並設定密碼與 TLS，徹底解決原本降級為 VLESS 導致的協議不通問題
+    const sb: any = { 
+      tag: name, 
+      type: 'anytls', 
+      server: node.server, 
+      server_port: node.port, 
+      password: node.password, 
+      tls: { 
+        enabled: true, 
+        server_name: node.sni, 
+        insecure: node.skipCertVerify, 
+        utls: { 
+          enabled: true, 
+          fingerprint: node.fingerprint 
+        } 
+      } 
+    };
     if (node.alpn) sb.tls.alpn = node.alpn;
     node.singboxObj = sb;
 
@@ -230,7 +248,7 @@ function parseAnytls(urlStr: string): ProxyNode | null {
   } catch (e) { return null; }
 }
 
-// --- 解析 VMess ---
+// --- 解析 VMess (補上 packet_encoding: 'xudp' 優化 UDP 傳輸與握手) ---
 function parseVmess(vmessUrl: string): ProxyNode | null {
   try {
     const b64 = vmessUrl.replace('vmess://', ''); const jsonStr = safeBase64Decode(b64); const config = JSON.parse(jsonStr); const name = config.ps || 'VMess';
@@ -239,7 +257,8 @@ function parseVmess(vmessUrl: string): ProxyNode | null {
 
     const node: ProxyNode = { type: 'vmess', name, server: config.add, port: parseInt(config.port) || 443, uuid: config.id, cipher: 'auto', tls: config.tls === 'tls', sni: config.sni || config.host, network: config.net || 'tcp', wsPath: wsPath, wsHeaders: config.host ? { Host: config.host } : undefined, skipCertVerify: true };
     
-    const sb: any = { tag: name, type: 'vmess', server: node.server, server_port: node.port, uuid: node.uuid, security: 'auto' };
+    // 💥 補上 packet_encoding: 'xudp' 以解決 UDP 封包穿透問題
+    const sb: any = { tag: name, type: 'vmess', server: node.server, server_port: node.port, uuid: node.uuid, security: 'auto', packet_encoding: 'xudp' };
     sb.tls = { enabled: node.tls, server_name: node.sni || node.server, insecure: true }; if(node.network === 'ws') sb.transport = { type: 'ws', path: node.wsPath, headers: node.wsHeaders }; node.singboxObj = sb;
     
     const cl: any = { name, type: 'vmess', server: node.server, port: node.port, uuid: node.uuid, alterId: parseInt(config.aid) || 0, cipher: config.scy || 'auto', udp: true, tls: node.tls, servername: node.sni || config.host || node.server, network: node.network };
@@ -250,7 +269,7 @@ function parseVmess(vmessUrl: string): ProxyNode | null {
   } catch (e) { return null; }
 }
 
-// 💥 【全新：解析 Trojan】
+// --- 解析 Trojan ---
 function parseTrojan(urlStr: string): ProxyNode | null {
   try {
     const fakeUrlStr = urlStr.replace(/^[^:]+:\/\//i, 'http://');
@@ -264,7 +283,7 @@ function parseTrojan(urlStr: string): ProxyNode | null {
       server: url.hostname,
       port: parseInt(url.port) || 443,
       password: url.username,
-      tls: true, // Trojan 必定啟用 TLS
+      tls: true,
       sni: params.get('sni') || params.get('peer') || url.hostname,
       skipCertVerify: params.get('allowInsecure') === '1' || params.get('insecure') === '1'
     };
@@ -343,7 +362,6 @@ export async function parseContent(content: string): Promise<ProxyNode[]> {
     else if (l.startsWith('vmess://')) { const n = parseVmess(l); if (n) nodes.push(n); }
     else if (l.startsWith('tuic://')) { const n = parseTuic(l); if (n) nodes.push(n); }
     else if (l.startsWith('anytls://')) { const n = parseAnytls(l); if (n) nodes.push(n); }
-    // 💥 註冊 Trojan 路由
     else if (l.startsWith('trojan://')) { const n = parseTrojan(l); if (n) nodes.push(n); }
   } 
   
