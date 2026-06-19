@@ -1,5 +1,5 @@
 # Complete Project Codebase
-Generated on: Fri Jun 19 13:24:52 UTC 2026
+Generated on: Fri Jun 19 13:27:38 UTC 2026
 
 ## File: scripts/argo-converter.ts
 ````ts
@@ -407,12 +407,12 @@ dns:
     - 8.8.8.8
     - 1.1.1.1
 
-  # 💥 2. 節點專用 DNS
+  # 💥 2. 節點專用 DNS（全部使用 IP 型 DoH，免除任何域名解析，極速啟動）
   proxy-server-nameserver:
     - https://223.5.5.5/dns-query
     - https://8.8.8.8/dns-query
 
-  # 💥 3. 網域特殊分流
+  # 💥 3. 網域特殊分流（國內、蘋果獨立優化）
   nameserver-policy:
     # 國內直連網站
     "rule-set:cn":
@@ -423,12 +423,6 @@ dns:
     "rule-set:apple":
       - https://223.5.5.5/dns-query
       - https://8.8.8.8/dns-query
-
-    # 微信/騰訊服務
-    "rule-set:tencent":
-      - https://8.8.8.8/dns-query
-      - https://1.1.1.1/dns-query
-      - https://doh.pub/dns-query
 
   # 💥 4. 國外網站兜底 DNS（推薦使用海外頂級 IP 型 DoH，自動走代理，防污染且速度最快）
   nameserver:
@@ -596,14 +590,6 @@ rule-providers:
     format: mrs
     url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/apple.mrs"
     path: ./ruleset/apple.mrs
-    interval: 86400
-
-  tencent:
-    type: http
-    behavior: domain
-    format: mrs
-    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/tencent.mrs"
-    path: ./ruleset/tencent.mrs
     interval: 86400
 
   geolocation-non-cn:
