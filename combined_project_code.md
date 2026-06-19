@@ -1,5 +1,5 @@
 # Complete Project Codebase
-Generated on: Fri Jun 19 13:27:58 UTC 2026
+Generated on: Fri Jun 19 13:33:59 UTC 2026
 
 ## File: scripts/argo-converter.ts
 ````ts
@@ -1223,7 +1223,6 @@ export const HTML_PAGE = `
         </div>
       </div>
 
-      <!-- 💥 修正：前台 UI 說明同步更新，融入 ALL- 新名稱改名教學 -->
       <div class="form-group" style="margin-top: 1.5rem;">
         <label for="renameKeywords">節點名稱替換 (選填，多個用 | 分隔)</label>
         <input type="text" id="renameKeywords" placeholder="例如: DEL-[69云]|移动优化-專線">
@@ -1248,7 +1247,7 @@ export const HTML_PAGE = `
       </button>
     </main>
 
-    <!-- ⚡ 轉換結果面板 (QR Code 圖示已美化為 Lucide 標準 QR-Code 規格圖示) -->
+    <!-- ⚡ 轉換結果面板 -->
     <section class="results-wrapper" id="results">
       <div class="panel">
         <div class="panel-header">
@@ -1560,7 +1559,7 @@ export const HTML_PAGE = `
             </div>
             <div class="fav-actions">
               <button class="btn btn-ghost" onclick="event.stopPropagation(); editFav(\${i})">編輯</button>
-              <button class="btn btn-ghost btn-danger" onclick="event.stopPropagation(); deleteFav(\${i})">刪除</button>
+              <button class="btn btn-ghost btn-danger" onclick="event.stopPropagation(); deleteFav(\---\${i})">刪除</button>
             </div>
           </div>\`;
       }).join('');
@@ -1747,7 +1746,7 @@ export const HTML_PAGE = `
       }
     }
 
-    // ⚡ 當勾選狀態改變時，100% 精確同步為所選節點之原生連接埠（無任何 CDN 智慧改寫覆蓋）
+    // ⚡ 當勾選狀態改變時同步為所選節點之原生連接埠
     function syncDefaultPort() {
       const checkedInput = document.querySelector('.vless-chk:checked');
       if (checkedInput) {
@@ -1756,7 +1755,7 @@ export const HTML_PAGE = `
       }
     }
 
-    // ⚡ Argo 隧道一鍵生成 (修正：不重寫 urlInput、第二步只顯示新生成的 Argo 連結)
+    // ⚡ Argo 隧道一鍵生成
     async function generateArgo() {
       const raw = document.getElementById('urlInput').value.trim();
       const checkboxes = document.querySelectorAll('.vless-chk:checked');
@@ -1793,13 +1792,13 @@ export const HTML_PAGE = `
         const hasKv = res.scriptId && res.scriptId.trim() !== '';
         if (hasKv) {
           document.getElementById('argoCurlCmd').value = \`curl -sSL \${host}/argo/sh/\${res.scriptId} | bash\`;
-          document.getElementById('argoWgetCmd').value = \`wget -qO- \${host}/argo/sh/\---\${res.scriptId} | bash\`;
+          document.getElementById('argoWgetCmd').value = \`wget -qO- \${host}/argo/sh/\${res.scriptId} | bash\`;
         } else {
           document.getElementById('argoCurlCmd').value = "請綁定 KV 命名空間以解鎖極簡一鍵命令";
           document.getElementById('argoWgetCmd').value = "或在 wrangler.toml 中設定並部署。";
         }
 
-        // 2. 修正：下方明文文字框只顯示新產生的 Argo 節點，供手動備份複製
+        // 2. 下方明文文字框只顯示新產生的 Argo 節點
         const argoPlainLinks = res.argoNodes.map(x => x.link).join('\\n');
         document.getElementById('argoBase64Sub').value = argoPlainLinks;
 
