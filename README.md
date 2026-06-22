@@ -173,7 +173,7 @@ https://your-worker.workers.dev/<自訂短連結名稱>?target=clash
 | :--- | :--- | :--- |
 | 🚀 | 節點選擇 | 手動切換所有可用節點 |
 | ⚡ | 自動選擇 | 基於 URL Test 自動測速切換延遲最低的節點 |
-| 💬 | AI 服務 | ChatGPT / Gemini / Claude / Copilot 專屬分流 |
+| 💬 | AI 服務 | ChatGPT / Claude / 香港專屬分流 |
 | 🍎 | 蘋果服務 | Apple 相關服務直連 or 代理 (自動依據網路環境切換最快 CDN) |
 | Ⓜ️ | 微軟服務 | Microsoft 服務直連 or 代理 |
 | 🎮 | 遊戲平台 | Steam / Epic / EA / Ubisoft / Blizzard |
