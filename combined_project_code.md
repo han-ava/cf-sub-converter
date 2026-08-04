@@ -1,5 +1,348 @@
 # Complete Project Codebase
-Generated on: Mon Jun 29 10:16:12 UTC 2026
+Generated on: Tue Aug  4 13:40:46 UTC 2026
+
+## File: wrangler.toml
+````toml
+name = "my-sub-converter"
+main = "src/index.ts"
+compatibility_date = "2024-04-01"
+
+[placement]
+mode = "smart"
+
+[[kv_namespaces]]
+binding = "SUB_CACHE"
+id = "KV_ID_PLACEHOLDER"
+
+````
+
+## File: .github/workflows/combine-code.yml
+````yml
+name: Generate All Codebase to MD
+
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - 'combined_project_code.md' # 避免此檔案自身更新引發無限循環
+  workflow_dispatch: # 支援在 GitHub 網頁上手動觸發執行
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Combine All Files into MD
+        run: |
+          OUT_FILE="combined_project_code.md"
+          echo "# Complete Project Codebase" > "$OUT_FILE"
+          echo "Generated on: $(date)" >> "$OUT_FILE"
+          echo "" >> "$OUT_FILE"
+
+          # 遍歷專案內的所有檔案，排除依賴、Git 歷史、打包產物及二進位檔案
+          find . -type f \
+            -not -path "*/node_modules/*" \
+            -not -path "*/.git/*" \
+            -not -path "*/dist/*" \
+            -not -name "package-lock.json" \
+            -not -name "yarn.lock" \
+            -not -name "pnpm-lock.yaml" \
+            -not -name "$OUT_FILE" \
+            -not -name "*.png" \
+            -not -name "*.jpg" \
+            -not -name "*.jpeg" \
+            -not -name "*.gif" \
+            -not -name "*.ico" \
+            -not -name "*.woff*" \
+            -not -name "*.ttf" | while read -r file; do
+              
+              # 取得相對路徑與副檔名
+              rel_path="${file#./}"
+              ext="${file##*.}"
+              
+              # 如果無副檔名，清除變數避免格式混亂
+              if [ "$ext" = "$rel_path" ]; then
+                ext=""
+              fi
+              
+              # 寫入檔案標題
+              echo "## File: $rel_path" >> "$OUT_FILE"
+              # 使用四個反單引號（````）包裹，防止內部程式碼的三個反單引號造成排版衝突
+              echo "\`\`\`\`$ext" >> "$OUT_FILE"
+              cat "$file" >> "$OUT_FILE"
+              echo "" >> "$OUT_FILE"
+              echo "\`\`\`\`" >> "$OUT_FILE"
+              echo "" >> "$OUT_FILE"
+          done
+
+      - name: Commit and Push changes
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add combined_project_code.md
+          
+          if git diff --staged --quiet; then
+            echo "No changes in codebase."
+          else
+            git commit -m "docs: auto-generate complete codebase [skip ci]"
+            git push origin main
+          fi
+
+````
+
+## File: .github/workflows/deploy.yml
+````yml
+# .github/workflows/deploy.yml
+name: Deploy to Cloudflare Workers
+
+on:
+  # 1. 當推送到 main 或 master 分支時自動執行
+  push:
+    branches:
+      - main
+      - master
+  
+  # 2. 保留手動執行按鈕
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    name: Deploy
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+      
+      # 已將 Node.js 環境升級至 Node 24 以消除棄用警告
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          # 暫時移除 cache: 'npm'，避免因缺少 package-lock.json 報錯
+
+      # 替換成相容無鎖定檔的普通安裝（加入 --prefer-offline 稍微加速）
+      - name: Install dependencies
+        run: npm install --prefer-offline
+
+      # 替換 KV ID
+      - name: Inject KV ID from Secrets
+        run: |
+          sed -i 's/KV_ID_PLACEHOLDER/${{ secrets.CF_KV_ID }}/g' wrangler.toml
+
+      # 部署步驟
+      - name: Deploy
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CF_API_TOKEN }}
+          accountId: ${{ secrets.CF_ACCOUNT_ID }}
+
+````
+
+## File: argo.sh
+````sh
+#!/bin/bash
+# Cloudflare Argo Tunnel 一鍵部署腳本 (由 cf-sub-converter 動態配置)
+# 專案網址: https://github.com/sammy0101/cf-sub-converter
+
+GREEN='\033[0;32m'
+RED='\033[0;31m'
+NC='\033[0m'
+
+# 動態變數佔位符 (由 Worker 自動替換)
+NODE_TYPE="{{NODE_TYPE}}"
+VLESS_UUID="{{VLESS_UUID}}"
+VLESS_PATH="{{VLESS_PATH}}"
+VLESS_TYPE="{{VLESS_TYPE}}"
+VLESS_PORT="{{VLESS_PORT}}"
+NODE_NAME="{{NODE_NAME}}"
+TUNNEL_TOKEN="{{TUNNEL_TOKEN}}"
+CUSTOM_DOMAIN="{{CUSTOM_DOMAIN}}"
+VLESS_TLS="{{VLESS_TLS}}"
+ORIGIN_HOST="{{ORIGIN_HOST}}"
+
+echo -e "${GREEN}=== 開始部署 Cloudflare Argo 隧道 (${NODE_NAME}) ===${NC}"
+
+if [ "$EUID" -ne 0 ]; then
+  echo -e "${RED}錯誤: 請使用 root 權限執行此腳本！${NC}"
+  exit 1
+fi
+
+# 1. 安裝 cloudflared
+if ! command -v cloudflared &> /dev/null; then
+    echo "正在下載安裝 cloudflared..."
+    curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o /usr/local/bin/cloudflared
+    chmod +x /usr/local/bin/cloudflared
+else
+    echo "cloudflared 已存在，跳過安裝。"
+fi
+
+SAFE_NODE_NAME=$(echo "$NODE_NAME" | sed 's/[^a-zA-Z0-9]/_/g')
+
+# 2. 雙重保險：VPS 本地執行期自動檢測並修正連接埠與 TLS 加密衝突
+DETECTED_PORT="$VLESS_PORT"
+
+if command -v ss &> /dev/null; then
+    if ! ss -tln | grep -qE ":$VLESS_PORT([[:space:]]|$)"; then
+        echo -e "${RED}警告: 本地轉發埠 $VLESS_PORT 似乎未在本地監聽。正在探測常用埠...${NC}"
+        if ss -tln | grep -qE ":443([[:space:]]|$)"; then
+            echo -e "${GREEN}自動修正成功：偵測到 VPS 本地 Nginx/443 埠正在運行！已將轉發目標自動修正為: 443 埠。${NC}"
+            DETECTED_PORT="443"
+        elif ss -tln | grep -qE ":80([[:space:]]|$)"; then
+            echo -e "${GREEN}自動修正成功：偵測到 VPS 本地 80 埠正在運行！已將轉發目標自動修正為: 80 埠。${NC}"
+            DETECTED_PORT="80"
+        fi
+    fi
+fi
+
+# 智慧探測：自動探測目標連接埠是否啟用 TLS 加密
+DETECTED_TLS="false"
+if curl -s -k --connect-timeout 2 "https://127.0.0.1:$DETECTED_PORT" &>/dev/null; then
+    echo "偵測到本地轉發埠 $DETECTED_PORT 為 TLS 加密連接埠，自動開啟 HTTPS 轉發與 SNI 對齊模式。"
+    DETECTED_TLS="true"
+else
+    echo "偵測到本地轉發埠 $DETECTED_PORT 為明文連接埠，自動開啟 HTTP 轉發模式。"
+fi
+
+LOCAL_URL="http://127.0.0.1:$DETECTED_PORT"
+EXTRA_ARGS=""
+if [ "$DETECTED_TLS" = "true" ]; then
+    LOCAL_URL="https://127.0.0.1:$DETECTED_PORT"
+    EXTRA_ARGS="--no-tls-verify"
+fi
+
+# 重寫 Host Header 與 TLS SNI
+if [ -n "$ORIGIN_HOST" ]; then
+    echo "已自動啟用 HTTP 主機頭部重寫 (Host Header 重寫為: $ORIGIN_HOST)"
+    EXTRA_ARGS="$EXTRA_ARGS --http-host-header $ORIGIN_HOST"
+    if [ "$DETECTED_TLS" = "true" ]; then
+        echo "已自動啟用 TLS SNI 重寫為: $ORIGIN_HOST"
+        EXTRA_ARGS="$EXTRA_ARGS --origin-server-name $ORIGIN_HOST"
+    fi
+fi
+
+# 4. 判斷並執行部署
+if [ -n "$TUNNEL_TOKEN" ]; then
+    echo -e "${GREEN}【固定隧道模式】正在配置服務...${NC}"
+    cloudflared service uninstall &> /dev/null
+    cloudflared service install "$TUNNEL_TOKEN"
+    systemctl daemon-reload
+    systemctl enable cloudflared
+    systemctl restart cloudflared
+    
+    echo -e "\n${GREEN}=== 部署成功 【固定域名模式】 ===${NC}"
+    echo -e "原節點名稱: $NODE_NAME"
+    echo -e "轉發連接埠: $DETECTED_PORT"
+    echo -e "綁定自訂域名: $CUSTOM_DOMAIN"
+    
+    if [ "$NODE_TYPE" = "vless" ]; then
+        FINAL_LINK="vless://$VLESS_UUID@$CUSTOM_DOMAIN:443?encryption=none&security=tls&type=$VLESS_TYPE&host=$CUSTOM_DOMAIN"
+        if [ "$VLESS_TYPE" = "ws" ]; then
+            FINAL_LINK="$FINAL_LINK&path=$VLESS_PATH"
+        fi
+        FINAL_LINK="$FINAL_LINK#$NODE_NAME"
+    else
+        VMESS_JSON="{\"v\":\"2\",\"ps\":\"$NODE_NAME\",\"add\":\"$CUSTOM_DOMAIN\",\"port\":443,\"id\":\"$VLESS_UUID\",\"aid\":0,\"scy\":\"auto\",\"net\":\"$VLESS_TYPE\",\"type\":\"none\",\"host\":\"$CUSTOM_DOMAIN\",\"path\":\"$VLESS_PATH\",\"tls\":\"tls\",\"sni\":\"$CUSTOM_DOMAIN\"}"
+        VMESS_B64=$(echo -n "$VMESS_JSON" | base64 | tr -d '\n')
+        FINAL_LINK="vmess://$VMESS_B64"
+    fi
+    echo -e "\n${GREEN}您的 Argo $NODE_TYPE 訂閱連結為:${NC}"
+    echo -e "${GREEN}$FINAL_LINK${NC}\n"
+else
+    echo -e "${GREEN}【臨時隧道模式】正在啟動 Quick Tunnel...${NC}"
+    systemctl stop cloudflared-argo-${SAFE_NODE_NAME} &> /dev/null
+    
+    cat <<EOF > /etc/systemd/system/cloudflared-argo-${SAFE_NODE_NAME}.service
+[Unit]
+Description=Cloudflare Argo Temporary Tunnel for ${NODE_NAME}
+After=network.target
+
+[Service]
+Type=simple
+User=root
+ExecStart=/usr/local/bin/cloudflared tunnel --url $LOCAL_URL $EXTRA_ARGS
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    systemctl daemon-reload
+    systemctl enable cloudflared-argo-${SAFE_NODE_NAME}
+    systemctl start cloudflared-argo-${SAFE_NODE_NAME}
+    
+    echo "正在等待 Cloudflare 分配臨時域名 (約需 10-15 秒)..."
+    TEMP_DOMAIN=""
+    for i in {1..15}; do
+        sleep 1
+        # 💥 核心修正：改用系統級 journalctl 探測，並搭配 tail -n 1 永遠提取最新活著的網域，徹底解決 530 緩存！
+        TEMP_DOMAIN=$(journalctl -u cloudflared-argo-${SAFE_NODE_NAME} -n 50 --no-pager 2>/dev/null | grep -o 'https://[a-zA-Z0-9-]*\.trycloudflare\.com' | tail -n 1 | cut -d'/' -f3)
+        if [ -n "$TEMP_DOMAIN" ]; then
+            break
+        fi
+    done
+    
+    if [ -n "$TEMP_DOMAIN" ]; then
+        echo -e "${GREEN}獲取臨時域名成功: $TEMP_DOMAIN${NC}"
+        if [ "$NODE_TYPE" = "vless" ]; then
+            FINAL_LINK="vless://$VLESS_UUID@$TEMP_DOMAIN:443?encryption=none&security=tls&type=$VLESS_TYPE&host=$TEMP_DOMAIN"
+            if [ "$VLESS_TYPE" = "ws" ]; then
+                FINAL_LINK="$FINAL_LINK&path=$VLESS_PATH"
+            fi
+            FINAL_LINK="$FINAL_LINK#$NODE_NAME"
+        else
+            VMESS_JSON="{\"v\":\"2\",\"ps\":\"$NODE_NAME\",\"add\":\"$TEMP_DOMAIN\",\"port\":443,\"id\":\"$VLESS_UUID\",\"aid\":0,\"scy\":\"auto\",\"net\":\"$VLESS_TYPE\",\"type\":\"none\",\"host\":\"$TEMP_DOMAIN\",\"path\":\"$VLESS_PATH\",\"tls\":\"tls\",\"sni\":\"$TEMP_DOMAIN\"}"
+            VMESS_B64=$(echo -n "$VMESS_JSON" | base64 | tr -d '\n')
+            FINAL_LINK="vmess://$VMESS_B64"
+        fi
+        
+        echo -e "\n${GREEN}=== 部署成功 【臨時域名模式】 ===${NC}"
+        echo -e "原節點名稱: $NODE_NAME"
+        echo -e "轉發連接埠: $DETECTED_PORT"
+        echo -e "分配的臨時域名: $TEMP_DOMAIN"
+        echo -e "您的臨時 Argo 節點 $NODE_TYPE 連結為 (注意：VPS 重啟或重開服務後域名會刷新):"
+        echo -e "${GREEN}$FINAL_LINK${NC}\n"
+    else
+        echo -e "${RED}錯誤: 獲取臨時域名超時！請執行 'journalctl -u cloudflared-argo-${SAFE_NODE_NAME} -n 30' 檢查日誌。${NC}"
+    fi
+fi
+
+````
+
+## File: package.json
+````json
+{
+  "name": "cf-sub-converter",
+  "version": "3.0.6",
+  "private": true,
+  "scripts": {
+    "deploy": "wrangler deploy",
+    "dev": "wrangler dev",
+    "start": "wrangler dev",
+    "argo": "tsx scripts/argo-converter.ts"
+  },
+  "dependencies": {
+    "js-yaml": "^4.1.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20240208.0",
+    "@types/js-yaml": "^4.0.9",
+    "tsx": "^4.7.1",
+    "typescript": "^5.3.3",
+    "wrangler": "^3.28.1"
+  }
+}
+
+````
 
 ## File: scripts/argo-converter.ts
 ````ts
@@ -318,584 +661,192 @@ main();
 
 ````
 
-## File: Clash_Rules.YAML
-````YAML
-port: 7890
-socks-port: 7891
-mixed-port: 7893
-redir-port: 7892
-tproxy-port: 7895
-allow-lan: true
-bind-address: "*"
-mode: rule
-log-level: info
-ipv6: false
-external-controller: 0.0.0.0:9090
-tcp-concurrent: true
-unified-delay: true
-
-# 啟用 TCP Fast Open，降低建立連線的握手延遲
-fast-open: true
-
-# ==================== 設定檔快取 ====================
-profile:
-  store-selected: true
-  store-fake-ip: true
-
-# ==================== 流量嗅探器 Sniffer ====================
-sniffer:
-  enable: true
-  override-destination: true
-  sniff:
-    QUIC:
-      ports:
-        - 443
-    TLS:
-      ports:
-        - 443
-        - 8443
-    HTTP:
-      ports:
-        - 80
-        - 8080-8880
-      override-destination: true
-  force-domain:
-    - "+.netflix.com"
-    - "+.nflxvideo.net"
-    - "+.amazonaws.com"
-    - "+.media.dssott.com"
-  skip-domain:
-    - "+.apple.com"
-    - "Mijia Cloud"
-    - "dlg.io.mi.com"
-    - "+.oray.com"
-    - "+.sunlogin.net"
-    - "+.push.apple.com"
-  parse-pure-ip: true
-  force-dns-mapping: true
-
-# ==================== 進階 DNS 設定 ====================
-dns:
-  enable: true
-  ipv6: false
-  listen: 0.0.0.0:1053
-  enhanced-mode: fake-ip
-  fake-ip-range: 198.18.0.1/16
-  fake-ip-filter-mode: blacklist
-  respect-rules: true  # 開啟：讓海外 DoH 安全地走代理，防止國內 DNS 污染
-  fake-ip-filter:
-    - '*.lan'
-    - '*.local'
-    - '*.localhost'
-    - '*.home.arpa'
-    - 'captive.apple.com'
-    - 'time.apple.com'
-    - 'time.*.apple.com'
-    - 'time.*.com'
-    - 'time.*.gov'
-    - 'time.*.edu.cn'
-    - 'ntp.*.com'
-    # 讓國內網站與蘋果服務強制返回真實 IP（配合 rule-set 屬性）
-    - 'rule-set:cn'
-    - 'rule-set:private'
-    - 'rule-set:apple'
-  
-  # 💥 1. 基礎 DNS：必須使用傳統實體 IP（不可改動）
-  default-nameserver:
-    - 223.5.5.5
-    - 119.29.29.29
-    - 8.8.8.8
-    - 1.1.1.1
-
-  # 💥 2. 節點專用 DNS（全部使用 IP 型 DoH，免除任何域名解析，極速啟動）
-  proxy-server-nameserver:
-    - https://223.5.5.5/dns-query
-    - https://8.8.8.8/dns-query
-
-  # 💥 3. 網域特殊分流（國內、蘋果獨立優化）
-  nameserver-policy:
-    # 國內直連網站
-    "rule-set:cn":
-      - https://223.5.5.5/dns-query
-      - https://doh.pub/dns-query
-
-    # 蘋果服務
-    "rule-set:apple":
-      - https://223.5.5.5/dns-query
-      - https://8.8.8.8/dns-query
-
-  # 💥 4. 國外網站兜底 DNS（推薦使用海外頂級 IP 型 DoH，自動走代理，防污染且速度最快）
-  nameserver:
-    - https://8.8.8.8/dns-query
-    - https://1.1.1.1/dns-query
-
-# ==================================================
-# 代理節點設定
-# ==================================================
-proxies:
-
-proxy-groups:
-  - name: 🚀 節點選擇
-    type: select
-    proxies:
-      - ⚡ 自動選擇
-      - DIRECT
-
-  - name: ⚡ 自動選擇
-    type: url-test
-    url: http://www.gstatic.com/generate_204
-    interval: 300
-    proxies:
-
-  - name: 💬 AI 服務
-    type: select
-    proxies:
-      - ⚡ 自動選擇
-      - 🚀 節點選擇
-
-  - name: 🍎 蘋果服務
-    type: select
-    proxies:
-      - DIRECT
-      - 🚀 節點選擇
-
-  - name: Ⓜ️ 微軟服務
-    type: select
-    proxies:
-      - DIRECT
-      - 🚀 節點選擇
-
-  - name: 🎮 遊戲平台
-    type: select
-    proxies:
-      - DIRECT
-      - 🚀 節點選擇
-
-  - name: 🌐 非中國
-    type: select
-    proxies:
-      - 🚀 節點選擇
-      - DIRECT
-
-  - name: 🇨🇳 國內服務
-    type: select
-    proxies:
-      - DIRECT
-      - 🚀 節點選擇
-
-  - name: 🏠 私有網絡
-    type: select
-    proxies:
-      - DIRECT
-
-  - name: 🐟 漏網之魚
-    type: select
-    proxies:
-      - 🚀 節點選擇
-      - DIRECT
-
-  - name: 🛑 廣告攔截
-    type: select
-    proxies:
-      - REJECT
-      - DIRECT
-
-# ==================================================
-# 規則集 Rule Providers (採用 MetaCubeX meta 格式優化)
-# ==================================================
-rule-providers:
-  my-ai:
-    type: http
-    behavior: domain
-    format: mrs
-    url: "https://raw.githubusercontent.com/sammy0101/myself/refs/heads/main/geosite_ai_hk_proxy.mrs"
-    path: ./ruleset/my-ai.mrs
-    interval: 86400
-
-  category-ads-all:
-    type: http
-    behavior: domain
-    format: mrs
-    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/category-ads-all.mrs"
-    path: ./ruleset/category-ads-all.mrs
-    interval: 86400
-
-  private:
-    type: http
-    behavior: domain
-    format: mrs
-    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/private.mrs"
-    path: ./ruleset/private.mrs
-    interval: 86400
-
-  private-ip:
-    type: http
-    behavior: ipcidr
-    format: mrs
-    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/private.mrs"
-    path: ./ruleset/private-ip.mrs
-    interval: 86400
-
-  microsoft:
-    type: http
-    behavior: domain
-    format: mrs
-    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/microsoft.mrs"
-    path: ./ruleset/microsoft.mrs
-    interval: 86400
-
-  steam:
-    type: http
-    behavior: domain
-    format: mrs
-    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/steam.mrs"
-    path: ./ruleset/steam.mrs
-    interval: 86400
-
-  epicgames:
-    type: http
-    behavior: domain
-    format: mrs
-    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/epicgames.mrs"
-    path: ./ruleset/epicgames.mrs
-    interval: 86400
-
-  ea:
-    type: http
-    behavior: domain
-    format: mrs
-    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/ea.mrs"
-    path: ./ruleset/ea.mrs
-    interval: 86400
-
-  ubisoft:
-    type: http
-    behavior: domain
-    format: mrs
-    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/ubisoft.mrs"
-    path: ./ruleset/ubisoft.mrs
-    interval: 86400
-
-  blizzard:
-    type: http
-    behavior: domain
-    format: mrs
-    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/blizzard.mrs"
-    path: ./ruleset/blizzard.mrs
-    interval: 86400
-
-  apple:
-    type: http
-    behavior: domain
-    format: mrs
-    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/apple.mrs"
-    path: ./ruleset/apple.mrs
-    interval: 86400
-
-  geolocation-non-cn:
-    type: http
-    behavior: domain
-    format: mrs
-    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/geolocation-!cn.mrs"
-    path: ./ruleset/geolocation-non-cn.mrs
-    interval: 86400
-
-  cn:
-    type: http
-    behavior: domain
-    format: mrs
-    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/cn.mrs"
-    path: ./ruleset/cn.mrs
-    interval: 86400
-
-  cn-ip:
-    type: http
-    behavior: ipcidr
-    format: mrs
-    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/cn.mrs"
-    path: ./ruleset/cn-ip.mrs
-    interval: 86400
-
-# ==================================================
-# 流量路由 Rules
-# ==================================================
-rules:
-  # 1. 廣告與內網
-  - RULE-SET,category-ads-all,🛑 廣告攔截
-  - RULE-SET,private,🏠 私有網絡
-  - RULE-SET,private-ip,🏠 私有網絡,no-resolve
-
-  # 2. 強制代理業務 (專屬 AI 規則集)
-  - RULE-SET,my-ai,💬 AI 服務
-
-  # 3. Microsoft 服務分流
-  - RULE-SET,microsoft,Ⓜ️ 微軟服務
-
-  # 4. 遊戲平台分流
-  - RULE-SET,steam,🎮 遊戲平台
-  - RULE-SET,epicgames,🎮 遊戲平台
-  - RULE-SET,ea,🎮 遊戲平台
-  - RULE-SET,ubisoft,🎮 遊戲平台
-  - RULE-SET,blizzard,🎮 遊戲平台
-
-  # 5. Apple 服務分流
-  - RULE-SET,apple,🍎 蘋果服務
-
-  # 6. 非中國網站：走代理
-  - RULE-SET,geolocation-non-cn,🌐 非中國
-
-  # 7. 中國國內網域與 IP：走直連
-  - RULE-SET,cn,🇨🇳 國內服務
-  - RULE-SET,cn-ip,🇨🇳 國內服務,no-resolve
-
-  # 8. 國外網站兜底：全走代理
-  - MATCH,🐟 漏網之魚
-
-````
-
-## File: README.md
-````md
-# ⚡ CF Sub Converter Pro
-
-基於 Cloudflare Workers 的 Serverless 訂閱轉換工具。擁有全新專業級的無廣告深色 UI，內建智慧過濾、替換、智慧國旗萬國對齊系統，以及 **Argo 隧道一鍵生成器**。一鍵將雜亂的訂閱或節點轉換為 Sing-Box / Clash Meta (Mihomo) / Base64 格式，亦可直接作為第三方轉換網頁（如 `sub-web`）的自定義後端。
-
-[![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/sammy0101/cf-sub-converter)
-
-## 🌟 特性
-
-- 🎨 **專業級 UI** - 全新深色主題設計 (Slate/Zinc)，無廣告、純淨排版，搭配流暢的互動動畫與一鍵掃碼功能。
-- 🌀 **Argo 隧道一鍵生成器** - 
-  - **自動化克隆轉換**：一鍵載入貼入的節點，勾選 VLESS 或 VMess 節點，系統自動拷貝並轉換為對應的 Argo 隧道節點。
-  - **超簡短一鍵 VPS 命令**：結合 Cloudflare KV 雲端動態腳本快取技術與 `curl | bash` 轉換，產生極簡 VPS 一鍵部署命令。
-  - **雙層智慧探測校正**：VPS 部署時自動檢測本地連接埠與 TLS 加密，智慧避免 Proxy Protocol / TLS 握手衝突，並自動重寫 Host Header 與 TLS SNI。
-- 📊 **流量與到期日智慧透傳** - 自動從上游多個機場擷取並**加總多個訂閱的流量（上傳、下載、總量），並自動計算最近的到期時間**，透過標準 `subscription-userinfo` 標頭透傳，完美點亮客戶端的流量條！
-- ⚡ **標準 SubConverter 後端支援** - 內建 **`/sub`** 和 **`/version`** API 路由，回傳與您專案版本和網域動態對齊的標準格式（如 `subconverter v2.5.0 <your-worker-domain> backend`）並全面支援跨域 (CORS)。這使其可以直接做為任何第三方訂閱前端網頁（如 `sub-web`）的自定義後端。
-- 🔍 **智慧過濾與替換** - 
-  - **節點篩選**：支援「僅保留」與「排除」雙向過濾（使用 `|` 隔開，如 `HK|TW` 或 `5x`）。後端內建字元智慧相容技術，自動將 `x`、`X`、全形 `ｘ` 與數學乘號 `×` 進行互通匹配。
-  - **名稱替換**：支援極簡統一的替換與刪除語法。刪除請用 `DEL-關鍵字`，替換請用 `尋找-替換`。
-  - **💥 首創 `ALL-` 一鍵統改名稱**：若要將所有節點統一改名，請用 `ALL-新名稱`（例如 `ALL-JP`）。此功能配合我們的「智慧國旗」與「去重自動編號」系統，能將所有節點完美格式化為：`🇯🇵 JP`、`🇯🇵 JP_2`、`🇯🇵 JP_3` 等極致工整的排版。
-- 🚩 **自動國旗與萬國標註** - 
-  - **國旗智慧分群與 22 國黃金多梯隊排序**：自動將相同國家的節點緊密歸類在一起。並配有內建的黃金梯隊排序（港 🇭🇰 ➔ 台 🇹🇼 ➔ 日 🇯🇵 ➔ 星 🇸🇬 ➔ 美 🇺🇸 ➔ 英 🇬🇧 ➔ 澳 🇦🇺 等 22 個熱門地區），且會**自動將帶有 🇺🇳 標誌的臨時 Argo 佔位符或提醒節點置於列表最頂部（排在最前面）**，保證最流暢直觀的訂閱體驗。
-  - 若遇到無對應國家的節點（如流量提示、機場官網），自動補上 🇺🇳 (聯合國國旗)，達成 100% 工整排版。
-- 🔌 **全協議支援** - 完美解析 `Trojan`, `VLESS`, `VMess`, `Shadowsocks`, `Hysteria2 (hy2)`, `TUIC`, `AnyTLS` 等主流與新興協議。
-- 🚀 **極速路由與 DNS** - 轉換出的配置檔內建頂級路由規則：
-  - **Clash Meta**：流量嗅探 (Sniffer)、Fake-IP、TProxy 軟路由最佳化、中外 DNS 智慧解析。
-  - **Sing-Box**：Mixed TUN 堆疊優化、獨立 DNS Kay、蘋果/國內服務精準直連。
-- ☁️ **雲端與配置同步** - 運行在 Cloudflare 邊緣網絡，零成本運維。生成短連結時，**系統會將「資料來源、過濾規則、替換規則」打包存入 KV**，客戶端直接更新短連結即可自動套用所有規則，不需在客戶端 URL 後手動外掛複雜參數。
-
-<img width="2559" height="1204" alt="螢幕擷取畫面 2026-06-29 181504" src="https://github.com/user-attachments/assets/c412badb-14ae-4a2c-937f-bd5ce3444b77" />
-
-## 🚀 部署教學
-
-### 方法一：一鍵快速部署 (最推薦、最簡單)
-
-點擊本說明文件上方的 **Deploy to Cloudflare Workers** 藍色按鈕。
-
-* **零設定自動託管**：Cloudflare 網頁部署精靈會引導您登入，並**在背景全自動為您建立並對接好所需的 KV 命名空間（`SUB_CACHE`）**，完全不需要您手動至儀表板綁定。
-* **自建 CI/CD (Workers Builds)**：Cloudflare 會在您的 GitHub 下自動建立此專案的複製倉庫。未來您只要在 GitHub 修改並 `git push`，Cloudflare 就會自動在端點編譯部署，**此模式完全不需要設定 GitHub Secrets 密鑰**。
-
----
-
-### 方法二：手動 Fork 本項目並使用 GitHub Actions 自動部署 (需要設定 Secrets)
-
-如果您選擇**不使用**一鍵部署按鈕，而是打算手動 Fork 本項目，並利用專案內建的 GitHub Actions 自動進行部署，請按照以下步驟操作：
-
-1. **Fork 本項目**：
-   請先點擊本專案右上角的 **`Fork`** 按鈕，將專案複製一份到您自己的 GitHub 帳號下。
-
-2. **設定 GitHub Repository Secrets**：
-   前往您 GitHub 專案頁面，依次點擊 **`Settings`** -> **`Secrets and variables`** -> **`Actions`** -> **`New repository secret`**，並添加以下三個密鑰，否則 GitHub 部署工作流會報錯：
-   * **`CF_API_TOKEN`**：您的 Cloudflare API 權杖。
-     * *獲取方式*：Cloudflare 首頁 -> 我的個人資料 -> API 權杖 -> 建立具有「編輯 Workers 與 KV」權限的權杖。
-   * **`CF_ACCOUNT_ID`**：您的 Cloudflare 帳戶 ID（可在 Worker 頁面右側找到）。
-   * **`CF_KV_ID`**：您在 Cloudflare 上建立的 KV 命名空間 ID。
-     * *獲取方式*：Cloudflare 儀表板 -> 鍵值儲存 (KV) -> 建立一個空間（例如 `SUB_CACHE`）並複製其 ID。
-
-3. **Actions 執行部署**：
-   設定完成後，當您對專案進行任何修改並推送（Push），或手動在倉庫的 **`Actions`** 頁面觸發 **`Deploy to Cloudflare Workers`** 工作流，GitHub 就會全自動為您編譯並完成部署。
-
----
-
-### 方法三：本地手動編譯部署 (Wrangler CLI)
-
-1. **克隆本專案**：
-   ```bash
-   git clone https://github.com/sammy0101/cf-sub-converter.git
-   cd cf-sub-converter
-   ```
-
-2. **安裝專案依賴**：
-   ```bash
-   npm install
-   ```
-
-3. **創建並綁定 KV 命名空間**：
-   ```bash
-   wrangler kv:namespace create SUB_CACHE
-   ```
-   *執行後，將終端機回傳的配置代碼（包含 binding 和 id），複製並貼上取代您 `wrangler.toml` 中的 `KV_ID_PLACEHOLDER` 佔位符。*
-
-4. **發布至 Cloudflare**：
-   ```bash
-   wrangler deploy
-   ```
-
-## 📖 使用指南
-
-訪問你部署完成的 Workers 網址即可進入視覺化面板。
-
-### 面板功能
-- **資料來源設定**：支援貼上機場訂閱連結、Base64 字串，或直接貼上多行節點 URI。支援多個訂閱地址換行輸入，系統將保持原始順序進行合併。
-- **Argo 隧道一鍵生成**：
-  1. 在資料來源貼入您的機場訂閱或明文連結。
-  2. 點選「解析並載入目前輸入的 VLESS / VMess 節點」，介面會自動拉出節點列表。
-  3. 勾選您要轉換的節點，系統會自動在下方同步該節點的原生埠號。
-  4. 設定 VPS 本地對接連接埠，點選「一鍵生成 Argo 節點與一鍵部署腳本」。
-  5. 複製產生的簡短 `curl` 或 `wget` 指令至您的 VPS 上執行。
-  6. 腳本成功執行後：
-     * **臨時域名模式**：請在您的 VPS 終端機內直接複製最終生成、連通的 VLESS/VMess 節點。
-     * **固定域名模式**：新生成的 Argo 節點（原節點名末尾加 `_Argo` 後綴）會直接顯示在網頁下方的明文列表框中，方便拷貝。
-- **過濾與替換**：
-  - **僅保留關鍵字**：只留下符合關鍵字的節點。例如輸入 `HK|TW`。
-  - **排除關鍵字**：過濾掉垃圾或高倍率節點。例如輸入 `5x`（系統會自動相容 `5×` 乘號）。
-  - **節點名稱替換**：刪除寫 `DEL-關鍵字`，替換寫 `尋找-替換`。若要一鍵重命名所有節點，請用 `ALL-新名稱`。多組規則用 `|` 隔開。
-- **配置收藏**：常用的節點與過濾替換規則可以儲存到「已儲存的配置」區塊。卡片上會直觀地以綠色 `保`、紅色 `排` 和藍色 `替` 標籤顯示你所設定的規則，點擊卡片即可自動載入所有設定。
-
----
-
-### 🔑 Cloudflare 固定隧道 (免費) 申請與配置教學
-
-臨時隨機隧道（trycloudflare）雖然完全免設定，但缺點是每次 VPS 重啟或服務重開時，網域名稱都會改變。如果您想要擁有**永久固定不變的網域**，請依照以下步驟免費建立 Cloudflare 固定隧道：
-
-#### 準備工作：
-1. 一個 Cloudflare 帳戶。
-2. 一個已成功託管（啟用橘色雲端 CDN）在您 Cloudflare 帳戶下的自訂域名（例如：`yourdomain.com`）。
-
-#### 申請與設定步驟：
-
-1. **進入 Zero Trust 面板**：
-   登入 Cloudflare 儀表板，點擊左側選單中的 **`Zero Trust`**（首次進入需要點擊訂閱，選擇 Free 0元計劃並綁定卡片，完全不會扣款）。
-
-2. **建立 Tunnel 隧道**：
-   在 Zero Trust 介面中，點擊左側選單的 **`Networks`** -> **`Tunnels`**，然後點擊 **`Create a Tunnel`**。
-
-3. **選擇安裝方式並複製 Token**：
-   * 選擇 **`cloudflared`**，並為您的隧道取個名字（例如 `my-vps-tunnel`），點擊 Next。
-   * 在安裝指令頁面，您會看到一串安裝指令。**請注意指令最末端的一長串 Base64 字元（這就是您的 Tunnel Token）**，將其複製下來，例如：
-     `eyJhIjoiY2... (約 100~200 字元的超長字串)`
-
-4. **配置域名路由（Public Hostname）**：
-   * 在同一個頁面下方（或點擊已建立隧道的 Edit -> Public Hostname 標籤），點擊 **`Add a public hostname`**。
-   * **Domain**：填入您要分配給此節點的子網域，例如：`vless.yourdomain.com`。
-   * **Service**：
-     * **Type（服務類型）**：
-       * 如果您在網頁端對接的是 TLS 埠（如 **`8443`** 或 **`443`**）➔ 選擇 **`HTTPS`**。
-       * 如果對接的是無加密明文埠（如 **`27110`** 或 **`31297`**）➔ 選擇 **`HTTP`**。
-     * **URL**：輸入本地地址與埠，例如：`127.0.0.1:8443` 或 `127.0.0.1:27110`。
-   * **💥 極致關鍵（HTTPS 模式必填）**：
-     如果您在 Type 選擇了 `HTTPS`，請展開下方的 **`Additional HTTP settings`**，**並將 `No TLS Verify` 選項開啟（設定為 Enabled）**！這是為了允許隧道跳過 VPS 本地自我簽署證書的安全驗證，否則會出現 `530` 錯誤。
-   * 設定完成後，點擊 **`Save hostname`** 保存。
-
-5. **在網頁端生成固定隧道指令**：
-   回到您部署的 **SubConverter Pro** 網頁：
-   * 本地監聽連接埠：填入您 VPS 的真實埠（例如 `8443` 或 `27110`）。
-   * Cloudflare Tunnel Token：貼上您剛才複製的超長 Token。
-   * 自訂綁定域名：輸入您剛才在第 4 步綁定的網域（如 `vless.yourdomain.com`）。
-   * 點擊生成指令，貼上 VPS 執行。您的固定安全隧道即告部署完成，節點將永遠不變！
-
----
-
-### API 調用與外部前端對接
-
-#### 1. 當作標準 SubConverter 後端使用
-本專案內建對應 `/sub` 與 `/version` 端點。你可以打開任何一個開源的 `sub-web` 網頁（例如：`sub.id9.cc` 或其他的轉換前端），並在**「後端地址 (Backend URL)」**中，填入你的 Cloudflare Workers 網址：
-```text
-https://your-worker.workers.dev
-```
-
-#### 2. 自訂 API 參數格式
-你也可以直接透過 URL 參數進行手動調用與過濾：
-
-```http
-# 轉換原始連結 + 僅保留港台 + 排除 5x 節點 + 移除 [69云] 廣告 + 將 移动优化 替換為 專線
-https://your-worker.workers.dev/sub?url=<URL編碼後的訂閱連結>&target=singbox&include=HK|TW&exclude=5x&rename=DEL-[69云]|移动优化-專線
-
-# 轉換短連結 + 自動套用在雲端 KV 中存好的過濾與名稱替換規則
-https://your-worker.workers.dev/<自訂短連結名稱>?target=clash
-```
-
-## 🛡️ 內建分流規則群組
-
-轉換出的 Sing-Box / Clash 配置文件預設包含以下精心設計的分流群組，開箱即用：
-
-| 圖標 | 群組名稱 | 路由說明 |
-| :--- | :--- | :--- |
-| 🚀 | 節點選擇 | 手動切換所有可用節點 |
-| ⚡ | 自動選擇 | 基於 URL Test 自動測速切換延遲最低的節點 |
-| 💬 | AI 服務 | ChatGPT / Claude / 香港專屬分流 |
-| 🍎 | 蘋果服務 | Apple 相關服務直連 or 代理 (自動依據網路環境切換最快 CDN) |
-| Ⓜ️ | 微軟服務 | Microsoft 服務直連 or 代理 |
-| 🎮 | 遊戲平台 | Steam / Epic / EA / Ubisoft / Blizzard |
-| 🌐 | 非中國 | 全球主流網站 (Google, Telegram 等) |
-| 🇨🇳 | 國內服務 | 中國大陸 IP 與網域自動直連 (精準 IP 解析) |
-| 🏠 | 私有網絡 | 區域網路 (LAN / 內網) 直連 |
-| 🛑 | 廣告攔截 | 阻擋常見廣告、追蹤器 (AdBlock) |
-| 🐟 | 漏網之魚 | Final Match (未匹配規則的最終去向) |
-
-## 📁 專案結構
-
-```text
-cf-sub-converter/
-├── src/
-│   ├── index.ts          # Worker 主入口路由、並發請求控制、智慧過濾、雲端配置同步與 /version 後端模擬
-│   ├── constants.ts      # 專業版 HTML 視圖模板與遠端規則常數 (含過濾、收藏與 Argo 隧道 UI)
-│   ├── parser.ts         # 節點解析器 (支援 Trojan, AnyTLS, TUIC, Hy2 等)
-│   ├── generator.ts      # 格式生成器 (映射為 Sing-Box / Clash Meta / Base64 / 原始連結明文導出)
-│   ├── utils.ts          # Base64 淨化與智慧國旗自動標註系統 (豪華全球版 + 萬國 🇺🇳 對齊)
-│   └── types.ts          # TypeScript 類型定義
-├── argo.sh               # 上傳至 GitHub 倉庫的一鍵 VPS 隧道部署通用腳本
-├── Sing-Box_Rules.JSON   # 遠端 Sing-Box 路由規則範本 (極速混合堆疊版)
-├── Clash_Rules.YAML      # 遠端 Clash Meta 路由規則範本 (軟路由透明代理版)
-└── wrangler.toml         # Cloudflare Workers 設定檔
-```
-
-## ⚠️ 免責聲明
-
-本專案僅供技術交流與網路安全學習研究使用，不提供任何節點服務。請使用者務必遵守當地法律法規，勿將其用於任何違法用途，開發者對使用者的行為不承擔任何責任。
-
-````
-
-## File: src/types.ts
+## File: src/utils.ts
 ````ts
-export interface Env {
-  SUB_CACHE: KVNamespace;
+import { ProxyNode } from "./types";
+
+// --- 完美 Base64 解碼 ---
+export function safeBase64Decode(str: string): string {
+  try {
+    let b64 = str.replace(/-/g, '+').replace(/_/g, '/').replace(/[^A-Za-z0-9+/=]/g, '');
+    while (b64.length % 4) b64 += '=';
+    
+    const binaryStr = atob(b64);
+    const bytes = new Uint8Array(binaryStr.length);
+    for (let i = 0; i < binaryStr.length; i++) {
+      bytes[i] = binaryStr.charCodeAt(i);
+    }
+    return new TextDecoder('utf-8').decode(bytes);
+  } catch (e) {
+    return "";
+  }
 }
 
-export interface ProxyNode {
-  type: string;
-  name: string;
-  server: string;
-  port: number;
-  uuid?: string;
-  password?: string;
-  cipher?: string;
-  udp?: boolean;
-  tls?: boolean;
-  sni?: string;
-  alpn?: string[];
-  fingerprint?: string;
-  flow?: string;
-  network?: string;
-  wsPath?: string;
-  wsHeaders?: Record<string, string>;
-  reality?: { publicKey: string; shortId: string };
-  obfs?: string;
-  obfsPassword?: string;
-  skipCertVerify?: boolean;
-  singboxObj?: any; 
-  clashObj?: any;
-  congestion_control?: string;
-  udp_relay_mode?: string;
+export function utf8ToBase64(str: string): string {
+  try {
+    return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g,
+        function toSolidBytes(match, p1) {
+            return String.fromCharCode(parseInt(p1, 16));
+        }));
+  } catch (e) {
+    return btoa(str);
+  }
+}
+
+export function tryDecodeURIComponent(str: string): string {
+  try {
+    return decodeURIComponent(str);
+  } catch (e) {
+    return str;
+  }
+}
+
+// --- 自動加入國旗 Emoji 的智慧辨識系統 ---
+export function addFlag(name: string): string {
+  if (/[\uD83C][\uDDE6-\uDDFF][\uD83C][\uDDE6-\uDDFF]/.test(name)) {
+    return name;
+  }
+
+  const upper = name.toUpperCase();
+
+  const isMatch = (codes: string, keywords: string) => {
+    const codeRegex = new RegExp(`(?:^|[^A-Z])(${codes})(?![A-Z])`);
+    const keywordRegex = new RegExp(`(${keywords})`);
+    return codeRegex.test(upper) || keywordRegex.test(upper);
+  };
+
+  if (isMatch('HK|HKG', '香港|深港|HONGKONG|HONG KONG')) return "🇭🇰 " + name;
+  if (isMatch('TW|TWN|TPE', '台灣|台湾|台北|新北|彰化')) return "🇹🇼 " + name;
+  if (isMatch('JP|JPN|TYO|OSA|NRT|HND|KIX', '日本|东京|大阪|埼玉|慢日|川日|JAPAN')) return "🇯🇵 " + name;
+  if (isMatch('SG|SGP|SIN', '新加坡|狮城|SINGAPORE')) return "🇸🇬 " + name;
+  if (isMatch('US|USA|LAX|SFO|SJC|SEA|NYC|JFK|EWR', '美国|美利堅|洛杉矶|圣何塞|硅谷|波特兰|西雅图|AMERICA|UNITED STATES')) return "🇺🇸 " + name;
+  if (isMatch('KR|KOR|ICN|SEL', '韩国|首尔|KOREA')) return "🇰🇷 " + name;
+  if (isMatch('UK|GB|GBR|LHR|LON', '英国|英國|伦敦|BRITAIN|ENGLAND')) return "🇬🇧 " + name;
+  if (isMatch('NL|NLD|AMS', '荷兰|荷蘭|阿姆斯特丹|NETHERLANDS')) return "🇳🇱 " + name;
+  if (isMatch('BR|BRA|SAO', '巴西|圣保罗|聖保羅|BRAZIL')) return "🇧🇷 " + name;
+  if (isMatch('EG|EGY|CAI', '埃及|开罗|開羅|EGYPT')) return "🇪🇬 " + name;
+  if (isMatch('VN|VNM|HAN|SGN', '越南|河内|河內|西贡|VIETNAM')) return "🇻🇳 " + name;
+  
+  if (isMatch('MO|MAC|MFM', '澳門|澳门')) return "🇲🇴 " + name;
+  if (isMatch('KH|KHM|PNH', '柬埔寨|金边|金邊|CAMBODIA')) return "🇰🇭 " + name;
+  if (isMatch('GR|GRC|ATH', '希腊|希臘|雅典|GREECE')) return "🇬🇷 " + name;
+  if (isMatch('PL|POL|WAW', '波兰|波蘭|华沙|華沙|POLAND')) return "🇵🇱 " + name;
+  
+  if (isMatch('IT|ITA|MIL', '意大利|義大和|米兰|羅馬|ITALY')) return "🇮🇹 " + name;
+  if (isMatch('ES|ESP|MAD', '西班牙|马德里|巴塞隆納|SPAIN')) return "🇪🇸 " + name;
+  if (isMatch('DE|DEU|FRA', '德国|德國|法兰克福|GERMANY')) return "🇩🇪 " + name;
+  if (isMatch('FR|FRA|CDG', '法国|法國|巴黎|FRANCE')) return "🇫🇷 " + name;
+  if (isMatch('RU|RUS', '俄罗斯|俄羅斯|莫斯科|RUSSIA')) return "🇷🇺 " + name;
+  if (isMatch('CH|CHE|ZRH', '瑞士|苏黎世|日内瓦|SWITZERLAND')) return "🇨🇭 " + name;
+  if (isMatch('SE|SWE|ARN', '瑞典|斯德哥尔摩|SWEDEN')) return "🇸🇪 " + name;
+  if (isMatch('NO|NOR|OSL', '挪威|奥斯陆|NORWAY')) return "🇳🇴 " + name;
+  if (isMatch('FI|FIN|HEL', '芬兰|芬蘭|赫尔辛基|FINLAND')) return "🇫🇮 " + name;
+  if (isMatch('DK|DNK|CPH', '丹麦|丹麥|哥本哈根|DENMARK')) return "🇩🇰 " + name;
+  if (isMatch('IE|IRL|DUB', '爱玩|愛爾蘭|都柏林|IRELAND')) return "🇮🇪 " + name;
+  if (isMatch('PT|PRT|LIS', '葡萄牙|里斯本|PORTUGAL')) return "🇵🇹 " + name;
+  if (isMatch('TH|THA|BKK', '泰国|泰國|曼谷|THAILAND')) return "🇹🇭 " + name;
+  if (isMatch('MY|MYS|KUL', '马来西亚|馬來西亞|吉隆坡|MALAYSIA')) return "🇲🇾 " + name;
+  if (isMatch('PH|PHL|MNL', '物理宾|物理賓|马尼拉|PHILIPPINES')) return "🇵🇭 " + name;
+  if (isMatch('ID|IDN|CGK', '印度尼西亚|印尼|雅加达|INDONESIA')) return "🇮🇩 " + name;
+  if (isMatch('TR|TUR|IST', '土耳其|伊斯坦堡|TURKEY')) return "🇹🇷 " + name;
+  if (isMatch('IN|IND|BOM', '印度|孟买|INDIA')) return "🇮🇳 " + name;
+  if (isMatch('CA|CAN|YVR|YYZ', '加拿大|多伦多|温哥华|CANADA')) return "🇨🇦 " + name;
+  if (isMatch('AU|AUS|SYD|MEL', '澳大利亚|澳洲|悉尼|墨本|AUSTRALIA')) return "🇦🇺 " + name;
+  if (isMatch('CN|CHN', '中国|回国|国内|北京|上海|廣州|深圳|CHINA')) return "🇨🇳 " + name;
+  if (isMatch('NZ|NZL|AKL', '新西兰|紐西蘭|奥克兰|NEW ZEALAND')) return "🇳🇿 " + name;
+  if (isMatch('AE|ARE|DXB', '阿联酋|迪拜|杜拜|UAE')) return "🇦🇪 " + name;
+  if (isMatch('SA|SAU|RUH', '沙特|沙烏地阿拉伯|利雅德|SAUDI')) return "🇸🇦 " + name;
+  if (isMatch('IL|ISR|TLV', '以色列|特拉维夫|ISRAEL')) return "🇮🇱 " + name;
+  if (isMatch('KZ|KAZ', '哈萨克斯坦|哈薩克|KAZAKHSTAN')) return "🇰🇿 " + name;
+  if (isMatch('PK|PAK', '巴基斯坦|PAKISTAN')) return "🇵🇰 " + name;
+  if (isMatch('ZA|ZAF|CPT', '南非|开普敦|SOUTH AFRICA')) return "🇿🇦 " + name;
+
+  return "🇺🇳 " + name;
+}
+
+// 按國旗進行歸類排序（🇺🇳 置於最頂部，其餘依黃金順序排布）
+export function groupNodesByFlag(nodes: ProxyNode[]): ProxyNode[] {
+  const groups = new Map<string, ProxyNode[]>();
+  const flagOrder: string[] = [];
+  
+  for (const node of nodes) {
+    const flaggedName = addFlag(node.name || 'node');
+    
+    // 提取國旗 Emoji (包含 surrogate pairs)
+    let flag = '';
+    const match = flaggedName.match(/^([\uD83C][\uDDE6-\uDDFF][\uD83C][\uDDE6-\uDDFF])/);
+    if (match) {
+      flag = match[1];
+    } else {
+      flag = '🇺🇳';
+    }
+    
+    if (!groups.has(flag)) {
+      groups.set(flag, []);
+      flagOrder.push(flag);
+    }
+    groups.get(flag)!.push(node);
+  }
+  
+  // 黃金地區排序順序
+  const standardOrder = [
+    '🇭🇰', '🇹🇼', '🇯🇵', '🇸🇬', '🇰🇷',  // 1. 亞太一線核心
+    '🇺🇸', '🇬🇧', '🇨🇦', '🇦🇺',        // 2. 歐美主流大戶
+    '🇲🇴', '🇨🇳', '🇹🇭', '🇻🇳', '🇲🇾', '🇵🇭', '🇮🇩', // 3. 特區與東南亞
+    '🇩🇪', '🇫🇷', '🇳🇱', '🇷🇺', '🇮🇳', '🇹🇷'  // 4. 歐洲與全球主流
+  ];
+  
+  flagOrder.sort((a, b) => {
+    // 🇺🇳 (聯合國國旗/臨時佔位符/官網提示) 優先排序在最前面
+    if (a === '🇺🇳' && b !== '🇺🇳') return -1;
+    if (b === '🇺🇳' && a !== '🇺🇳') return 1;
+    
+    const idxA = standardOrder.indexOf(a);
+    const idxB = standardOrder.indexOf(b);
+    
+    if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+    if (idxA !== -1) return -1;
+    if (idxB !== -1) return 1;
+    
+    return a.localeCompare(b);
+  });
+  
+  const result: ProxyNode[] = [];
+  for (const flag of flagOrder) {
+    result.push(...groups.get(flag)!);
+  }
+  return result;
+}
+
+// --- 去重複命名與還原機場預設排序 ---
+export function deduplicateNodeNames(nodes: ProxyNode[]): ProxyNode[] {
+  const seenKey = new Set<string>();
+  const nameCount = new Map<string, number>();
+
+  return nodes.filter(node => {
+    const key = `${node.server}:${node.port}:${node.uuid || node.password || ''}`;
+
+    if (seenKey.has(key)) return false;
+    seenKey.add(key);
+
+    let baseName = node.name || 'node';
+    baseName = addFlag(baseName);
+
+    if (!nameCount.has(baseName)) {
+      nameCount.set(baseName, 1);
+      node.name = baseName;
+    } else {
+      const count = nameCount.get(baseName)! + 1;
+      nameCount.set(baseName, count);
+      // 💥 修正：將原本的 " (count)" 格式修改為 "_count"
+      node.name = `${baseName}_${count}`;
+    }
+    
+    if (node.singboxObj) node.singboxObj.tag = node.name;
+    if (node.clashObj) node.clashObj.name = node.name;
+
+    return true;
+  });
 }
 
 ````
@@ -1891,344 +1842,6 @@ export const HTML_PAGE = `
 
 ````
 
-## File: src/generator.ts
-````ts
-import yaml from 'js-yaml';
-import { ProxyNode } from './types';
-import { REMOTE_CONFIG } from './constants';
-import { utf8ToBase64 } from './utils';
-
-// 💥 新增：導出明文連結列表（一列一條節點，多筆換行）
-export function toRawLinks(nodes: ProxyNode[]): string {
-  const links = nodes.map(node => {
-    try {
-      if (node.type === 'vless') {
-        const params = new URLSearchParams();
-        params.set('security', node.reality ? 'reality' : (node.tls ? 'tls' : 'none'));
-        params.set('type', node.network || 'tcp');
-        if (node.flow) params.set('flow', node.flow);
-        if (node.sni) params.set('sni', node.sni);
-        if (node.fingerprint) params.set('fp', node.fingerprint);
-        if (node.reality) { params.set('pbk', node.reality.publicKey); params.set('sid', node.reality.shortId); }
-        if (node.network === 'ws') { if (node.wsPath) params.set('path', node.wsPath); if (node.wsHeaders?.Host) params.set('host', node.wsHeaders.Host); }
-        return `vless://${node.uuid}@${node.server}:${node.port}?${params.toString()}#${encodeURIComponent(node.name)}`;
-      }
-      if (node.type === 'hysteria2') {
-        const params = new URLSearchParams();
-        if (node.sni) params.set('sni', node.sni);
-        if (node.obfs) { params.set('obfs', node.obfs); if (node.obfsPassword) params.set('obfs-password', node.obfsPassword); }
-        if (node.skipCertVerify) params.set('insecure', '1');
-        return `hysteria2://${node.password}@${node.server}:${node.port}?${params.toString()}#${encodeURIComponent(node.name)}`;
-      }
-      if (node.type === 'vmess') {
-        const vmessObj = {
-          v: "2", ps: node.name, add: node.server, port: node.port, id: node.uuid,
-          aid: node.clashObj?.alterId || 0, scy: "auto", net: node.network, type: "none",
-          host: node.wsHeaders?.Host || "", path: node.wsPath || "",
-          tls: node.tls ? "tls" : "", sni: node.sni || ""
-        };
-        return 'vmess://' + utf8ToBase64(JSON.stringify(vmessObj));
-      }
-      if (node.type === 'shadowsocks') {
-        const method = encodeURIComponent(node.cipher || '');
-        const pass = encodeURIComponent(node.password || '');
-        const params = new URLSearchParams();
-        if (node.tls) {
-            params.set('security', 'tls');
-            if (node.sni) params.set('sni', node.sni);
-            if (node.alpn) params.set('alpn', node.alpn.join(','));
-            if (node.fingerprint) params.set('fp', node.fingerprint);
-            params.set('type', node.network || 'tcp');
-        }
-        if (node.clashObj && node.clashObj.plugin && !node.tls) {
-             const pluginOpts = node.clashObj['plugin-opts'];
-             const optStr = pluginOpts ? ';' + new URLSearchParams(pluginOpts).toString().replace(/&/g, ';') : '';
-             params.set('plugin', node.clashObj.plugin + optStr);
-        }
-        const query = params.toString();
-        return `ss://${method}:${pass}@${node.server}:${node.port}${query ? '/?' + query : ''}#${encodeURIComponent(node.name)}`;
-      }
-      if (node.type === 'tuic') {
-        const params = new URLSearchParams();
-        if (node.sni) params.set('sni', node.sni);
-        if (node.congestion_control) params.set('congestion_control', node.congestion_control);
-        if (node.udp_relay_mode) params.set('udp_relay_mode', node.udp_relay_mode);
-        if (node.alpn && node.alpn.length > 0) params.set('alpn', node.alpn.join(','));
-        if (node.skipCertVerify) params.set('allow_insecure', '1');
-        
-        const uuid = node.uuid || '';
-        const password = node.password || '';
-        return `tuic://${uuid}:${password}@${node.server}:${node.port}?${params.toString()}#${encodeURIComponent(node.name)}`;
-      }
-      if (node.type === 'anytls') {
-        const params = new URLSearchParams();
-        params.set('security', 'tls');
-        if (node.sni) params.set('sni', node.sni);
-        params.set('insecure', node.skipCertVerify ? '1' : '0');
-        params.set('allowInsecure', node.skipCertVerify ? '1' : '0');
-        if (node.fingerprint) params.set('fp', node.fingerprint);
-        if (node.alpn && node.alpn.length > 0) params.set('alpn', node.alpn.join(','));
-        params.set('type', 'tcp'); 
-        return `anytls://${node.password}@${node.server}:${node.port}?${params.toString()}#${encodeURIComponent(node.name)}`;
-      }
-      if (node.type === 'trojan') {
-        const params = new URLSearchParams();
-        if (node.sni) params.set('sni', node.sni);
-        if (node.skipCertVerify) params.set('allowInsecure', '1');
-        return `trojan://${node.password}@${node.server}:${node.port}?${params.toString()}#${encodeURIComponent(node.name)}`;
-      }
-      return null;
-    } catch { return null; }
-  }).filter(l => l !== null);
-  return links.join('\n');
-}
-
-// 導出 Base64 訂閱
-export function toBase64(nodes: ProxyNode[]) {
-  const rawLinks = toRawLinks(nodes);
-  return utf8ToBase64(rawLinks);
-}
-
-async function fetchWithUA(url: string) {
-  const resp = await fetch(`${url}?t=${Math.random()}`, {
-    headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' }
-  });
-  if (!resp.ok) throw new Error(`Template fetch failed: ${resp.status}`);
-  return await resp.text();
-}
-
-export async function toSingBoxWithTemplate(nodes: ProxyNode[]) {
-  const text = await fetchWithUA(REMOTE_CONFIG.singbox);
-  let config = JSON.parse(text);
-  const outbounds = nodes.map(n => JSON.parse(JSON.stringify(n.singboxObj)));
-  const nodeTags = outbounds.map((o:any) => o.tag);
-  
-  if (!Array.isArray(config.outbounds)) config.outbounds = [];
-  config.outbounds.push(...outbounds);
-  config.outbounds.forEach((out: any) => {
-    if (out.type === 'selector' || out.type === 'urltest') {
-      if (!Array.isArray(out.outbounds)) out.outbounds = [];
-      nodeTags.forEach(tag => { if (!out.outbounds.includes(tag)) out.outbounds.push(tag); });
-    }
-  });
-  return JSON.stringify(config, null, 2);
-}
-
-export async function toClashWithTemplate(nodes: ProxyNode[]) {
-  const text = await fetchWithUA(REMOTE_CONFIG.clash);
-  let config: any = yaml.load(text);
-  
-  const proxies = nodes.map(n => {
-    const obj = JSON.parse(JSON.stringify(n.clashObj));
-    Object.keys(obj).forEach(key => obj[key] === undefined && delete obj[key]);
-    return obj;
-  }); 
-  const proxyNames = proxies.map((p: any) => p.name);
-
-  if (!Array.isArray(config.proxies)) config.proxies = [];
-  config.proxies.push(...proxies);
-
-  if (Array.isArray(config['proxy-groups'])) {
-    config['proxy-groups'].forEach((group: any) => {
-      if (!Array.isArray(group.proxies)) group.proxies = [];
-      proxyNames.forEach(name => { if (!group.proxies.includes(name)) group.proxies.push(name); });
-    });
-  }
-  return yaml.dump(config, { indent: 2, noRefs: true });
-}
-
-````
-
-## File: src/utils.ts
-````ts
-import { ProxyNode } from "./types";
-
-// --- 完美 Base64 解碼 ---
-export function safeBase64Decode(str: string): string {
-  try {
-    let b64 = str.replace(/-/g, '+').replace(/_/g, '/').replace(/[^A-Za-z0-9+/=]/g, '');
-    while (b64.length % 4) b64 += '=';
-    
-    const binaryStr = atob(b64);
-    const bytes = new Uint8Array(binaryStr.length);
-    for (let i = 0; i < binaryStr.length; i++) {
-      bytes[i] = binaryStr.charCodeAt(i);
-    }
-    return new TextDecoder('utf-8').decode(bytes);
-  } catch (e) {
-    return "";
-  }
-}
-
-export function utf8ToBase64(str: string): string {
-  try {
-    return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g,
-        function toSolidBytes(match, p1) {
-            return String.fromCharCode(parseInt(p1, 16));
-        }));
-  } catch (e) {
-    return btoa(str);
-  }
-}
-
-export function tryDecodeURIComponent(str: string): string {
-  try {
-    return decodeURIComponent(str);
-  } catch (e) {
-    return str;
-  }
-}
-
-// --- 自動加入國旗 Emoji 的智慧辨識系統 ---
-export function addFlag(name: string): string {
-  if (/[\uD83C][\uDDE6-\uDDFF][\uD83C][\uDDE6-\uDDFF]/.test(name)) {
-    return name;
-  }
-
-  const upper = name.toUpperCase();
-
-  const isMatch = (codes: string, keywords: string) => {
-    const codeRegex = new RegExp(`(?:^|[^A-Z])(${codes})(?![A-Z])`);
-    const keywordRegex = new RegExp(`(${keywords})`);
-    return codeRegex.test(upper) || keywordRegex.test(upper);
-  };
-
-  if (isMatch('HK|HKG', '香港|深港|HONGKONG|HONG KONG')) return "🇭🇰 " + name;
-  if (isMatch('TW|TWN|TPE', '台灣|台湾|台北|新北|彰化')) return "🇹🇼 " + name;
-  if (isMatch('JP|JPN|TYO|OSA|NRT|HND|KIX', '日本|东京|大阪|埼玉|慢日|川日|JAPAN')) return "🇯🇵 " + name;
-  if (isMatch('SG|SGP|SIN', '新加坡|狮城|SINGAPORE')) return "🇸🇬 " + name;
-  if (isMatch('US|USA|LAX|SFO|SJC|SEA|NYC|JFK|EWR', '美国|美利堅|洛杉矶|圣何塞|硅谷|波特兰|西雅图|AMERICA|UNITED STATES')) return "🇺🇸 " + name;
-  if (isMatch('KR|KOR|ICN|SEL', '韩国|首尔|KOREA')) return "🇰🇷 " + name;
-  if (isMatch('UK|GB|GBR|LHR|LON', '英国|英國|伦敦|BRITAIN|ENGLAND')) return "🇬🇧 " + name;
-  if (isMatch('NL|NLD|AMS', '荷兰|荷蘭|阿姆斯特丹|NETHERLANDS')) return "🇳🇱 " + name;
-  if (isMatch('BR|BRA|SAO', '巴西|圣保罗|聖保羅|BRAZIL')) return "🇧🇷 " + name;
-  if (isMatch('EG|EGY|CAI', '埃及|开罗|開羅|EGYPT')) return "🇪🇬 " + name;
-  if (isMatch('VN|VNM|HAN|SGN', '越南|河内|河內|西贡|VIETNAM')) return "🇻🇳 " + name;
-  
-  if (isMatch('MO|MAC|MFM', '澳門|澳门')) return "🇲🇴 " + name;
-  if (isMatch('KH|KHM|PNH', '柬埔寨|金边|金邊|CAMBODIA')) return "🇰🇭 " + name;
-  if (isMatch('GR|GRC|ATH', '希腊|希臘|雅典|GREECE')) return "🇬🇷 " + name;
-  if (isMatch('PL|POL|WAW', '波兰|波蘭|华沙|華沙|POLAND')) return "🇵🇱 " + name;
-  
-  if (isMatch('IT|ITA|MIL', '意大利|義大和|米兰|羅馬|ITALY')) return "🇮🇹 " + name;
-  if (isMatch('ES|ESP|MAD', '西班牙|马德里|巴塞隆納|SPAIN')) return "🇪🇸 " + name;
-  if (isMatch('DE|DEU|FRA', '德国|德國|法兰克福|GERMANY')) return "🇩🇪 " + name;
-  if (isMatch('FR|FRA|CDG', '法国|法國|巴黎|FRANCE')) return "🇫🇷 " + name;
-  if (isMatch('RU|RUS', '俄罗斯|俄羅斯|莫斯科|RUSSIA')) return "🇷🇺 " + name;
-  if (isMatch('CH|CHE|ZRH', '瑞士|苏黎世|日内瓦|SWITZERLAND')) return "🇨🇭 " + name;
-  if (isMatch('SE|SWE|ARN', '瑞典|斯德哥尔摩|SWEDEN')) return "🇸🇪 " + name;
-  if (isMatch('NO|NOR|OSL', '挪威|奥斯陆|NORWAY')) return "🇳🇴 " + name;
-  if (isMatch('FI|FIN|HEL', '芬兰|芬蘭|赫尔辛基|FINLAND')) return "🇫🇮 " + name;
-  if (isMatch('DK|DNK|CPH', '丹麦|丹麥|哥本哈根|DENMARK')) return "🇩🇰 " + name;
-  if (isMatch('IE|IRL|DUB', '爱玩|愛爾蘭|都柏林|IRELAND')) return "🇮🇪 " + name;
-  if (isMatch('PT|PRT|LIS', '葡萄牙|里斯本|PORTUGAL')) return "🇵🇹 " + name;
-  if (isMatch('TH|THA|BKK', '泰国|泰國|曼谷|THAILAND')) return "🇹🇭 " + name;
-  if (isMatch('MY|MYS|KUL', '马来西亚|馬來西亞|吉隆坡|MALAYSIA')) return "🇲🇾 " + name;
-  if (isMatch('PH|PHL|MNL', '物理宾|物理賓|马尼拉|PHILIPPINES')) return "🇵🇭 " + name;
-  if (isMatch('ID|IDN|CGK', '印度尼西亚|印尼|雅加达|INDONESIA')) return "🇮🇩 " + name;
-  if (isMatch('TR|TUR|IST', '土耳其|伊斯坦堡|TURKEY')) return "🇹🇷 " + name;
-  if (isMatch('IN|IND|BOM', '印度|孟买|INDIA')) return "🇮🇳 " + name;
-  if (isMatch('CA|CAN|YVR|YYZ', '加拿大|多伦多|温哥华|CANADA')) return "🇨🇦 " + name;
-  if (isMatch('AU|AUS|SYD|MEL', '澳大利亚|澳洲|悉尼|墨本|AUSTRALIA')) return "🇦🇺 " + name;
-  if (isMatch('CN|CHN', '中国|回国|国内|北京|上海|廣州|深圳|CHINA')) return "🇨🇳 " + name;
-  if (isMatch('NZ|NZL|AKL', '新西兰|紐西蘭|奥克兰|NEW ZEALAND')) return "🇳🇿 " + name;
-  if (isMatch('AE|ARE|DXB', '阿联酋|迪拜|杜拜|UAE')) return "🇦🇪 " + name;
-  if (isMatch('SA|SAU|RUH', '沙特|沙烏地阿拉伯|利雅德|SAUDI')) return "🇸🇦 " + name;
-  if (isMatch('IL|ISR|TLV', '以色列|特拉维夫|ISRAEL')) return "🇮🇱 " + name;
-  if (isMatch('KZ|KAZ', '哈萨克斯坦|哈薩克|KAZAKHSTAN')) return "🇰🇿 " + name;
-  if (isMatch('PK|PAK', '巴基斯坦|PAKISTAN')) return "🇵🇰 " + name;
-  if (isMatch('ZA|ZAF|CPT', '南非|开普敦|SOUTH AFRICA')) return "🇿🇦 " + name;
-
-  return "🇺🇳 " + name;
-}
-
-// 按國旗進行歸類排序（🇺🇳 置於最頂部，其餘依黃金順序排布）
-export function groupNodesByFlag(nodes: ProxyNode[]): ProxyNode[] {
-  const groups = new Map<string, ProxyNode[]>();
-  const flagOrder: string[] = [];
-  
-  for (const node of nodes) {
-    const flaggedName = addFlag(node.name || 'node');
-    
-    // 提取國旗 Emoji (包含 surrogate pairs)
-    let flag = '';
-    const match = flaggedName.match(/^([\uD83C][\uDDE6-\uDDFF][\uD83C][\uDDE6-\uDDFF])/);
-    if (match) {
-      flag = match[1];
-    } else {
-      flag = '🇺🇳';
-    }
-    
-    if (!groups.has(flag)) {
-      groups.set(flag, []);
-      flagOrder.push(flag);
-    }
-    groups.get(flag)!.push(node);
-  }
-  
-  // 黃金地區排序順序
-  const standardOrder = [
-    '🇭🇰', '🇹🇼', '🇯🇵', '🇸🇬', '🇰🇷',  // 1. 亞太一線核心
-    '🇺🇸', '🇬🇧', '🇨🇦', '🇦🇺',        // 2. 歐美主流大戶
-    '🇲🇴', '🇨🇳', '🇹🇭', '🇻🇳', '🇲🇾', '🇵🇭', '🇮🇩', // 3. 特區與東南亞
-    '🇩🇪', '🇫🇷', '🇳🇱', '🇷🇺', '🇮🇳', '🇹🇷'  // 4. 歐洲與全球主流
-  ];
-  
-  flagOrder.sort((a, b) => {
-    // 🇺🇳 (聯合國國旗/臨時佔位符/官網提示) 優先排序在最前面
-    if (a === '🇺🇳' && b !== '🇺🇳') return -1;
-    if (b === '🇺🇳' && a !== '🇺🇳') return 1;
-    
-    const idxA = standardOrder.indexOf(a);
-    const idxB = standardOrder.indexOf(b);
-    
-    if (idxA !== -1 && idxB !== -1) return idxA - idxB;
-    if (idxA !== -1) return -1;
-    if (idxB !== -1) return 1;
-    
-    return a.localeCompare(b);
-  });
-  
-  const result: ProxyNode[] = [];
-  for (const flag of flagOrder) {
-    result.push(...groups.get(flag)!);
-  }
-  return result;
-}
-
-// --- 去重複命名與還原機場預設排序 ---
-export function deduplicateNodeNames(nodes: ProxyNode[]): ProxyNode[] {
-  const seenKey = new Set<string>();
-  const nameCount = new Map<string, number>();
-
-  return nodes.filter(node => {
-    const key = `${node.server}:${node.port}:${node.uuid || node.password || ''}`;
-
-    if (seenKey.has(key)) return false;
-    seenKey.add(key);
-
-    let baseName = node.name || 'node';
-    baseName = addFlag(baseName);
-
-    if (!nameCount.has(baseName)) {
-      nameCount.set(baseName, 1);
-      node.name = baseName;
-    } else {
-      const count = nameCount.get(baseName)! + 1;
-      nameCount.set(baseName, count);
-      // 💥 修正：將原本的 " (count)" 格式修改為 "_count"
-      node.name = `${baseName}_${count}`;
-    }
-    
-    if (node.singboxObj) node.singboxObj.tag = node.name;
-    if (node.clashObj) node.clashObj.name = node.name;
-
-    return true;
-  });
-}
-
-````
-
 ## File: src/parser.ts
 ````ts
 // src/parser.ts
@@ -2607,6 +2220,154 @@ export async function parseContent(content: string): Promise<ProxyNode[]> {
 
 ````
 
+## File: src/generator.ts
+````ts
+import yaml from 'js-yaml';
+import { ProxyNode } from './types';
+import { REMOTE_CONFIG } from './constants';
+import { utf8ToBase64 } from './utils';
+
+// 💥 新增：導出明文連結列表（一列一條節點，多筆換行）
+export function toRawLinks(nodes: ProxyNode[]): string {
+  const links = nodes.map(node => {
+    try {
+      if (node.type === 'vless') {
+        const params = new URLSearchParams();
+        params.set('security', node.reality ? 'reality' : (node.tls ? 'tls' : 'none'));
+        params.set('type', node.network || 'tcp');
+        if (node.flow) params.set('flow', node.flow);
+        if (node.sni) params.set('sni', node.sni);
+        if (node.fingerprint) params.set('fp', node.fingerprint);
+        if (node.reality) { params.set('pbk', node.reality.publicKey); params.set('sid', node.reality.shortId); }
+        if (node.network === 'ws') { if (node.wsPath) params.set('path', node.wsPath); if (node.wsHeaders?.Host) params.set('host', node.wsHeaders.Host); }
+        return `vless://${node.uuid}@${node.server}:${node.port}?${params.toString()}#${encodeURIComponent(node.name)}`;
+      }
+      if (node.type === 'hysteria2') {
+        const params = new URLSearchParams();
+        if (node.sni) params.set('sni', node.sni);
+        if (node.obfs) { params.set('obfs', node.obfs); if (node.obfsPassword) params.set('obfs-password', node.obfsPassword); }
+        if (node.skipCertVerify) params.set('insecure', '1');
+        return `hysteria2://${node.password}@${node.server}:${node.port}?${params.toString()}#${encodeURIComponent(node.name)}`;
+      }
+      if (node.type === 'vmess') {
+        const vmessObj = {
+          v: "2", ps: node.name, add: node.server, port: node.port, id: node.uuid,
+          aid: node.clashObj?.alterId || 0, scy: "auto", net: node.network, type: "none",
+          host: node.wsHeaders?.Host || "", path: node.wsPath || "",
+          tls: node.tls ? "tls" : "", sni: node.sni || ""
+        };
+        return 'vmess://' + utf8ToBase64(JSON.stringify(vmessObj));
+      }
+      if (node.type === 'shadowsocks') {
+        const method = encodeURIComponent(node.cipher || '');
+        const pass = encodeURIComponent(node.password || '');
+        const params = new URLSearchParams();
+        if (node.tls) {
+            params.set('security', 'tls');
+            if (node.sni) params.set('sni', node.sni);
+            if (node.alpn) params.set('alpn', node.alpn.join(','));
+            if (node.fingerprint) params.set('fp', node.fingerprint);
+            params.set('type', node.network || 'tcp');
+        }
+        if (node.clashObj && node.clashObj.plugin && !node.tls) {
+             const pluginOpts = node.clashObj['plugin-opts'];
+             const optStr = pluginOpts ? ';' + new URLSearchParams(pluginOpts).toString().replace(/&/g, ';') : '';
+             params.set('plugin', node.clashObj.plugin + optStr);
+        }
+        const query = params.toString();
+        return `ss://${method}:${pass}@${node.server}:${node.port}${query ? '/?' + query : ''}#${encodeURIComponent(node.name)}`;
+      }
+      if (node.type === 'tuic') {
+        const params = new URLSearchParams();
+        if (node.sni) params.set('sni', node.sni);
+        if (node.congestion_control) params.set('congestion_control', node.congestion_control);
+        if (node.udp_relay_mode) params.set('udp_relay_mode', node.udp_relay_mode);
+        if (node.alpn && node.alpn.length > 0) params.set('alpn', node.alpn.join(','));
+        if (node.skipCertVerify) params.set('allow_insecure', '1');
+        
+        const uuid = node.uuid || '';
+        const password = node.password || '';
+        return `tuic://${uuid}:${password}@${node.server}:${node.port}?${params.toString()}#${encodeURIComponent(node.name)}`;
+      }
+      if (node.type === 'anytls') {
+        const params = new URLSearchParams();
+        params.set('security', 'tls');
+        if (node.sni) params.set('sni', node.sni);
+        params.set('insecure', node.skipCertVerify ? '1' : '0');
+        params.set('allowInsecure', node.skipCertVerify ? '1' : '0');
+        if (node.fingerprint) params.set('fp', node.fingerprint);
+        if (node.alpn && node.alpn.length > 0) params.set('alpn', node.alpn.join(','));
+        params.set('type', 'tcp'); 
+        return `anytls://${node.password}@${node.server}:${node.port}?${params.toString()}#${encodeURIComponent(node.name)}`;
+      }
+      if (node.type === 'trojan') {
+        const params = new URLSearchParams();
+        if (node.sni) params.set('sni', node.sni);
+        if (node.skipCertVerify) params.set('allowInsecure', '1');
+        return `trojan://${node.password}@${node.server}:${node.port}?${params.toString()}#${encodeURIComponent(node.name)}`;
+      }
+      return null;
+    } catch { return null; }
+  }).filter(l => l !== null);
+  return links.join('\n');
+}
+
+// 導出 Base64 訂閱
+export function toBase64(nodes: ProxyNode[]) {
+  const rawLinks = toRawLinks(nodes);
+  return utf8ToBase64(rawLinks);
+}
+
+async function fetchWithUA(url: string) {
+  const resp = await fetch(`${url}?t=${Math.random()}`, {
+    headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' }
+  });
+  if (!resp.ok) throw new Error(`Template fetch failed: ${resp.status}`);
+  return await resp.text();
+}
+
+export async function toSingBoxWithTemplate(nodes: ProxyNode[]) {
+  const text = await fetchWithUA(REMOTE_CONFIG.singbox);
+  let config = JSON.parse(text);
+  const outbounds = nodes.map(n => JSON.parse(JSON.stringify(n.singboxObj)));
+  const nodeTags = outbounds.map((o:any) => o.tag);
+  
+  if (!Array.isArray(config.outbounds)) config.outbounds = [];
+  config.outbounds.push(...outbounds);
+  config.outbounds.forEach((out: any) => {
+    if (out.type === 'selector' || out.type === 'urltest') {
+      if (!Array.isArray(out.outbounds)) out.outbounds = [];
+      nodeTags.forEach(tag => { if (!out.outbounds.includes(tag)) out.outbounds.push(tag); });
+    }
+  });
+  return JSON.stringify(config, null, 2);
+}
+
+export async function toClashWithTemplate(nodes: ProxyNode[]) {
+  const text = await fetchWithUA(REMOTE_CONFIG.clash);
+  let config: any = yaml.load(text);
+  
+  const proxies = nodes.map(n => {
+    const obj = JSON.parse(JSON.stringify(n.clashObj));
+    Object.keys(obj).forEach(key => obj[key] === undefined && delete obj[key]);
+    return obj;
+  }); 
+  const proxyNames = proxies.map((p: any) => p.name);
+
+  if (!Array.isArray(config.proxies)) config.proxies = [];
+  config.proxies.push(...proxies);
+
+  if (Array.isArray(config['proxy-groups'])) {
+    config['proxy-groups'].forEach((group: any) => {
+      if (!Array.isArray(group.proxies)) group.proxies = [];
+      proxyNames.forEach(name => { if (!group.proxies.includes(name)) group.proxies.push(name); });
+    });
+  }
+  return yaml.dump(config, { indent: 2, noRefs: true });
+}
+
+````
+
 ## File: src/index.ts
 ````ts
 // src/index.ts
@@ -2672,7 +2433,7 @@ function safeBtoa(str: string): string {
   }
 }
 
-// 動態從 GitHub 獲取模板腳本並進行變數置換 (網址增加動態時間戳，消除 Cloudflare 緩存)
+// 動態從 GitHub 獲取模板腳本並進行變數置換
 async function getArgoScriptFromGithub(node: ProxyNode, port: string, token: string, domain: string): Promise<string> {
   const GITHUB_TEMPLATE_URL = `https://raw.githubusercontent.com/sammy0101/cf-sub-converter/main/argo.sh?t=${Date.now()}`;
   let template = "";
@@ -3127,9 +2888,18 @@ if (renameParam) {
   }
 }
 
+// 💥 重構：正則表達式構建器，修復二次替換破壞正則表達式的重大 Bug
 const buildFilterRegex = (param: string): RegExp => {
-  const safePattern = param.replace(/[xXｘＸ]/g, '[xXｘＸ×]').replace(/×/g, '[xXｘＸ×]');
-  return new RegExp(safePattern, 'i');
+  const parts = param.split('|').map(part => {
+    const trimmed = part.trim();
+    if (!trimmed) return '';
+    // 對正則表達式特殊字元進行安全轉義
+    const escaped = trimmed.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    // 單一次進行 x/X/x/X/× 字符相容替換
+    return escaped.replace(/[xXｘＸ×]/g, '[xXｘＸ×]');
+  }).filter(Boolean);
+  
+  return new RegExp(parts.join('|'), 'i');
 };
 
 if (includeParam) {
@@ -3163,11 +2933,10 @@ const uniqueNodes = deduplicateNodeNames(sortedNodes);
 
 let target = url.searchParams.get('target');
 
-// 自適應 User-Agent 偵測邏輯 (適用於自適應/短連結)
+// 自適應 User-Agent 偵測邏輯
 if (!target) {
   const ua = (request.headers.get('User-Agent') || '').toLowerCase();
   
-  // 檢查是否為代理客戶端，若不是代理客戶端（例如普通瀏覽器），則繼續輸出網頁摘要介面
   const isAgent = ua.includes('clash') || 
                   ua.includes('mihomo') || 
                   ua.includes('stash') || 
@@ -3186,7 +2955,7 @@ if (!target) {
     } else if (ua.includes('sing-box') || ua.includes('singbox') || ua.includes('hiddify')) {
       target = 'singbox';
     } else {
-      target = 'base64'; // 其它客戶端降級為 Base64 格式
+      target = 'base64';
     }
   }
 }
@@ -3239,7 +3008,6 @@ if (!target) {
       <div class="result-link">${host}/?url=${encodedUrl}${filterQuery}&target=base64</div>
     </div>
     
-    <!-- 提供三個平台的下載按鈕 -->
     <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 1.5rem;">
       <a class="btn" style="background: #3b82f6; margin-top: 0;" href="${host}/?url=${encodedUrl}${filterQuery}&target=base64">📥 下載 Base64 訂閱</a>
       <a class="btn" style="background: #f59e0b; margin-top: 0;" href="${host}/?url=${encodedUrl}${filterQuery}&target=clash">📥 下載 Clash Meta 訂閱</a>
@@ -3296,18 +3064,38 @@ return new Response(result, { headers: responseHeaders });
 
 ````
 
-## File: wrangler.toml
-````toml
-name = "my-sub-converter"
-main = "src/index.ts"
-compatibility_date = "2024-04-01"
+## File: src/types.ts
+````ts
+export interface Env {
+  SUB_CACHE: KVNamespace;
+}
 
-[placement]
-mode = "smart"
-
-[[kv_namespaces]]
-binding = "SUB_CACHE"
-id = "KV_ID_PLACEHOLDER"
+export interface ProxyNode {
+  type: string;
+  name: string;
+  server: string;
+  port: number;
+  uuid?: string;
+  password?: string;
+  cipher?: string;
+  udp?: boolean;
+  tls?: boolean;
+  sni?: string;
+  alpn?: string[];
+  fingerprint?: string;
+  flow?: string;
+  network?: string;
+  wsPath?: string;
+  wsHeaders?: Record<string, string>;
+  reality?: { publicKey: string; shortId: string };
+  obfs?: string;
+  obfsPassword?: string;
+  skipCertVerify?: boolean;
+  singboxObj?: any; 
+  clashObj?: any;
+  congestion_control?: string;
+  udp_relay_mode?: string;
+}
 
 ````
 
@@ -3464,331 +3252,550 @@ id = "KV_ID_PLACEHOLDER"
 
 ````
 
-## File: argo.sh
-````sh
-#!/bin/bash
-# Cloudflare Argo Tunnel 一鍵部署腳本 (由 cf-sub-converter 動態配置)
-# 專案網址: https://github.com/sammy0101/cf-sub-converter
+## File: README.md
+````md
+# ⚡ CF Sub Converter Pro
 
-GREEN='\033[0;32m'
-RED='\033[0;31m'
-NC='\033[0m'
+基於 Cloudflare Workers 的 Serverless 訂閱轉換工具。擁有全新專業級的無廣告深色 UI，內建智慧過濾、替換、智慧國旗萬國對齊系統，以及 **Argo 隧道一鍵生成器**。一鍵將雜亂的訂閱或節點轉換為 Sing-Box / Clash Meta (Mihomo) / Base64 格式，亦可直接作為第三方轉換網頁（如 `sub-web`）的自定義後端。
 
-# 動態變數佔位符 (由 Worker 自動替換)
-NODE_TYPE="{{NODE_TYPE}}"
-VLESS_UUID="{{VLESS_UUID}}"
-VLESS_PATH="{{VLESS_PATH}}"
-VLESS_TYPE="{{VLESS_TYPE}}"
-VLESS_PORT="{{VLESS_PORT}}"
-NODE_NAME="{{NODE_NAME}}"
-TUNNEL_TOKEN="{{TUNNEL_TOKEN}}"
-CUSTOM_DOMAIN="{{CUSTOM_DOMAIN}}"
-VLESS_TLS="{{VLESS_TLS}}"
-ORIGIN_HOST="{{ORIGIN_HOST}}"
+[![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/sammy0101/cf-sub-converter)
 
-echo -e "${GREEN}=== 開始部署 Cloudflare Argo 隧道 (${NODE_NAME}) ===${NC}"
+## 🌟 特性
 
-if [ "$EUID" -ne 0 ]; then
-  echo -e "${RED}錯誤: 請使用 root 權限執行此腳本！${NC}"
-  exit 1
-fi
+- 🎨 **專業級 UI** - 全新深色主題設計 (Slate/Zinc)，無廣告、純淨排版，搭配流暢的互動動畫與一鍵掃碼功能。
+- 🌀 **Argo 隧道一鍵生成器** - 
+  - **自動化克隆轉換**：一鍵載入貼入的節點，勾選 VLESS 或 VMess 節點，系統自動拷貝並轉換為對應的 Argo 隧道節點。
+  - **超簡短一鍵 VPS 命令**：結合 Cloudflare KV 雲端動態腳本快取技術與 `curl | bash` 轉換，產生極簡 VPS 一鍵部署命令。
+  - **雙層智慧探測校正**：VPS 部署時自動檢測本地連接埠與 TLS 加密，智慧避免 Proxy Protocol / TLS 握手衝突，並自動重寫 Host Header 與 TLS SNI。
+- 📊 **流量與到期日智慧透傳** - 自動從上游多個機場擷取並**加總多個訂閱的流量（上傳、下載、總量），並自動計算最近的到期時間**，透過標準 `subscription-userinfo` 標頭透傳，完美點亮客戶端的流量條！
+- ⚡ **標準 SubConverter 後端支援** - 內建 **`/sub`** 和 **`/version`** API 路由，回傳與您專案版本和網域動態對齊的標準格式（如 `subconverter v2.5.0 <your-worker-domain> backend`）並全面支援跨域 (CORS)。這使其可以直接做為任何第三方訂閱前端網頁（如 `sub-web`）的自定義後端。
+- 🔍 **智慧過濾與替換** - 
+  - **節點篩選**：支援「僅保留」與「排除」雙向過濾（使用 `|` 隔開，如 `HK|TW` 或 `5x`）。後端內建字元智慧相容技術，自動將 `x`、`X`、全形 `ｘ` 與數學乘號 `×` 進行互通匹配。
+  - **名稱替換**：支援極簡統一的替換與刪除語法。刪除請用 `DEL-關鍵字`，替換請用 `尋找-替換`。
+  - **💥 首創 `ALL-` 一鍵統改名稱**：若要將所有節點統一改名，請用 `ALL-新名稱`（例如 `ALL-JP`）。此功能配合我們的「智慧國旗」與「去重自動編號」系統，能將所有節點完美格式化為：`🇯🇵 JP`、`🇯🇵 JP_2`、`🇯🇵 JP_3` 等極致工整的排版。
+- 🚩 **自動國旗與萬國標註** - 
+  - **國旗智慧分群與 22 國黃金多梯隊排序**：自動將相同國家的節點緊密歸類在一起。並配有內建的黃金梯隊排序（港 🇭🇰 ➔ 台 🇹🇼 ➔ 日 🇯🇵 ➔ 星 🇸🇬 ➔ 美 🇺🇸 ➔ 英 🇬🇧 ➔ 澳 🇦🇺 等 22 個熱門地區），且會**自動將帶有 🇺🇳 標誌的臨時 Argo 佔位符或提醒節點置於列表最頂部（排在最前面）**，保證最流暢直觀的訂閱體驗。
+  - 若遇到無對應國家的節點（如流量提示、機場官網），自動補上 🇺🇳 (聯合國國旗)，達成 100% 工整排版。
+- 🔌 **全協議支援** - 完美解析 `Trojan`, `VLESS`, `VMess`, `Shadowsocks`, `Hysteria2 (hy2)`, `TUIC`, `AnyTLS` 等主流與新興協議。
+- 🚀 **極速路由與 DNS** - 轉換出的配置檔內建頂級路由規則：
+  - **Clash Meta**：流量嗅探 (Sniffer)、Fake-IP、TProxy 軟路由最佳化、中外 DNS 智慧解析。
+  - **Sing-Box**：Mixed TUN 堆疊優化、獨立 DNS Kay、蘋果/國內服務精準直連。
+- ☁️ **雲端與配置同步** - 運行在 Cloudflare 邊緣網絡，零成本運維。生成短連結時，**系統會將「資料來源、過濾規則、替換規則」打包存入 KV**，客戶端直接更新短連結即可自動套用所有規則，不需在客戶端 URL 後手動外掛複雜參數。
 
-# 1. 安裝 cloudflared
-if ! command -v cloudflared &> /dev/null; then
-    echo "正在下載安裝 cloudflared..."
-    curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o /usr/local/bin/cloudflared
-    chmod +x /usr/local/bin/cloudflared
-else
-    echo "cloudflared 已存在，跳過安裝。"
-fi
+<img width="2559" height="1204" alt="螢幕擷取畫面 2026-06-29 181504" src="https://github.com/user-attachments/assets/c412badb-14ae-4a2c-937f-bd5ce3444b77" />
 
-SAFE_NODE_NAME=$(echo "$NODE_NAME" | sed 's/[^a-zA-Z0-9]/_/g')
+## 🚀 部署教學
 
-# 2. 雙重保險：VPS 本地執行期自動檢測並修正連接埠與 TLS 加密衝突
-DETECTED_PORT="$VLESS_PORT"
+### 方法一：一鍵快速部署 (最推薦、最簡單)
 
-if command -v ss &> /dev/null; then
-    if ! ss -tln | grep -qE ":$VLESS_PORT([[:space:]]|$)"; then
-        echo -e "${RED}警告: 本地轉發埠 $VLESS_PORT 似乎未在本地監聽。正在探測常用埠...${NC}"
-        if ss -tln | grep -qE ":443([[:space:]]|$)"; then
-            echo -e "${GREEN}自動修正成功：偵測到 VPS 本地 Nginx/443 埠正在運行！已將轉發目標自動修正為: 443 埠。${NC}"
-            DETECTED_PORT="443"
-        elif ss -tln | grep -qE ":80([[:space:]]|$)"; then
-            echo -e "${GREEN}自動修正成功：偵測到 VPS 本地 80 埠正在運行！已將轉發目標自動修正為: 80 埠。${NC}"
-            DETECTED_PORT="80"
-        fi
-    fi
-fi
+點擊本說明文件上方的 **Deploy to Cloudflare Workers** 藍色按鈕。
 
-# 智慧探測：自動探測目標連接埠是否啟用 TLS 加密
-DETECTED_TLS="false"
-if curl -s -k --connect-timeout 2 "https://127.0.0.1:$DETECTED_PORT" &>/dev/null; then
-    echo "偵測到本地轉發埠 $DETECTED_PORT 為 TLS 加密連接埠，自動開啟 HTTPS 轉發與 SNI 對齊模式。"
-    DETECTED_TLS="true"
-else
-    echo "偵測到本地轉發埠 $DETECTED_PORT 為明文連接埠，自動開啟 HTTP 轉發模式。"
-fi
+* **零設定自動託管**：Cloudflare 網頁部署精靈會引導您登入，並**在背景全自動為您建立並對接好所需的 KV 命名空間（`SUB_CACHE`）**，完全不需要您手動至儀表板綁定。
+* **自建 CI/CD (Workers Builds)**：Cloudflare 會在您的 GitHub 下自動建立此專案的複製倉庫。未來您只要在 GitHub 修改並 `git push`，Cloudflare 就會自動在端點編譯部署，**此模式完全不需要設定 GitHub Secrets 密鑰**。
 
-LOCAL_URL="http://127.0.0.1:$DETECTED_PORT"
-EXTRA_ARGS=""
-if [ "$DETECTED_TLS" = "true" ]; then
-    LOCAL_URL="https://127.0.0.1:$DETECTED_PORT"
-    EXTRA_ARGS="--no-tls-verify"
-fi
+---
 
-# 重寫 Host Header 與 TLS SNI
-if [ -n "$ORIGIN_HOST" ]; then
-    echo "已自動啟用 HTTP 主機頭部重寫 (Host Header 重寫為: $ORIGIN_HOST)"
-    EXTRA_ARGS="$EXTRA_ARGS --http-host-header $ORIGIN_HOST"
-    if [ "$DETECTED_TLS" = "true" ]; then
-        echo "已自動啟用 TLS SNI 重寫為: $ORIGIN_HOST"
-        EXTRA_ARGS="$EXTRA_ARGS --origin-server-name $ORIGIN_HOST"
-    fi
-fi
+### 方法二：手動 Fork 本項目並使用 GitHub Actions 自動部署 (需要設定 Secrets)
 
-# 4. 判斷並執行部署
-if [ -n "$TUNNEL_TOKEN" ]; then
-    echo -e "${GREEN}【固定隧道模式】正在配置服務...${NC}"
-    cloudflared service uninstall &> /dev/null
-    cloudflared service install "$TUNNEL_TOKEN"
-    systemctl daemon-reload
-    systemctl enable cloudflared
-    systemctl restart cloudflared
-    
-    echo -e "\n${GREEN}=== 部署成功 【固定域名模式】 ===${NC}"
-    echo -e "原節點名稱: $NODE_NAME"
-    echo -e "轉發連接埠: $DETECTED_PORT"
-    echo -e "綁定自訂域名: $CUSTOM_DOMAIN"
-    
-    if [ "$NODE_TYPE" = "vless" ]; then
-        FINAL_LINK="vless://$VLESS_UUID@$CUSTOM_DOMAIN:443?encryption=none&security=tls&type=$VLESS_TYPE&host=$CUSTOM_DOMAIN"
-        if [ "$VLESS_TYPE" = "ws" ]; then
-            FINAL_LINK="$FINAL_LINK&path=$VLESS_PATH"
-        fi
-        FINAL_LINK="$FINAL_LINK#$NODE_NAME"
-    else
-        VMESS_JSON="{\"v\":\"2\",\"ps\":\"$NODE_NAME\",\"add\":\"$CUSTOM_DOMAIN\",\"port\":443,\"id\":\"$VLESS_UUID\",\"aid\":0,\"scy\":\"auto\",\"net\":\"$VLESS_TYPE\",\"type\":\"none\",\"host\":\"$CUSTOM_DOMAIN\",\"path\":\"$VLESS_PATH\",\"tls\":\"tls\",\"sni\":\"$CUSTOM_DOMAIN\"}"
-        VMESS_B64=$(echo -n "$VMESS_JSON" | base64 | tr -d '\n')
-        FINAL_LINK="vmess://$VMESS_B64"
-    fi
-    echo -e "\n${GREEN}您的 Argo $NODE_TYPE 訂閱連結為:${NC}"
-    echo -e "${GREEN}$FINAL_LINK${NC}\n"
-else
-    echo -e "${GREEN}【臨時隧道模式】正在啟動 Quick Tunnel...${NC}"
-    systemctl stop cloudflared-argo-${SAFE_NODE_NAME} &> /dev/null
-    
-    cat <<EOF > /etc/systemd/system/cloudflared-argo-${SAFE_NODE_NAME}.service
-[Unit]
-Description=Cloudflare Argo Temporary Tunnel for ${NODE_NAME}
-After=network.target
+如果您選擇**不使用**一鍵部署按鈕，而是打算手動 Fork 本項目，並利用專案內建的 GitHub Actions 自動進行部署，請按照以下步驟操作：
 
-[Service]
-Type=simple
-User=root
-ExecStart=/usr/local/bin/cloudflared tunnel --url $LOCAL_URL $EXTRA_ARGS
-Restart=always
-RestartSec=5
-StandardOutput=journal
-StandardError=journal
+1. **Fork 本項目**：
+   請先點擊本專案右上角的 **`Fork`** 按鈕，將專案複製一份到您自己的 GitHub 帳號下。
 
-[Install]
-WantedBy=multi-user.target
-EOF
+2. **設定 GitHub Repository Secrets**：
+   前往您 GitHub 專案頁面，依次點擊 **`Settings`** -> **`Secrets and variables`** -> **`Actions`** -> **`New repository secret`**，並添加以下三個密鑰，否則 GitHub 部署工作流會報錯：
+   * **`CF_API_TOKEN`**：您的 Cloudflare API 權杖。
+     * *獲取方式*：Cloudflare 首頁 -> 我的個人資料 -> API 權杖 -> 建立具有「編輯 Workers 與 KV」權限的權杖。
+   * **`CF_ACCOUNT_ID`**：您的 Cloudflare 帳戶 ID（可在 Worker 頁面右側找到）。
+   * **`CF_KV_ID`**：您在 Cloudflare 上建立的 KV 命名空間 ID。
+     * *獲取方式*：Cloudflare 儀表板 -> 鍵值儲存 (KV) -> 建立一個空間（例如 `SUB_CACHE`）並複製其 ID。
 
-    systemctl daemon-reload
-    systemctl enable cloudflared-argo-${SAFE_NODE_NAME}
-    systemctl start cloudflared-argo-${SAFE_NODE_NAME}
-    
-    echo "正在等待 Cloudflare 分配臨時域名 (約需 10-15 秒)..."
-    TEMP_DOMAIN=""
-    for i in {1..15}; do
-        sleep 1
-        # 💥 核心修正：改用系統級 journalctl 探測，並搭配 tail -n 1 永遠提取最新活著的網域，徹底解決 530 緩存！
-        TEMP_DOMAIN=$(journalctl -u cloudflared-argo-${SAFE_NODE_NAME} -n 50 --no-pager 2>/dev/null | grep -o 'https://[a-zA-Z0-9-]*\.trycloudflare\.com' | tail -n 1 | cut -d'/' -f3)
-        if [ -n "$TEMP_DOMAIN" ]; then
-            break
-        fi
-    done
-    
-    if [ -n "$TEMP_DOMAIN" ]; then
-        echo -e "${GREEN}獲取臨時域名成功: $TEMP_DOMAIN${NC}"
-        if [ "$NODE_TYPE" = "vless" ]; then
-            FINAL_LINK="vless://$VLESS_UUID@$TEMP_DOMAIN:443?encryption=none&security=tls&type=$VLESS_TYPE&host=$TEMP_DOMAIN"
-            if [ "$VLESS_TYPE" = "ws" ]; then
-                FINAL_LINK="$FINAL_LINK&path=$VLESS_PATH"
-            fi
-            FINAL_LINK="$FINAL_LINK#$NODE_NAME"
-        else
-            VMESS_JSON="{\"v\":\"2\",\"ps\":\"$NODE_NAME\",\"add\":\"$TEMP_DOMAIN\",\"port\":443,\"id\":\"$VLESS_UUID\",\"aid\":0,\"scy\":\"auto\",\"net\":\"$VLESS_TYPE\",\"type\":\"none\",\"host\":\"$TEMP_DOMAIN\",\"path\":\"$VLESS_PATH\",\"tls\":\"tls\",\"sni\":\"$TEMP_DOMAIN\"}"
-            VMESS_B64=$(echo -n "$VMESS_JSON" | base64 | tr -d '\n')
-            FINAL_LINK="vmess://$VMESS_B64"
-        fi
-        
-        echo -e "\n${GREEN}=== 部署成功 【臨時域名模式】 ===${NC}"
-        echo -e "原節點名稱: $NODE_NAME"
-        echo -e "轉發連接埠: $DETECTED_PORT"
-        echo -e "分配的臨時域名: $TEMP_DOMAIN"
-        echo -e "您的臨時 Argo 節點 $NODE_TYPE 連結為 (注意：VPS 重啟或重開服務後域名會刷新):"
-        echo -e "${GREEN}$FINAL_LINK${NC}\n"
-    else
-        echo -e "${RED}錯誤: 獲取臨時域名超時！請執行 'journalctl -u cloudflared-argo-${SAFE_NODE_NAME} -n 30' 檢查日誌。${NC}"
-    fi
-fi
+3. **Actions 執行部署**：
+   設定完成後，當您對專案進行任何修改並推送（Push），或手動在倉庫的 **`Actions`** 頁面觸發 **`Deploy to Cloudflare Workers`** 工作流，GitHub 就會全自動為您編譯並完成部署。
+
+---
+
+### 方法三：本地手動編譯部署 (Wrangler CLI)
+
+1. **克隆本專案**：
+   ```bash
+   git clone https://github.com/sammy0101/cf-sub-converter.git
+   cd cf-sub-converter
+   ```
+
+2. **安裝專案依賴**：
+   ```bash
+   npm install
+   ```
+
+3. **創建並綁定 KV 命名空間**：
+   ```bash
+   wrangler kv:namespace create SUB_CACHE
+   ```
+   *執行後，將終端機回傳的配置代碼（包含 binding 和 id），複製並貼上取代您 `wrangler.toml` 中的 `KV_ID_PLACEHOLDER` 佔位符。*
+
+4. **發布至 Cloudflare**：
+   ```bash
+   wrangler deploy
+   ```
+
+## 📖 使用指南
+
+訪問你部署完成的 Workers 網址即可進入視覺化面板。
+
+### 面板功能
+- **資料來源設定**：支援貼上機場訂閱連結、Base64 字串，或直接貼上多行節點 URI。支援多個訂閱地址換行輸入，系統將保持原始順序進行合併。
+- **Argo 隧道一鍵生成**：
+  1. 在資料來源貼入您的機場訂閱或明文連結。
+  2. 點選「解析並載入目前輸入的 VLESS / VMess 節點」，介面會自動拉出節點列表。
+  3. 勾選您要轉換的節點，系統會自動在下方同步該節點的原生埠號。
+  4. 設定 VPS 本地對接連接埠，點選「一鍵生成 Argo 節點與一鍵部署腳本」。
+  5. 複製產生的簡短 `curl` 或 `wget` 指令至您的 VPS 上執行。
+  6. 腳本成功執行後：
+     * **臨時域名模式**：請在您的 VPS 終端機內直接複製最終生成、連通的 VLESS/VMess 節點。
+     * **固定域名模式**：新生成的 Argo 節點（原節點名末尾加 `_Argo` 後綴）會直接顯示在網頁下方的明文列表框中，方便拷貝。
+- **過濾與替換**：
+  - **僅保留關鍵字**：只留下符合關鍵字的節點。例如輸入 `HK|TW`。
+  - **排除關鍵字**：過濾掉垃圾或高倍率節點。例如輸入 `5x`（系統會自動相容 `5×` 乘號）。
+  - **節點名稱替換**：刪除寫 `DEL-關鍵字`，替換寫 `尋找-替換`。若要一鍵重命名所有節點，請用 `ALL-新名稱`。多組規則用 `|` 隔開。
+- **配置收藏**：常用的節點與過濾替換規則可以儲存到「已儲存的配置」區塊。卡片上會直觀地以綠色 `保`、紅色 `排` 和藍色 `替` 標籤顯示你所設定的規則，點擊卡片即可自動載入所有設定。
+
+---
+
+### 🔑 Cloudflare 固定隧道 (免費) 申請與配置教學
+
+臨時隨機隧道（trycloudflare）雖然完全免設定，但缺點是每次 VPS 重啟或服務重開時，網域名稱都會改變。如果您想要擁有**永久固定不變的網域**，請依照以下步驟免費建立 Cloudflare 固定隧道：
+
+#### 準備工作：
+1. 一個 Cloudflare 帳戶。
+2. 一個已成功託管（啟用橘色雲端 CDN）在您 Cloudflare 帳戶下的自訂域名（例如：`yourdomain.com`）。
+
+#### 申請與設定步驟：
+
+1. **進入 Zero Trust 面板**：
+   登入 Cloudflare 儀表板，點擊左側選單中的 **`Zero Trust`**（首次進入需要點擊訂閱，選擇 Free 0元計劃並綁定卡片，完全不會扣款）。
+
+2. **建立 Tunnel 隧道**：
+   在 Zero Trust 介面中，點擊左側選單的 **`Networks`** -> **`Tunnels`**，然後點擊 **`Create a Tunnel`**。
+
+3. **選擇安裝方式並複製 Token**：
+   * 選擇 **`cloudflared`**，並為您的隧道取個名字（例如 `my-vps-tunnel`），點擊 Next。
+   * 在安裝指令頁面，您會看到一串安裝指令。**請注意指令最末端的一長串 Base64 字元（這就是您的 Tunnel Token）**，將其複製下來，例如：
+     `eyJhIjoiY2... (約 100~200 字元的超長字串)`
+
+4. **配置域名路由（Public Hostname）**：
+   * 在同一個頁面下方（或點擊已建立隧道的 Edit -> Public Hostname 標籤），點擊 **`Add a public hostname`**。
+   * **Domain**：填入您要分配給此節點的子網域，例如：`vless.yourdomain.com`。
+   * **Service**：
+     * **Type（服務類型）**：
+       * 如果您在網頁端對接的是 TLS 埠（如 **`8443`** 或 **`443`**）➔ 選擇 **`HTTPS`**。
+       * 如果對接的是無加密明文埠（如 **`27110`** 或 **`31297`**）➔ 選擇 **`HTTP`**。
+     * **URL**：輸入本地地址與埠，例如：`127.0.0.1:8443` 或 `127.0.0.1:27110`。
+   * **💥 極致關鍵（HTTPS 模式必填）**：
+     如果您在 Type 選擇了 `HTTPS`，請展開下方的 **`Additional HTTP settings`**，**並將 `No TLS Verify` 選項開啟（設定為 Enabled）**！這是為了允許隧道跳過 VPS 本地自我簽署證書的安全驗證，否則會出現 `530` 錯誤。
+   * 設定完成後，點擊 **`Save hostname`** 保存。
+
+5. **在網頁端生成固定隧道指令**：
+   回到您部署的 **SubConverter Pro** 網頁：
+   * 本地監聽連接埠：填入您 VPS 的真實埠（例如 `8443` 或 `27110`）。
+   * Cloudflare Tunnel Token：貼上您剛才複製的超長 Token。
+   * 自訂綁定域名：輸入您剛才在第 4 步綁定的網域（如 `vless.yourdomain.com`）。
+   * 點擊生成指令，貼上 VPS 執行。您的固定安全隧道即告部署完成，節點將永遠不變！
+
+---
+
+### API 調用與外部前端對接
+
+#### 1. 當作標準 SubConverter 後端使用
+本專案內建對應 `/sub` 與 `/version` 端點。你可以打開任何一個開源的 `sub-web` 網頁（例如：`sub.id9.cc` 或其他的轉換前端），並在**「後端地址 (Backend URL)」**中，填入你的 Cloudflare Workers 網址：
+```text
+https://your-worker.workers.dev
+```
+
+#### 2. 自訂 API 參數格式
+你也可以直接透過 URL 參數進行手動調用與過濾：
+
+```http
+# 轉換原始連結 + 僅保留港台 + 排除 5x 節點 + 移除 [69云] 廣告 + 將 移动优化 替換為 專線
+https://your-worker.workers.dev/sub?url=<URL編碼後的訂閱連結>&target=singbox&include=HK|TW&exclude=5x&rename=DEL-[69云]|移动优化-專線
+
+# 轉換短連結 + 自動套用在雲端 KV 中存好的過濾與名稱替換規則
+https://your-worker.workers.dev/<自訂短連結名稱>?target=clash
+```
+
+## 🛡️ 內建分流規則群組
+
+轉換出的 Sing-Box / Clash 配置文件預設包含以下精心設計的分流群組，開箱即用：
+
+| 圖標 | 群組名稱 | 路由說明 |
+| :--- | :--- | :--- |
+| 🚀 | 節點選擇 | 手動切換所有可用節點 |
+| ⚡ | 自動選擇 | 基於 URL Test 自動測速切換延遲最低的節點 |
+| 💬 | AI 服務 | ChatGPT / Claude / 香港專屬分流 |
+| 🍎 | 蘋果服務 | Apple 相關服務直連 or 代理 (自動依據網路環境切換最快 CDN) |
+| Ⓜ️ | 微軟服務 | Microsoft 服務直連 or 代理 |
+| 🎮 | 遊戲平台 | Steam / Epic / EA / Ubisoft / Blizzard |
+| 🌐 | 非中國 | 全球主流網站 (Google, Telegram 等) |
+| 🇨🇳 | 國內服務 | 中國大陸 IP 與網域自動直連 (精準 IP 解析) |
+| 🏠 | 私有網絡 | 區域網路 (LAN / 內網) 直連 |
+| 🛑 | 廣告攔截 | 阻擋常見廣告、追蹤器 (AdBlock) |
+| 🐟 | 漏網之魚 | Final Match (未匹配規則的最終去向) |
+
+## 📁 專案結構
+
+```text
+cf-sub-converter/
+├── src/
+│   ├── index.ts          # Worker 主入口路由、並發請求控制、智慧過濾、雲端配置同步與 /version 後端模擬
+│   ├── constants.ts      # 專業版 HTML 視圖模板與遠端規則常數 (含過濾、收藏與 Argo 隧道 UI)
+│   ├── parser.ts         # 節點解析器 (支援 Trojan, AnyTLS, TUIC, Hy2 等)
+│   ├── generator.ts      # 格式生成器 (映射為 Sing-Box / Clash Meta / Base64 / 原始連結明文導出)
+│   ├── utils.ts          # Base64 淨化與智慧國旗自動標註系統 (豪華全球版 + 萬國 🇺🇳 對齊)
+│   └── types.ts          # TypeScript 類型定義
+├── argo.sh               # 上傳至 GitHub 倉庫的一鍵 VPS 隧道部署通用腳本
+├── Sing-Box_Rules.JSON   # 遠端 Sing-Box 路由規則範本 (極速混合堆疊版)
+├── Clash_Rules.YAML      # 遠端 Clash Meta 路由規則範本 (軟路由透明代理版)
+└── wrangler.toml         # Cloudflare Workers 設定檔
+```
+
+## ⚠️ 免責聲明
+
+本專案僅供技術交流與網路安全學習研究使用，不提供任何節點服務。請使用者務必遵守當地法律法規，勿將其用於任何違法用途，開發者對使用者的行為不承擔任何責任。
 
 ````
 
-## File: package.json
-````json
-{
-  "name": "cf-sub-converter",
-  "version": "3.0.6",
-  "private": true,
-  "scripts": {
-    "deploy": "wrangler deploy",
-    "dev": "wrangler dev",
-    "start": "wrangler dev",
-    "argo": "tsx scripts/argo-converter.ts"
-  },
-  "dependencies": {
-    "js-yaml": "^4.1.0"
-  },
-  "devDependencies": {
-    "@cloudflare/workers-types": "^4.20240208.0",
-    "@types/js-yaml": "^4.0.9",
-    "tsx": "^4.7.1",
-    "typescript": "^5.3.3",
-    "wrangler": "^3.28.1"
-  }
-}
+## File: Clash_Rules.YAML
+````YAML
+port: 7890
+socks-port: 7891
+mixed-port: 7893
+redir-port: 7892
+tproxy-port: 7895
+allow-lan: true
+bind-address: "*"
+mode: rule
+log-level: info
+ipv6: false
+external-controller: 0.0.0.0:9090
+tcp-concurrent: true
+unified-delay: true
 
-````
+# 啟用 TCP Fast Open，降低建立連線的握手延遲
+fast-open: true
 
-## File: .github/workflows/deploy.yml
-````yml
-# .github/workflows/deploy.yml
-name: Deploy to Cloudflare Workers
+# ==================== 設定檔快取 ====================
+profile:
+  store-selected: true
+  store-fake-ip: true
 
-on:
-  # 1. 當推送到 main 或 master 分支時自動執行
-  push:
-    branches:
-      - main
-      - master
+# ==================== 流量嗅探器 Sniffer ====================
+sniffer:
+  enable: true
+  override-destination: true
+  sniff:
+    QUIC:
+      ports:
+        - 443
+    TLS:
+      ports:
+        - 443
+        - 8443
+    HTTP:
+      ports:
+        - 80
+        - 8080-8880
+      override-destination: true
+  force-domain:
+    - "+.netflix.com"
+    - "+.nflxvideo.net"
+    - "+.amazonaws.com"
+    - "+.media.dssott.com"
+  skip-domain:
+    - "+.apple.com"
+    - "Mijia Cloud"
+    - "dlg.io.mi.com"
+    - "+.oray.com"
+    - "+.sunlogin.net"
+    - "+.push.apple.com"
+  parse-pure-ip: true
+  force-dns-mapping: true
+
+# ==================== 進階 DNS 設定 ====================
+dns:
+  enable: true
+  ipv6: false
+  listen: 0.0.0.0:1053
+  enhanced-mode: fake-ip
+  fake-ip-range: 198.18.0.1/16
+  fake-ip-filter-mode: blacklist
+  respect-rules: true  # 開啟：讓海外 DoH 安全地走代理，防止國內 DNS 污染
+  fake-ip-filter:
+    - '*.lan'
+    - '*.local'
+    - '*.localhost'
+    - '*.home.arpa'
+    - 'captive.apple.com'
+    - 'time.apple.com'
+    - 'time.*.apple.com'
+    - 'time.*.com'
+    - 'time.*.gov'
+    - 'time.*.edu.cn'
+    - 'ntp.*.com'
+    # 讓國內網站與蘋果服務強制返回真實 IP（配合 rule-set 屬性）
+    - 'rule-set:cn'
+    - 'rule-set:private'
+    - 'rule-set:apple'
   
-  # 2. 保留手動執行按鈕
-  workflow_dispatch:
+  # 💥 1. 基礎 DNS：必須使用傳統實體 IP（不可改動）
+  default-nameserver:
+    - 223.5.5.5
+    - 119.29.29.29
+    - 8.8.8.8
+    - 1.1.1.1
 
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    name: Deploy
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-      
-      # 已將 Node.js 環境升級至 Node 24 以消除棄用警告
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          # 暫時移除 cache: 'npm'，避免因缺少 package-lock.json 報錯
+  # 💥 2. 節點專用 DNS（全部使用 IP 型 DoH，免除任何域名解析，極速啟動）
+  proxy-server-nameserver:
+    - https://223.5.5.5/dns-query
+    - https://8.8.8.8/dns-query
 
-      # 替換成相容無鎖定檔的普通安裝（加入 --prefer-offline 稍微加速）
-      - name: Install dependencies
-        run: npm install --prefer-offline
+  # 💥 3. 網域特殊分流（國內、蘋果獨立優化）
+  nameserver-policy:
+    # 國內直連網站
+    "rule-set:cn":
+      - https://223.5.5.5/dns-query
+      - https://doh.pub/dns-query
 
-      # 替換 KV ID
-      - name: Inject KV ID from Secrets
-        run: |
-          sed -i 's/KV_ID_PLACEHOLDER/${{ secrets.CF_KV_ID }}/g' wrangler.toml
+    # 蘋果服務
+    "rule-set:apple":
+      - https://223.5.5.5/dns-query
+      - https://8.8.8.8/dns-query
 
-      # 部署步驟
-      - name: Deploy
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CF_API_TOKEN }}
-          accountId: ${{ secrets.CF_ACCOUNT_ID }}
+  # 💥 4. 國外網站兜底 DNS（推薦使用海外頂級 IP 型 DoH，自動走代理，防污染且速度最快）
+  nameserver:
+    - https://8.8.8.8/dns-query
+    - https://1.1.1.1/dns-query
 
-````
+# ==================================================
+# 代理節點設定
+# ==================================================
+proxies:
 
-## File: .github/workflows/combine-code.yml
-````yml
-name: Generate All Codebase to MD
+proxy-groups:
+  - name: 🚀 節點選擇
+    type: select
+    proxies:
+      - ⚡ 自動選擇
+      - DIRECT
 
-on:
-  push:
-    branches:
-      - main
-    paths-ignore:
-      - 'combined_project_code.md' # 避免此檔案自身更新引發無限循環
-  workflow_dispatch: # 支援在 GitHub 網頁上手動觸發執行
+  - name: ⚡ 自動選擇
+    type: url-test
+    url: http://www.gstatic.com/generate_204
+    interval: 300
+    proxies:
 
-permissions:
-  contents: write
+  - name: 💬 AI 服務
+    type: select
+    proxies:
+      - ⚡ 自動選擇
+      - 🚀 節點選擇
 
-jobs:
-  build:
-    runs-on: ubuntu-latest
+  - name: 🍎 蘋果服務
+    type: select
+    proxies:
+      - DIRECT
+      - 🚀 節點選擇
 
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+  - name: Ⓜ️ 微軟服務
+    type: select
+    proxies:
+      - DIRECT
+      - 🚀 節點選擇
 
-      - name: Combine All Files into MD
-        run: |
-          OUT_FILE="combined_project_code.md"
-          echo "# Complete Project Codebase" > "$OUT_FILE"
-          echo "Generated on: $(date)" >> "$OUT_FILE"
-          echo "" >> "$OUT_FILE"
+  - name: 🎮 遊戲平台
+    type: select
+    proxies:
+      - DIRECT
+      - 🚀 節點選擇
 
-          # 遍歷專案內的所有檔案，排除依賴、Git 歷史、打包產物及二進位檔案
-          find . -type f \
-            -not -path "*/node_modules/*" \
-            -not -path "*/.git/*" \
-            -not -path "*/dist/*" \
-            -not -name "package-lock.json" \
-            -not -name "yarn.lock" \
-            -not -name "pnpm-lock.yaml" \
-            -not -name "$OUT_FILE" \
-            -not -name "*.png" \
-            -not -name "*.jpg" \
-            -not -name "*.jpeg" \
-            -not -name "*.gif" \
-            -not -name "*.ico" \
-            -not -name "*.woff*" \
-            -not -name "*.ttf" | while read -r file; do
-              
-              # 取得相對路徑與副檔名
-              rel_path="${file#./}"
-              ext="${file##*.}"
-              
-              # 如果無副檔名，清除變數避免格式混亂
-              if [ "$ext" = "$rel_path" ]; then
-                ext=""
-              fi
-              
-              # 寫入檔案標題
-              echo "## File: $rel_path" >> "$OUT_FILE"
-              # 使用四個反單引號（````）包裹，防止內部程式碼的三個反單引號造成排版衝突
-              echo "\`\`\`\`$ext" >> "$OUT_FILE"
-              cat "$file" >> "$OUT_FILE"
-              echo "" >> "$OUT_FILE"
-              echo "\`\`\`\`" >> "$OUT_FILE"
-              echo "" >> "$OUT_FILE"
-          done
+  - name: 🌐 非中國
+    type: select
+    proxies:
+      - 🚀 節點選擇
+      - DIRECT
 
-      - name: Commit and Push changes
-        run: |
-          git config --local user.email "github-actions[bot]@users.noreply.github.com"
-          git config --local user.name "github-actions[bot]"
-          git add combined_project_code.md
-          
-          if git diff --staged --quiet; then
-            echo "No changes in codebase."
-          else
-            git commit -m "docs: auto-generate complete codebase [skip ci]"
-            git push origin main
-          fi
+  - name: 🇨🇳 國內服務
+    type: select
+    proxies:
+      - DIRECT
+      - 🚀 節點選擇
+
+  - name: 🏠 私有網絡
+    type: select
+    proxies:
+      - DIRECT
+
+  - name: 🐟 漏網之魚
+    type: select
+    proxies:
+      - 🚀 節點選擇
+      - DIRECT
+
+  - name: 🛑 廣告攔截
+    type: select
+    proxies:
+      - REJECT
+      - DIRECT
+
+# ==================================================
+# 規則集 Rule Providers (採用 MetaCubeX meta 格式優化)
+# ==================================================
+rule-providers:
+  my-ai:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://raw.githubusercontent.com/sammy0101/myself/refs/heads/main/geosite_ai_hk_proxy.mrs"
+    path: ./ruleset/my-ai.mrs
+    interval: 86400
+
+  category-ads-all:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/category-ads-all.mrs"
+    path: ./ruleset/category-ads-all.mrs
+    interval: 86400
+
+  private:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/private.mrs"
+    path: ./ruleset/private.mrs
+    interval: 86400
+
+  private-ip:
+    type: http
+    behavior: ipcidr
+    format: mrs
+    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/private.mrs"
+    path: ./ruleset/private-ip.mrs
+    interval: 86400
+
+  microsoft:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/microsoft.mrs"
+    path: ./ruleset/microsoft.mrs
+    interval: 86400
+
+  steam:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/steam.mrs"
+    path: ./ruleset/steam.mrs
+    interval: 86400
+
+  epicgames:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/epicgames.mrs"
+    path: ./ruleset/epicgames.mrs
+    interval: 86400
+
+  ea:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/ea.mrs"
+    path: ./ruleset/ea.mrs
+    interval: 86400
+
+  ubisoft:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/ubisoft.mrs"
+    path: ./ruleset/ubisoft.mrs
+    interval: 86400
+
+  blizzard:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/blizzard.mrs"
+    path: ./ruleset/blizzard.mrs
+    interval: 86400
+
+  apple:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/apple.mrs"
+    path: ./ruleset/apple.mrs
+    interval: 86400
+
+  geolocation-non-cn:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/geolocation-!cn.mrs"
+    path: ./ruleset/geolocation-non-cn.mrs
+    interval: 86400
+
+  cn:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/cn.mrs"
+    path: ./ruleset/cn.mrs
+    interval: 86400
+
+  cn-ip:
+    type: http
+    behavior: ipcidr
+    format: mrs
+    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/cn.mrs"
+    path: ./ruleset/cn-ip.mrs
+    interval: 86400
+
+# ==================================================
+# 流量路由 Rules
+# ==================================================
+rules:
+  # 1. 廣告與內網
+  - RULE-SET,category-ads-all,🛑 廣告攔截
+  - RULE-SET,private,🏠 私有網絡
+  - RULE-SET,private-ip,🏠 私有網絡,no-resolve
+
+  # 2. 強制代理業務 (專屬 AI 規則集)
+  - RULE-SET,my-ai,💬 AI 服務
+
+  # 3. Microsoft 服務分流
+  - RULE-SET,microsoft,Ⓜ️ 微軟服務
+
+  # 4. 遊戲平台分流
+  - RULE-SET,steam,🎮 遊戲平台
+  - RULE-SET,epicgames,🎮 遊戲平台
+  - RULE-SET,ea,🎮 遊戲平台
+  - RULE-SET,ubisoft,🎮 遊戲平台
+  - RULE-SET,blizzard,🎮 遊戲平台
+
+  # 5. Apple 服務分流
+  - RULE-SET,apple,🍎 蘋果服務
+
+  # 6. 非中國網站：走代理
+  - RULE-SET,geolocation-non-cn,🌐 非中國
+
+  # 7. 中國國內網域與 IP：走直連
+  - RULE-SET,cn,🇨🇳 國內服務
+  - RULE-SET,cn-ip,🇨🇳 國內服務,no-resolve
+
+  # 8. 國外網站兜底：全走代理
+  - MATCH,🐟 漏網之魚
 
 ````
 
