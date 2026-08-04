@@ -61,7 +61,7 @@ function safeBtoa(str: string): string {
   }
 }
 
-// 動態從 GitHub 獲取模板腳本並進行變數置換 (網址增加動態時間戳，消除 Cloudflare 緩存)
+// 動態從 GitHub 獲取模板腳本並進行變數置換
 async function getArgoScriptFromGithub(node: ProxyNode, port: string, token: string, domain: string): Promise<string> {
   const GITHUB_TEMPLATE_URL = `https://raw.githubusercontent.com/sammy0101/cf-sub-converter/main/argo.sh?t=${Date.now()}`;
   let template = "";
@@ -516,9 +516,18 @@ if (renameParam) {
   }
 }
 
+// 💥 重構：正則表達式構建器，修復二次替換破壞正則表達式的重大 Bug
 const buildFilterRegex = (param: string): RegExp => {
-  const safePattern = param.replace(/[xXｘＸ]/g, '[xXｘＸ×]').replace(/×/g, '[xXｘＸ×]');
-  return new RegExp(safePattern, 'i');
+  const parts = param.split('|').map(part => {
+    const trimmed = part.trim();
+    if (!trimmed) return '';
+    // 對正則表達式特殊字元進行安全轉義
+    const escaped = trimmed.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    // 單一次進行 x/X/x/X/× 字符相容替換
+    return escaped.replace(/[xXｘＸ×]/g, '[xXｘＸ×]');
+  }).filter(Boolean);
+  
+  return new RegExp(parts.join('|'), 'i');
 };
 
 if (includeParam) {
@@ -552,11 +561,10 @@ const uniqueNodes = deduplicateNodeNames(sortedNodes);
 
 let target = url.searchParams.get('target');
 
-// 自適應 User-Agent 偵測邏輯 (適用於自適應/短連結)
+// 自適應 User-Agent 偵測邏輯
 if (!target) {
   const ua = (request.headers.get('User-Agent') || '').toLowerCase();
   
-  // 檢查是否為代理客戶端，若不是代理客戶端（例如普通瀏覽器），則繼續輸出網頁摘要介面
   const isAgent = ua.includes('clash') || 
                   ua.includes('mihomo') || 
                   ua.includes('stash') || 
@@ -575,7 +583,7 @@ if (!target) {
     } else if (ua.includes('sing-box') || ua.includes('singbox') || ua.includes('hiddify')) {
       target = 'singbox';
     } else {
-      target = 'base64'; // 其它客戶端降級為 Base64 格式
+      target = 'base64';
     }
   }
 }
@@ -628,7 +636,6 @@ if (!target) {
       <div class="result-link">${host}/?url=${encodedUrl}${filterQuery}&target=base64</div>
     </div>
     
-    <!-- 提供三個平台的下載按鈕 -->
     <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 1.5rem;">
       <a class="btn" style="background: #3b82f6; margin-top: 0;" href="${host}/?url=${encodedUrl}${filterQuery}&target=base64">📥 下載 Base64 訂閱</a>
       <a class="btn" style="background: #f59e0b; margin-top: 0;" href="${host}/?url=${encodedUrl}${filterQuery}&target=clash">📥 下載 Clash Meta 訂閱</a>
