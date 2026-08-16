@@ -803,15 +803,16 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
           trafficCard.style.display = 'none';
         }
 
-        // 地区标签 (支持点击切换过滤与再次点击取消)
+        // 地区标签 (支持多选自由组合，例如: 香港|日本|美国)
         const chips = document.getElementById('regionChips');
         chips.innerHTML = '';
 
         const curInclude = document.getElementById('includeRegex').value.trim();
+        const curTokens = curInclude ? curInclude.split('|').map(s => s.trim()).filter(Boolean) : [];
 
-        // 🌐 全部节点快捷标签
+        // 🌐 全部节点快捷标签（点击重置，展示全部）
         const allChip = document.createElement('div');
-        allChip.className = 'region-chip' + (!curInclude ? ' active' : '');
+        allChip.className = 'region-chip' + (curTokens.length === 0 ? ' active' : '');
         allChip.textContent = '🌐 全部 (' + data.totalRaw + ')';
         allChip.onclick = () => {
           document.getElementById('includeRegex').value = '';
@@ -821,18 +822,21 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
 
         for (const [region, count] of Object.entries(data.regions || {})) {
           const rawReg = region.split(' ')[1] || region;
-          const isActive = curInclude === rawReg;
+          const isActive = curTokens.includes(rawReg);
 
           const chip = document.createElement('div');
           chip.className = 'region-chip' + (isActive ? ' active' : '');
           chip.textContent = \`\${region}: \${count}\`;
           chip.onclick = () => {
+            let nextTokens = [...curTokens];
             if (isActive) {
-              // 再次点击已选中的标签时，自动清空过滤条件（恢复全部）
-              document.getElementById('includeRegex').value = '';
+              // 再次点击取消该地区
+              nextTokens = nextTokens.filter(t => t !== rawReg);
             } else {
-              document.getElementById('includeRegex').value = rawReg;
+              // 叠加选中该地区（实现 香港|日本 多选自由组合）
+              nextTokens.push(rawReg);
             }
+            document.getElementById('includeRegex').value = nextTokens.join('|');
             inspectNodes();
           };
           chips.appendChild(chip);
