@@ -2,6 +2,8 @@
 
 基于 **Cloudflare Workers** 的轻量、无状态、高安全性 Serverless 订阅转换服务。
 
+[![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/han-ava/cf-sub-converter)
+
 ---
 
 ## 🌟 核心改进与安全保障（对比原版）
@@ -19,7 +21,16 @@
 
 ## 🚀 快速部署指南
 
-### 方法一：使用 Wrangler 命令行部署（推荐）
+### 方法一：Cloudflare 官方一键部署（最简单）
+
+点击下方按钮，直接将本项目一键分发部署到你的 Cloudflare 账户：
+
+[![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/han-ava/cf-sub-converter)
+
+---
+
+### 方法二：使用 Wrangler 命令行本地部署
+
 
 1. **安装依赖**：
    ```bash
