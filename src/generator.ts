@@ -408,14 +408,14 @@ export function toClashMeta(
     );
   }
 
-  // 构建默认 Proxy Groups
+  // 构建默认 Proxy Groups (严格保持有向无环图 DAG，避免 Clash 报 loop is detected 错误)
   const defaultGroups = [
     {
       name: '🚀 节点选择',
       type: 'select',
       proxies: [
         '⚡ 自动选择',
-        '🎯 全球直连',
+        'DIRECT',
         ...regionalGroupNames,
         ...(proxyNames.length > 0 ? proxyNames : ['DIRECT'])
       ]
@@ -433,7 +433,7 @@ export function toClashMeta(
     {
       name: '🎯 全球直连',
       type: 'select',
-      proxies: ['DIRECT', '🚀 节点选择']
+      proxies: ['DIRECT']
     },
     {
       name: '🛑 全球拦截',
@@ -443,7 +443,7 @@ export function toClashMeta(
     {
       name: '🐟 漏网之鱼',
       type: 'select',
-      proxies: ['🚀 节点选择', '🎯 全球直连', '⚡ 自动选择']
+      proxies: ['🚀 节点选择', '⚡ 自动选择', 'DIRECT']
     }
   ];
 
