@@ -327,6 +327,12 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       color: var(--accent);
       transform: translateY(-1px);
     }
+    .region-chip.active {
+      background: rgba(59, 130, 246, 0.2);
+      border-color: var(--accent);
+      color: var(--accent);
+      font-weight: 600;
+    }
     .node-list-box {
       max-height: 280px;
       overflow-y: auto;
@@ -797,16 +803,36 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
           trafficCard.style.display = 'none';
         }
 
-        // 地区标签
+        // 地区标签 (支持点击切换过滤与再次点击取消)
         const chips = document.getElementById('regionChips');
         chips.innerHTML = '';
+
+        const curInclude = document.getElementById('includeRegex').value.trim();
+
+        // 🌐 全部节点快捷标签
+        const allChip = document.createElement('div');
+        allChip.className = 'region-chip' + (!curInclude ? ' active' : '');
+        allChip.textContent = '🌐 全部 (' + data.totalRaw + ')';
+        allChip.onclick = () => {
+          document.getElementById('includeRegex').value = '';
+          inspectNodes();
+        };
+        chips.appendChild(allChip);
+
         for (const [region, count] of Object.entries(data.regions || {})) {
+          const rawReg = region.split(' ')[1] || region;
+          const isActive = curInclude === rawReg;
+
           const chip = document.createElement('div');
-          chip.className = 'region-chip';
+          chip.className = 'region-chip' + (isActive ? ' active' : '');
           chip.textContent = \`\${region}: \${count}\`;
           chip.onclick = () => {
-            const rawReg = region.split(' ')[1] || region;
-            document.getElementById('includeRegex').value = rawReg;
+            if (isActive) {
+              // 再次点击已选中的标签时，自动清空过滤条件（恢复全部）
+              document.getElementById('includeRegex').value = '';
+            } else {
+              document.getElementById('includeRegex').value = rawReg;
+            }
             inspectNodes();
           };
           chips.appendChild(chip);
