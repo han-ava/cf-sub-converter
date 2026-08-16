@@ -127,6 +127,43 @@ export function addFlagToNodeName(name: string): string {
 }
 
 /**
+ * 节点深层唯一特征指纹（精确区分同 IP/端口下的不同传输协议、路径、公钥与流控配置）
+ */
+export function getNodeFingerprint(node: ProxyNode): string {
+  return [
+    node.type || '',
+    node.server || '',
+    node.port || '',
+    node.uuid || node.password || '',
+    node.cipher || '',
+    node.network || '',
+    node.wsPath || '',
+    node.grpcServiceName || '',
+    node.sni || '',
+    node.reality?.publicKey || '',
+    node.flow || ''
+  ].join('|');
+}
+
+/**
+ * 基于深层特征指纹去重（防止不同订阅源包含完全相同节点时重复添加）
+ */
+export function deduplicateNodesByFingerprint(nodes: ProxyNode[]): ProxyNode[] {
+  const seen = new Set<string>();
+  const unique: ProxyNode[] = [];
+
+  for (const node of nodes) {
+    const fp = getNodeFingerprint(node);
+    if (!seen.has(fp)) {
+      seen.add(fp);
+      unique.push(node);
+    }
+  }
+
+  return unique;
+}
+
+/**
  * 节点名称去重
  */
 export function deduplicateNodeNames(nodes: ProxyNode[]): ProxyNode[] {
@@ -147,7 +184,7 @@ export function deduplicateNodeNames(nodes: ProxyNode[]): ProxyNode[] {
 }
 
 /**
- * 节点过滤与重命名处理
+ * 节点过滤、重命名与特征去重综合处理
  */
 export function processNodes(
   rawNodes: ProxyNode[],
@@ -159,14 +196,17 @@ export function processNodes(
     enableUdp?: boolean;
   }
 ): ProxyNode[] {
-  // 0. 节点名称安全清洗（过滤控制字符与换行，限制最大长度）
-  let nodes = rawNodes.map(node => {
+  // 0. 特征指纹去重
+  let nodes = deduplicateNodesByFingerprint(rawNodes);
+
+  // 1. 节点名称安全清洗（过滤控制字符与换行，限制最大 128 字符）
+  nodes = nodes.map(node => {
     let cleanName = (node.name || '')
       .replace(/[\x00-\x1f\x7f]/g, ' ')
       .replace(/\s+/g, ' ')
       .trim();
-    if (cleanName.length > 200) {
-      cleanName = cleanName.substring(0, 200);
+    if (cleanName.length > 128) {
+      cleanName = cleanName.substring(0, 128);
     }
     return { ...node, name: cleanName || 'Node' };
   });

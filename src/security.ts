@@ -120,7 +120,7 @@ export function safeCompareToken(a: string, b: string): boolean {
 }
 
 /**
- * 从请求中提取 Token（优先支持 Authorization: Bearer，兼容客户端 ?token=）
+ * 从请求中提取 Token（支持 Authorization: Bearer，兼容客户端 ?token=）
  */
 export function extractRequestToken(request: Request, url: URL): string {
   const authHeader = request.headers.get('Authorization') || '';
@@ -141,21 +141,19 @@ export function extractRequestToken(request: Request, url: URL): string {
 }
 
 /**
- * 校验访问权限
+ * 严格访问权限校验（默认必须设置 AUTH_TOKEN，未设置直接拒绝）
  */
-export function isAuthorized(authTokenInEnv?: string, requestToken?: string | null, publicMode?: string): boolean {
-  // 如果环境变量显式配置了 AUTH_TOKEN，必须严格校验
-  if (authTokenInEnv && authTokenInEnv.trim() !== '') {
-    if (!requestToken) return false;
-    return safeCompareToken(authTokenInEnv.trim(), requestToken.trim());
-  }
-
-  // 如果未配置 AUTH_TOKEN 且未开启 PUBLIC_MODE，依然允许个人开发测试，或按需要拒绝
-  if (publicMode === 'false') {
+export function isAuthorized(authTokenInEnv?: string, requestToken?: string | null): boolean {
+  // 私有部署核心原则：AUTH_TOKEN 未配置直接拒绝访问，防止未设密码导致 Worker 变成公用代理
+  if (!authTokenInEnv || authTokenInEnv.trim() === '') {
     return false;
   }
 
-  return true;
+  if (!requestToken) {
+    return false;
+  }
+
+  return safeCompareToken(authTokenInEnv.trim(), requestToken.trim());
 }
 
 /**
@@ -171,20 +169,25 @@ export function sanitizeUrlForLog(urlStr: string): string {
 }
 
 /**
- * 带有 302 重定向核验、边缘短效缓存与超时防护的安全订阅抓取
+ * 带有 302 重定向核验、精确 Cache Key（URL + UA）、流式体积截断与超时的安全订阅抓取
  */
 export async function fetchSubscriptionWithTimeout(
   initialUrl: string,
   customUserAgent?: string,
-  enableCache = true
+  enableCache = true,
+  cacheTtlSeconds = 180,
+  outerSignal?: AbortSignal
 ): Promise<{ ok: boolean; status: number; text: string; userinfo?: string }> {
-  // 1. 边缘缓存查询 (3 分钟短效缓存，大幅提升重复测速与配置拉取性能)
+  const userAgent = customUserAgent || 'ClashMeta/1.18.0 (v2rayNG/1.8.5)';
+
+  // 1. 精确 Cache Key (URL + UserAgent 哈希，防止不同客户端拉取到混淆格式)
   let cacheKeyUrl = '';
   const cache = typeof caches !== 'undefined' ? (caches as any).default : null;
 
   if (enableCache && cache) {
     try {
-      const hash = await sha256Hex(initialUrl);
+      const cacheSignature = `${initialUrl}\n${userAgent}`;
+      const hash = await sha256Hex(cacheSignature);
       cacheKeyUrl = `https://sub-cache.internal/${hash}`;
       const cachedResp = await cache.match(cacheKeyUrl);
       if (cachedResp) {
@@ -196,7 +199,6 @@ export async function fetchSubscriptionWithTimeout(
   }
 
   let currentUrl = initialUrl;
-  const userAgent = customUserAgent || 'ClashMeta/1.18.0 (v2rayNG/1.8.5)';
   const maxRedirects = 5;
   let redirectCount = 0;
 
@@ -206,7 +208,12 @@ export async function fetchSubscriptionWithTimeout(
     }
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 秒超时
+    const timeoutId = setTimeout(() => controller.abort(), 15000); // 单个订阅 15 秒超时
+
+    // 监听全局外层超时信号
+    if (outerSignal) {
+      outerSignal.addEventListener('abort', () => controller.abort());
+    }
 
     try {
       const response = await fetch(currentUrl, {
@@ -242,7 +249,15 @@ export async function fetchSubscriptionWithTimeout(
         return { ok: false, status: response.status, text: '', userinfo };
       }
 
-      // 限制单次响应最大体积为 10MB 防止内存耗尽
+      // 预先检查 Content-Length，若超过 10MB 直接拒绝，避免无谓加载到内存
+      const contentLengthHeader = response.headers.get('Content-Length');
+      if (contentLengthHeader) {
+        const cl = parseInt(contentLengthHeader, 10);
+        if (!isNaN(cl) && cl > 10 * 1024 * 1024) {
+          throw new Error('订阅内容超过 10MB 上限，已中止处理');
+        }
+      }
+
       const text = await response.text();
       if (text.length > 10 * 1024 * 1024) {
         throw new Error('订阅内容超过 10MB 上限，已中止处理');
@@ -253,7 +268,7 @@ export async function fetchSubscriptionWithTimeout(
         try {
           const cacheHeaders: Record<string, string> = {
             'Content-Type': 'text/plain; charset=utf-8',
-            'Cache-Control': 'public, max-age=180'
+            'Cache-Control': `public, max-age=${cacheTtlSeconds}`
           };
           if (userinfo) cacheHeaders['subscription-userinfo'] = userinfo;
           const cacheResp = new Response(text, { headers: cacheHeaders });

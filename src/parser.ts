@@ -514,21 +514,69 @@ export function parseTuic(urlStr: string): ProxyNode | null {
 }
 
 /**
+ * 协议级关键参数合法性校验（避免生成残缺不可用的节点配置）
+ */
+export function isValidNode(node: ProxyNode | null): boolean {
+  if (!node || !node.server || !node.port || isNaN(node.port) || node.port <= 0 || node.port > 65535) {
+    return false;
+  }
+
+  const type = node.type.toLowerCase();
+
+  if (type === 'vless') {
+    if (!node.uuid) return false;
+    // Reality 模式必须包含公钥
+    if (node.reality && (!node.reality.publicKey || !node.reality.publicKey.trim())) {
+      return false;
+    }
+    return true;
+  }
+
+  if (type === 'vmess') {
+    return !!node.uuid;
+  }
+
+  if (type === 'trojan') {
+    return !!node.password;
+  }
+
+  if (type === 'ss' || type === 'shadowsocks') {
+    return !!node.password && !!node.cipher;
+  }
+
+  if (type === 'ssr' || type === 'shadowsocksr') {
+    return !!node.password && !!node.cipher;
+  }
+
+  if (type === 'hysteria2' || type === 'hy2') {
+    return !!node.password;
+  }
+
+  if (type === 'tuic') {
+    return !!node.uuid && !!node.password;
+  }
+
+  return true;
+}
+
+/**
  * 单条节点链接识别并解析
  */
 export function parseSingleNode(link: string): ProxyNode | null {
   const trimmed = link.trim();
   if (!trimmed) return null;
 
-  if (trimmed.startsWith('vless://')) return parseVless(trimmed);
-  if (trimmed.startsWith('vmess://')) return parseVmess(trimmed);
-  if (trimmed.startsWith('trojan://')) return parseTrojan(trimmed);
-  if (trimmed.startsWith('ss://')) return parseShadowsocks(trimmed);
-  if (trimmed.startsWith('ssr://')) return parseShadowsocksR(trimmed);
-  if (trimmed.startsWith('hysteria2://') || trimmed.startsWith('hy2://')) return parseHysteria2(trimmed);
-  if (trimmed.startsWith('tuic://')) return parseTuic(trimmed);
+  let node: ProxyNode | null = null;
 
-  return null;
+  if (trimmed.startsWith('vless://')) node = parseVless(trimmed);
+  else if (trimmed.startsWith('vmess://')) node = parseVmess(trimmed);
+  else if (trimmed.startsWith('trojan://')) node = parseTrojan(trimmed);
+  else if (trimmed.startsWith('ss://')) node = parseShadowsocks(trimmed);
+  else if (trimmed.startsWith('ssr://')) node = parseShadowsocksR(trimmed);
+  else if (trimmed.startsWith('hysteria2://') || trimmed.startsWith('hy2://')) node = parseHysteria2(trimmed);
+  else if (trimmed.startsWith('tuic://')) node = parseTuic(trimmed);
+
+  return isValidNode(node) ? node : null;
 }
 
 /**
@@ -546,7 +594,7 @@ export async function parseContent(text: string): Promise<ProxyNode[]> {
       if (doc && Array.isArray(doc.proxies)) {
         for (const p of doc.proxies) {
           if (p && p.name && p.server && p.port) {
-            nodes.push({
+            const node: ProxyNode = {
               name: String(p.name),
               type: String(p.type || 'ss').toLowerCase(),
               server: String(p.server),
@@ -569,7 +617,10 @@ export async function parseContent(text: string): Promise<ProxyNode[]> {
               } : undefined,
               udp: p.udp !== false,
               clashObj: p
-            });
+            };
+            if (isValidNode(node)) {
+              nodes.push(node);
+            }
           }
         }
         if (nodes.length > 0) return nodes;
@@ -584,7 +635,7 @@ export async function parseContent(text: string): Promise<ProxyNode[]> {
       if (Array.isArray(json.outbounds)) {
         for (const ob of json.outbounds) {
           if (ob && ob.tag && ob.server && ob.server_port) {
-            nodes.push({
+            const node: ProxyNode = {
               name: String(ob.tag),
               type: String(ob.type).toLowerCase(),
               server: String(ob.server),
@@ -598,7 +649,10 @@ export async function parseContent(text: string): Promise<ProxyNode[]> {
               alpn: ob.tls?.alpn,
               udp: true,
               singboxObj: ob
-            });
+            };
+            if (isValidNode(node)) {
+              nodes.push(node);
+            }
           }
         }
         if (nodes.length > 0) return nodes;

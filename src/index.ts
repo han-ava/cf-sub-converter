@@ -26,53 +26,113 @@ const SECURITY_PAGE_HEADERS = {
 };
 
 /**
- * 核心节点聚合与并发拉取逻辑（Promise.allSettled 并行抓取加速）
+ * 限制并发的异步任务执行器（Worker Pool，默认最大并发 6）
+ */
+async function pMap<T, R>(items: T[], fn: (item: T) => Promise<R>, concurrency = 6): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let index = 0;
+
+  const workerCount = Math.min(concurrency, items.length);
+  if (workerCount === 0) return [];
+
+  const workers = Array.from({ length: workerCount }, async () => {
+    while (index < items.length) {
+      const i = index++;
+      results[i] = await fn(items[i]!);
+    }
+  });
+
+  await Promise.all(workers);
+  return results;
+}
+
+/**
+ * 汇总多个机场的流量信息
+ */
+function mergeUserinfos(userinfos: string[], strategy: 'first' | 'sum' | 'none'): string | undefined {
+  const validInfos = userinfos.filter(Boolean);
+  if (validInfos.length === 0) return undefined;
+  if (validInfos.length === 1) return validInfos[0];
+
+  if (strategy === 'none') return undefined;
+  if (strategy === 'first') return validInfos[0];
+
+  // strategy === 'sum'
+  let totalUpload = 0;
+  let totalDownload = 0;
+  let totalTotal = 0;
+  let minExpire = Infinity;
+
+  for (const info of validInfos) {
+    const parsed = parseUserinfo(info);
+    if (parsed) {
+      totalUpload += parsed.upload || 0;
+      totalDownload += parsed.download || 0;
+      totalTotal += parsed.total || 0;
+      if (parsed.expire && parsed.expire < minExpire) {
+        minExpire = parsed.expire;
+      }
+    }
+  }
+
+  const expirePart = minExpire !== Infinity ? `; expire=${minExpire}` : '';
+  return `upload=${totalUpload}; download=${totalDownload}; total=${totalTotal}${expirePart}`;
+}
+
+/**
+ * 核心节点聚合与并发控制抓取逻辑
  */
 async function loadAllNodes(
   urlParam: string,
   customUserAgent?: string,
-  enableCache = true
+  enableCache = true,
+  cacheTtl = 180,
+  userinfoStrategy: 'first' | 'sum' | 'none' = 'first',
+  outerSignal?: AbortSignal
 ): Promise<{ nodes: ProxyNode[]; userinfo?: string }> {
   const inputs = urlParam.split(/[\n\r|]+/);
   const allNodes: ProxyNode[] = [];
-  let userinfo: string | undefined = undefined;
+  const fetchedUserinfos: string[] = [];
 
-  const safeInputs = inputs.slice(0, 30);
-  const fetchTasks: Array<Promise<{ ok: boolean; status: number; text: string; userinfo?: string; originalUrl: string }>> = [];
+  const safeInputs = inputs.slice(0, 20); // 最多 20 个订阅源
+  const remoteUrls: string[] = [];
   const rawTexts: string[] = [];
 
   for (const input of safeInputs) {
     const trimmed = input.trim();
     if (!trimmed) continue;
-
     if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
-      fetchTasks.push(
-        fetchSubscriptionWithTimeout(trimmed, customUserAgent, enableCache)
-          .then(res => ({ ...res, originalUrl: trimmed }))
-          .catch(err => {
-            console.error(`Fetch subscription failed for: ${sanitizeUrlForLog(trimmed)} - ${err.message}`);
-            return { ok: false, status: 500, text: '', userinfo: undefined, originalUrl: trimmed };
-          })
-      );
+      remoteUrls.push(trimmed);
     } else {
       rawTexts.push(trimmed);
     }
   }
 
-  // 并行并发拉取所有远程订阅，大幅缩短总体延迟
-  if (fetchTasks.length > 0) {
-    const fetchResults = await Promise.allSettled(fetchTasks);
+  // 限制最大并发数为 6，避免对 Worker 与上游造成瞬时压力
+  if (remoteUrls.length > 0) {
+    const fetchResults = await pMap(
+      remoteUrls,
+      async (url) => {
+        try {
+          return await fetchSubscriptionWithTimeout(url, customUserAgent, enableCache, cacheTtl, outerSignal);
+        } catch (err: any) {
+          console.error(`Fetch subscription failed for: ${sanitizeUrlForLog(url)} - ${err.message}`);
+          return { ok: false, status: 500, text: '', userinfo: undefined };
+        }
+      },
+      6
+    );
 
     for (const result of fetchResults) {
-      if (result.status === 'fulfilled' && result.value.ok && result.value.text) {
-        if (!userinfo && result.value.userinfo) {
-          userinfo = result.value.userinfo;
+      if (result.ok && result.text) {
+        if (result.userinfo) {
+          fetchedUserinfos.push(result.userinfo);
         }
         try {
-          const parsed = await parseContent(result.value.text);
+          const parsed = await parseContent(result.text);
           allNodes.push(...parsed);
-        } catch (err: any) {
-          console.error(`Parse content failed for: ${sanitizeUrlForLog(result.value.originalUrl)}`);
+        } catch {
+          console.error('Parse subscription content failed');
         }
       }
     }
@@ -83,12 +143,13 @@ async function loadAllNodes(
     try {
       const parsed = await parseContent(rawText);
       allNodes.push(...parsed);
-    } catch (err: any) {
+    } catch {
       console.error('Parse raw node input failed');
     }
   }
 
-  return { nodes: allNodes, userinfo };
+  const mergedUserinfo = mergeUserinfos(fetchedUserinfos, userinfoStrategy);
+  return { nodes: allNodes, userinfo: mergedUserinfo };
 }
 
 export default {
@@ -138,8 +199,9 @@ export default {
         const rawUrl = body.url || '';
         const requestToken = body.token || extractRequestToken(request, url);
 
-        if (!isAuthorized(env.AUTH_TOKEN, requestToken, env.PUBLIC_MODE as string)) {
-          return new Response(JSON.stringify({ error: '未经授权: Token 缺失或无效' }), {
+        // 严格 Token 校验
+        if (!isAuthorized(env.AUTH_TOKEN, requestToken)) {
+          return new Response(JSON.stringify({ error: '未经授权: AUTH_TOKEN 未配置或无效' }), {
             status: 401,
             headers: { 'Content-Type': 'application/json', ...CORS_HEADERS }
           });
@@ -153,7 +215,7 @@ export default {
         }
 
         const clientUserAgent = request.headers.get('User-Agent') || undefined;
-        const { nodes: rawNodes, userinfo } = await loadAllNodes(rawUrl, clientUserAgent, true);
+        const { nodes: rawNodes, userinfo } = await loadAllNodes(rawUrl, clientUserAgent, true, 180, 'first');
 
         // 过滤与重命名
         const renameRules: Array<{ search: string; replace: string }> = [];
@@ -241,9 +303,12 @@ export default {
       let enableUdp = true;
       let showInfo = true;
       let preset = 'standard';
+      let testUrl = 'http://www.gstatic.com/generate_204';
+      let infoStrategy: 'first' | 'sum' | 'none' = 'first';
       let requestToken = extractRequestToken(request, url);
       let filename = 'SubConverter';
       let enableCache = url.searchParams.get('nocache') !== '1';
+      let cacheTtl = 180;
 
       if (request.method === 'GET') {
         rawUrl = url.searchParams.get('url') || '';
@@ -255,7 +320,16 @@ export default {
         enableUdp = url.searchParams.get('udp') !== '0';
         showInfo = url.searchParams.get('info') !== '0' && url.searchParams.get('show_info') !== '0';
         preset = (url.searchParams.get('preset') || 'standard').toLowerCase();
+        testUrl = url.searchParams.get('test_url') || 'http://www.gstatic.com/generate_204';
         filename = url.searchParams.get('filename') || 'SubConverter';
+
+        const infoParam = url.searchParams.get('info_mode');
+        if (infoParam === 'sum' || infoParam === 'none' || infoParam === 'first') {
+          infoStrategy = infoParam;
+        }
+
+        const ttlParam = parseInt(url.searchParams.get('cache_ttl') || '', 10);
+        if (!isNaN(ttlParam) && ttlParam > 0) cacheTtl = ttlParam;
       } else if (request.method === 'POST') {
         try {
           const body: any = await request.json();
@@ -268,9 +342,12 @@ export default {
           enableUdp = body.udp !== false;
           showInfo = body.info !== false && body.show_info !== false;
           preset = (body.preset || 'standard').toLowerCase();
+          testUrl = body.test_url || 'http://www.gstatic.com/generate_204';
+          if (body.info_mode) infoStrategy = body.info_mode;
           if (body.token) requestToken = body.token;
           filename = body.filename || 'SubConverter';
           if (body.nocache === true) enableCache = false;
+          if (body.cache_ttl) cacheTtl = Number(body.cache_ttl);
         } catch {
           return new Response(JSON.stringify({ error: '无效的 JSON 请求体' }), {
             status: 400,
@@ -279,12 +356,18 @@ export default {
         }
       }
 
-      // 访问鉴权校验
-      if (!isAuthorized(env.AUTH_TOKEN, requestToken, env.PUBLIC_MODE as string)) {
-        return new Response(JSON.stringify({ error: '未经授权: Token 缺失或无效' }), {
-          status: 401,
-          headers: { 'Content-Type': 'application/json', ...CORS_HEADERS }
-        });
+      // 严格鉴权校验：未配置 AUTH_TOKEN 或 Token 不匹配直接拒绝
+      if (!isAuthorized(env.AUTH_TOKEN, requestToken)) {
+        return new Response(
+          JSON.stringify({
+            error: '未经授权: AUTH_TOKEN 未配置或无效',
+            hint: '请在 Cloudflare Secret 中设置 AUTH_TOKEN，并在订阅链接中添加 &token=你的密码'
+          }),
+          {
+            status: 401,
+            headers: { 'Content-Type': 'application/json', ...CORS_HEADERS }
+          }
+        );
       }
 
       if (!rawUrl.trim()) {
@@ -293,6 +376,10 @@ export default {
           headers: { 'Content-Type': 'application/json', ...CORS_HEADERS }
         });
       }
+
+      // 全局 25 秒超时防护
+      const globalAbortController = new AbortController();
+      const globalTimeout = setTimeout(() => globalAbortController.abort(), 25000);
 
       try {
         // 解析重命名规则 (格式: "香港=HK, 日本=JP" 或换行)
@@ -312,8 +399,17 @@ export default {
           }
         }
 
-        // 并发拉取并解析节点
-        const { nodes: rawNodes, userinfo } = await loadAllNodes(rawUrl, clientUserAgent, enableCache);
+        // 并发池拉取并解析节点
+        const { nodes: rawNodes, userinfo } = await loadAllNodes(
+          rawUrl,
+          clientUserAgent,
+          enableCache,
+          cacheTtl,
+          infoStrategy,
+          globalAbortController.signal
+        );
+
+        clearTimeout(globalTimeout);
 
         if (rawNodes.length === 0) {
           return new Response('未成功解析到任何可用代理节点，请检查原始订阅链接是否有效。', {
@@ -326,7 +422,7 @@ export default {
           });
         }
 
-        // 过滤与重命名
+        // 过滤、重命名与特征去重
         let processedNodes = processNodes(rawNodes, {
           includeRegex,
           excludeRegex,
@@ -355,7 +451,7 @@ export default {
 
         // 根据 target 输出对应配置
         if (target === 'clash' || target === 'meta' || target === 'mihomo') {
-          const yamlOutput = toClashMeta(processedNodes, undefined, preset);
+          const yamlOutput = toClashMeta(processedNodes, undefined, preset, testUrl);
           responseHeaders['Content-Type'] = 'text/yaml; charset=utf-8';
           responseHeaders['Content-Disposition'] = `attachment; filename="${encodeURIComponent(filename)}.yaml"`;
           return new Response(yamlOutput, { headers: responseHeaders });
@@ -394,10 +490,11 @@ export default {
         }
 
         // 默认返回 Clash Meta
-        const defaultOutput = toClashMeta(processedNodes, undefined, preset);
+        const defaultOutput = toClashMeta(processedNodes, undefined, preset, testUrl);
         responseHeaders['Content-Type'] = 'text/yaml; charset=utf-8';
         return new Response(defaultOutput, { headers: responseHeaders });
       } catch (err: any) {
+        clearTimeout(globalTimeout);
         return new Response(JSON.stringify({ error: `订阅转换失败: ${err.message}` }), {
           status: 500,
           headers: {

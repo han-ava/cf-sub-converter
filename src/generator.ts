@@ -319,7 +319,12 @@ export function nodeToSingBoxOutbound(node: ProxyNode): Record<string, any> {
 /**
  * 转换为 Clash Meta / Mihomo 配置文件 (YAML)
  */
-export function toClashMeta(nodes: ProxyNode[], customTemplateYaml?: string, preset: string = 'standard'): string {
+export function toClashMeta(
+  nodes: ProxyNode[],
+  customTemplateYaml?: string,
+  preset: string = 'standard',
+  testUrl: string = 'http://www.gstatic.com/generate_204'
+): string {
   let config: any = null;
 
   if (customTemplateYaml && customTemplateYaml.trim()) {
@@ -357,7 +362,7 @@ export function toClashMeta(nodes: ProxyNode[], customTemplateYaml?: string, pre
       regionalGroups.push({
         name: groupName,
         type: 'url-test',
-        url: 'http://www.gstatic.com/generate_204',
+        url: testUrl,
         interval: 300,
         tolerance: 50,
         proxies: matchedNodes
@@ -418,7 +423,7 @@ export function toClashMeta(nodes: ProxyNode[], customTemplateYaml?: string, pre
     {
       name: '⚡ 自动选择',
       type: 'url-test',
-      url: 'http://www.gstatic.com/generate_204',
+      url: testUrl,
       interval: 300,
       tolerance: 50,
       proxies: proxyNames.length > 0 ? proxyNames : ['DIRECT']
