@@ -500,8 +500,8 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       </div>
 
       <div class="form-group">
-        <label for="authToken">访问密钥 Token (若服务端开启)</label>
-        <input type="text" id="authToken" placeholder="可选：填写您的 AUTH_TOKEN">
+        <label for="authToken">🔐 访问密钥 Token (AUTH_TOKEN)</label>
+        <input type="text" id="authToken" placeholder="请填写您在 Cloudflare 中配置的 AUTH_TOKEN" oninput="saveAuthToken()">
       </div>
 
       <!-- 高级设置 -->
@@ -641,9 +641,17 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
         return '';
       }
 
+      const authToken = document.getElementById('authToken').value.trim();
+      if (!authToken) {
+        alert('⚠️ 请输入您在 Cloudflare 中配置的「访问密钥 Token」(AUTH_TOKEN)，否则服务端将拦截请求。');
+        document.getElementById('authToken').focus();
+        return '';
+      }
+
+      saveAuthToken();
+
       const target = document.getElementById('targetClient').value;
       const preset = document.getElementById('rulePreset').value;
-      const authToken = document.getElementById('authToken').value.trim();
       const includeRegex = document.getElementById('includeRegex').value.trim();
       const excludeRegex = document.getElementById('excludeRegex').value.trim();
       const renameRules = document.getElementById('renameRules').value.trim();
@@ -655,9 +663,9 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       const params = new URLSearchParams();
       params.set('url', rawUrl);
       params.set('target', target);
+      params.set('token', authToken);
 
       if (preset && preset !== 'standard') params.set('preset', preset);
-      if (authToken) params.set('token', authToken);
       if (includeRegex) params.set('include', includeRegex);
       if (excludeRegex) params.set('exclude', excludeRegex);
       if (renameRules) params.set('rename', renameRules);
@@ -725,6 +733,15 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
         return;
       }
 
+      const token = document.getElementById('authToken').value.trim();
+      if (!token) {
+        alert('⚠️ 请先填写您在 Cloudflare 中配置的「访问密钥 Token」(AUTH_TOKEN)，否则服务端将拦截请求。');
+        document.getElementById('authToken').focus();
+        return;
+      }
+
+      saveAuthToken();
+
       const inspectBtn = document.getElementById('btnInspect');
       inspectBtn.textContent = '⏳ 解析中...';
       inspectBtn.disabled = true;
@@ -732,7 +749,7 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       try {
         const payload = {
           url: rawUrl,
-          token: document.getElementById('authToken').value.trim(),
+          token,
           include: document.getElementById('includeRegex').value.trim(),
           exclude: document.getElementById('excludeRegex').value.trim(),
           rename: document.getElementById('renameRules').value.trim(),
@@ -748,7 +765,11 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
 
         const data = await resp.json();
         if (!resp.ok || !data.ok) {
-          alert('解析失败: ' + (data.error || '未知错误'));
+          if (resp.status === 401) {
+            alert('❌ 身份认证失败 (401)\n\n原因: 访问密钥 Token 不匹配。\n请核对网页填写的 Token 是否与 Cloudflare Dashboard 中设置的 AUTH_TOKEN 完全一致。');
+          } else {
+            alert('解析失败: ' + (data.error || '未知错误'));
+          }
           return;
         }
 
@@ -1014,7 +1035,27 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       \`).join('');
     }
 
+    // Token 本地持久化 (localStorage)
+    const TOKEN_STORAGE_KEY = 'subconv_saved_token';
+
+    function saveAuthToken() {
+      const token = document.getElementById('authToken').value.trim();
+      if (token) {
+        localStorage.setItem(TOKEN_STORAGE_KEY, token);
+      }
+    }
+
+    function restoreAuthToken() {
+      try {
+        const saved = localStorage.getItem(TOKEN_STORAGE_KEY);
+        if (saved) {
+          document.getElementById('authToken').value = saved;
+        }
+      } catch {}
+    }
+
     // 初始化
+    restoreAuthToken();
     renderFavorites();
   </script>
 </body>
