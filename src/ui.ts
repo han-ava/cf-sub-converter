@@ -769,7 +769,7 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
         const data = await resp.json();
         if (!resp.ok || !data.ok) {
           if (resp.status === 401) {
-            alert('❌ 身份认证失败 (401)\n\n原因: 访问密钥 Token 不匹配。\n请核对网页填写的 Token 是否与 Cloudflare Dashboard 中设置的 AUTH_TOKEN 完全一致。');
+            alert('❌ 身份认证失败 (401): 访问密钥 Token 不匹配。请核对网页填写的 Token 是否与 Cloudflare Dashboard 中设置的 AUTH_TOKEN 完全一致。');
           } else {
             alert('解析失败: ' + (data.error || '未知错误'));
           }
