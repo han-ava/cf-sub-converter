@@ -211,33 +211,40 @@ export function processNodes(
     return { ...node, name: cleanName || 'Node' };
   });
 
-  // 1. 包含过滤 (Include Regex)
+  // 2. 包含过滤 (Include Regex，限制最大 500 字符)
   if (options.includeRegex && options.includeRegex.trim()) {
     try {
-      const inc = new RegExp(options.includeRegex.trim(), 'i');
+      const safePattern = options.includeRegex.trim().substring(0, 500);
+      const inc = new RegExp(safePattern, 'i');
       nodes = nodes.filter(n => inc.test(n.name));
     } catch {}
   }
 
-  // 2. 排除过滤 (Exclude Regex)
+  // 3. 排除过滤 (Exclude Regex，限制最大 500 字符)
   if (options.excludeRegex && options.excludeRegex.trim()) {
     try {
-      const exc = new RegExp(options.excludeRegex.trim(), 'i');
+      const safePattern = options.excludeRegex.trim().substring(0, 500);
+      const exc = new RegExp(safePattern, 'i');
       nodes = nodes.filter(n => !exc.test(n.name));
     } catch {}
   }
 
-  // 3. 重命名规则 (Rename Rules)
+  // 4. 重命名规则 (Rename Rules，限制最多 30 条，每条最多 200 字符)
   if (options.renameRules && options.renameRules.length > 0) {
+    const safeRules = options.renameRules.slice(0, 30).map(r => ({
+      search: (r.search || '').substring(0, 200),
+      replace: (r.replace || '').substring(0, 200)
+    }));
+
     nodes = nodes.map(node => {
       let newName = node.name;
-      for (const rule of options.renameRules!) {
+      for (const rule of safeRules) {
         if (!rule.search) continue;
         try {
           const reg = new RegExp(rule.search, 'g');
-          newName = newName.replace(reg, rule.replace || '');
+          newName = newName.replace(reg, rule.replace);
         } catch {
-          newName = newName.split(rule.search).join(rule.replace || '');
+          newName = newName.split(rule.search).join(rule.replace);
         }
       }
       return { ...node, name: newName.trim() || node.name };

@@ -87,7 +87,7 @@ async function loadAllNodes(
   customUserAgent?: string,
   enableCache = true,
   cacheTtl = 180,
-  userinfoStrategy: 'first' | 'sum' | 'none' = 'first',
+  userinfoStrategy?: 'first' | 'sum' | 'none',
   outerSignal?: AbortSignal
 ): Promise<{ nodes: ProxyNode[]; userinfo?: string }> {
   const inputs = urlParam.split(/[\n\r|]+/);
@@ -148,7 +148,9 @@ async function loadAllNodes(
     }
   }
 
-  const mergedUserinfo = mergeUserinfos(fetchedUserinfos, userinfoStrategy);
+  // 多订阅默认不混淆流量（none），单订阅保留原样（first）
+  const strategy = userinfoStrategy || (remoteUrls.length > 1 ? 'none' : 'first');
+  const mergedUserinfo = mergeUserinfos(fetchedUserinfos, strategy);
   return { nodes: allNodes, userinfo: mergedUserinfo };
 }
 
