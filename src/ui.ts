@@ -606,11 +606,14 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
         <div class="panel-title">
           <span>⭐ 本地配置收藏夹</span>
         </div>
-        <span style="font-size: 0.75rem; color: var(--text-dim);">仅存储于当前浏览器，绝不上传云端</span>
+        <button class="btn btn-secondary btn-sm" onclick="saveToLocalFavorites()">+ 收藏当前配置</button>
       </div>
 
       <div id="favList" class="fav-list">
-        <div style="color: var(--text-dim); font-size: 0.85rem; text-align: center; padding: 1rem;">暂无保存的本地配置</div>
+        <div style="color: var(--text-dim); font-size: 0.85rem; text-align: center; padding: 1.25rem; background: var(--bg-input); border-radius: var(--radius-md); border: 1px dashed var(--border);">
+          ⭐ 暂无保存的配置<br>
+          <span style="font-size: 0.78rem; color: var(--text-muted); margin-top: 4px; display: inline-block;">在上方配置好订阅与规则后，点击「+ 收藏当前配置」即可保存</span>
+        </div>
       </div>
     </div>
   </div>
@@ -961,14 +964,19 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
 
     function saveToLocalFavorites() {
       const subUrl = document.getElementById('subUrl').value.trim();
-      if (!subUrl) return;
+      if (!subUrl) {
+        alert('请先在上方输入订阅链接并配置好过滤规则');
+        document.getElementById('subUrl').focus();
+        return;
+      }
 
-      const name = prompt('请输入该配置名称 (如: 主力香港专线):', '我的订阅 ' + (new Date().toLocaleDateString()));
-      if (!name) return;
+      const defaultName = '我的订阅 ' + (new Date().toLocaleDateString());
+      const name = prompt('请输入该配置名称 (例如: 主力香港专线):', defaultName);
+      if (!name || !name.trim()) return;
 
       const item = {
         id: Date.now(),
-        name,
+        name: name.trim(),
         subUrl,
         target: document.getElementById('targetClient').value,
         preset: document.getElementById('rulePreset').value,
@@ -983,15 +991,17 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
 
       const favs = getFavorites();
       favs.unshift(item);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(favs.slice(0, 20)));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(favs.slice(0, 30)));
       renderFavorites();
-      showToast('⭐ 已保存至本地浏览器收藏');
+      showToast('⭐ 已保存配置至本地收藏夹');
     }
 
     function deleteFavorite(id) {
+      if (!confirm('确定要删除此收藏配置吗？')) return;
       const favs = getFavorites().filter(f => f.id !== id);
       localStorage.setItem(STORAGE_KEY, JSON.stringify(favs));
       renderFavorites();
+      showToast('🗑️ 已删除收藏配置');
     }
 
     function loadFavorite(id) {
@@ -1009,7 +1019,7 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       document.getElementById('enableUdp').checked = item.enableUdp !== false;
 
       generateLink();
-      showToast('⚡ 已加载配置: ' + item.name);
+      showToast('⚡ 已成功加载配置: ' + item.name);
     }
 
     function renderFavorites() {
@@ -1017,19 +1027,24 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       const favs = getFavorites();
 
       if (favs.length === 0) {
-        list.innerHTML = '<div style="color: var(--text-dim); font-size: 0.85rem; text-align: center; padding: 1rem;">暂无保存的本地配置</div>';
+        list.innerHTML = '<div style="color: var(--text-dim); font-size: 0.85rem; text-align: center; padding: 1.25rem; background: var(--bg-input); border-radius: var(--radius-md); border: 1px dashed var(--border);">⭐ 暂无保存的配置<br><span style="font-size: 0.78rem; color: var(--text-muted); margin-top: 4px; display: inline-block;">在上方配置好订阅与规则后，点击「+ 收藏当前配置」即可保存</span></div>';
         return;
       }
 
       list.innerHTML = favs.map(f => \`
         <div class="fav-item">
-          <div class="fav-info" onclick="loadFavorite(\${f.id})" style="cursor: pointer;">
-            <div class="fav-name">⚡ \${f.name}</div>
-            <div class="fav-meta">\${f.target.toUpperCase()} · \${new Date(f.date).toLocaleDateString()}</div>
+          <div class="fav-info" onclick="loadFavorite(\${f.id})" style="cursor: pointer; flex: 1;">
+            <div class="fav-name">⭐ \${f.name}</div>
+            <div class="fav-meta" style="margin-top: 4px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+              <span class="badge" style="font-size: 0.65rem; padding: 1px 6px;">\${f.target.toUpperCase()}</span>
+              \${f.preset && f.preset !== 'standard' ? \`<span class="badge" style="font-size: 0.65rem; padding: 1px 6px; background: rgba(16,185,129,0.15); color: #10b981;">\${f.preset.toUpperCase()}</span>\` : ''}
+              \${f.include ? \`<span style="font-family: monospace; font-size: 0.75rem; color: var(--accent);">[\${f.include}]</span>\` : ''}
+              <span style="font-size: 0.75rem; color: var(--text-dim);">· \${new Date(f.date).toLocaleDateString()}</span>
+            </div>
           </div>
-          <div style="display: flex; gap: 6px;">
-            <button class="btn btn-secondary btn-sm" onclick="loadFavorite(\${f.id})">载入</button>
-            <button class="btn btn-secondary btn-sm" style="color: var(--danger);" onclick="deleteFavorite(\${f.id})">删除</button>
+          <div style="display: flex; gap: 6px; align-items: center;">
+            <button class="btn btn-primary btn-sm" onclick="loadFavorite(\${f.id})" title="载入并立即转换">⚡ 载入</button>
+            <button class="btn btn-secondary btn-sm" style="color: var(--danger);" onclick="deleteFavorite(\${f.id})" title="删除此收藏">🗑️</button>
           </div>
         </div>
       \`).join('');
