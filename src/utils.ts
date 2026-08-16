@@ -1,185 +1,301 @@
-import { ProxyNode } from "./types";
+// src/utils.ts
+import { ProxyNode } from './types';
 
-// --- 完美 Base64 解碼 ---
+/**
+ * 带有完整 UTF-8 支持的安全 Base64 解码
+ */
 export function safeBase64Decode(str: string): string {
+  if (!str) return '';
   try {
-    let b64 = str.replace(/-/g, '+').replace(/_/g, '/').replace(/[^A-Za-z0-9+/=]/g, '');
-    while (b64.length % 4) b64 += '=';
-    
-    const binaryStr = atob(b64);
-    const bytes = new Uint8Array(binaryStr.length);
-    for (let i = 0; i < binaryStr.length; i++) {
-      bytes[i] = binaryStr.charCodeAt(i);
+    // 替换 base64url 字符并补齐 padding
+    let clean = str.trim().replace(/-/g, '+').replace(/_/g, '/');
+    while (clean.length % 4) {
+      clean += '=';
+    }
+
+    const binaryString = atob(clean);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
     }
     return new TextDecoder('utf-8').decode(bytes);
-  } catch (e) {
-    return "";
+  } catch {
+    try {
+      return atob(str.trim());
+    } catch {
+      return '';
+    }
   }
 }
 
-export function utf8ToBase64(str: string): string {
+/**
+ * 带有完整 UTF-8 支持的安全 Base64 编码
+ */
+export function safeBase64Encode(str: string): string {
   try {
-    return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g,
-        function toSolidBytes(match, p1) {
-            return String.fromCharCode(parseInt(p1, 16));
-        }));
-  } catch (e) {
+    const bytes = new TextEncoder().encode(str);
+    let binary = '';
+    const len = bytes.byteLength;
+    for (let i = 0; i < len; i++) {
+      binary += String.fromCharCode(bytes[i]!);
+    }
+    return btoa(binary);
+  } catch {
     return btoa(str);
   }
 }
 
+/**
+ * 安全的 decodeURIComponent
+ */
 export function tryDecodeURIComponent(str: string): string {
   try {
     return decodeURIComponent(str);
-  } catch (e) {
+  } catch {
     return str;
   }
 }
 
-// --- 自動加入國旗 Emoji 的智慧辨識系統 ---
-export function addFlag(name: string): string {
-  if (/[\uD83C][\uDDE6-\uDDFF][\uD83C][\uDDE6-\uDDFF]/.test(name)) {
+export interface RegionInfo {
+  code: string;
+  flag: string;
+  name: string;
+  regex: RegExp;
+}
+
+export const REGIONS: RegionInfo[] = [
+  { code: 'HK', flag: '🇭🇰', name: '香港', regex: /(?:香港|Hong\s*Kong|HK|HKG|HongKong|深港|沪港|广港|穗港|HKT|HKBN|HGC|WTT)/i },
+  { code: 'TW', flag: '🇹🇼', name: '台湾', regex: /(?:台湾|臺灣|Taiwan|TW|TWN|Taipei|台中|台北|新北|HINET|APOL|Kbro)/i },
+  { code: 'JP', flag: '🇯🇵', name: '日本', regex: /(?:日本|Japan|JP|JPN|Tokyo|Osaka|东京|大阪|埼玉|名古|广岛|软银|Softbank|KDDI|DOCOMO)/i },
+  { code: 'SG', flag: '🇸🇬', name: '新加坡', regex: /(?:新加坡|Singapore|SG|SGP|狮城|星加坡)/i },
+  { code: 'US', flag: '🇺🇸', name: '美国', regex: /(?:美国|美國|United\s*States|US|USA|America|洛杉矶|硅谷|西雅图|芝加哥|纽约|达拉斯|波特兰|旧金山|圣何塞|凤凰城|俄勒冈|弗吉尼亚|Fremont|Los\s*Angeles|San\s*Jose|Silicon\s*Valley|Seattle|Chicago|New\s*York)/i },
+  { code: 'KR', flag: '🇰🇷', name: '韩国', regex: /(?:韩国|韓國|Korea|KR|KOR|Seoul|首尔|釜山|KT|SK|LG)/i },
+  { code: 'GB', flag: '🇬🇧', name: '英国', regex: /(?:英国|英國|United\s*Kingdom|UK|GB|GBR|London|伦敦|曼彻斯特)/i },
+  { code: 'DE', flag: '🇩🇪', name: '德国', regex: /(?:德国|德國|Germany|DE|DEU|Frankfurt|法兰克福|柏林|慕尼黑)/i },
+  { code: 'FR', flag: '🇫🇷', name: '法国', regex: /(?:法国|法國|France|FR|FRA|Paris|巴黎)/i },
+  { code: 'CA', flag: '🇨🇦', name: '加拿大', regex: /(?:加拿大|Canada|CA|CAN|Toronto|Vancouver|多伦多|温哥华|蒙特利尔)/i },
+  { code: 'AU', flag: '🇦🇺', name: '澳大利亚', regex: /(?:澳大利亚|澳洲|Australia|AU|AUS|Sydney|Melbourne|悉尼|墨尔本|堪培拉)/i },
+  { code: 'RU', flag: '🇷🇺', name: '俄罗斯', regex: /(?:俄罗斯|Russia|RU|RUS|Moscow|莫斯科|圣彼得堡|海参崴)/i },
+  { code: 'IN', flag: '🇮🇳', name: '印度', regex: /(?:印度|India|IN|IND|Mumbai|孟买|新德里)/i },
+  { code: 'MY', flag: '🇲🇾', name: '马来西亚', regex: /(?:马来西亚|马来|大马|Malaysia|MY|MYS|Kuala\s*Lumpur|吉隆坡)/i },
+  { code: 'TH', flag: '🇹🇭', name: '泰国', regex: /(?:泰国|泰國|Thailand|TH|THA|Bangkok|曼谷)/i },
+  { code: 'PH', flag: '🇵🇭', name: '菲律宾', regex: /(?:菲律宾|Philippines|PH|PHL|Manila|马尼拉)/i },
+  { code: 'VN', flag: '🇻🇳', name: '越南', regex: /(?:越南|Vietnam|VN|VNM|Ho\s*Chi\s*Minh|胡志明|河内)/i },
+  { code: 'ID', flag: '🇮🇩', name: '印尼', regex: /(?:印尼|印度尼西亚|Indonesia|ID|IDN|Jakarta|雅加达)/i },
+  { code: 'TR', flag: '🇹🇷', name: '土耳其', regex: /(?:土耳其|Turkey|TR|TUR|Istanbul|伊斯坦布尔)/i },
+  { code: 'AR', flag: '🇦🇷', name: '阿根廷', regex: /(?:阿根廷|Argentina|AR|ARG)/i },
+  { code: 'BR', flag: '🇧🇷', name: '巴西', regex: /(?:巴西|Brazil|BR|BRA|Sao\s*Paulo|圣保罗)/i },
+  { code: 'ZA', flag: '🇿🇦', name: '南非', regex: /(?:南非|South\s*Africa|ZA|ZAF|Johannesburg)/i },
+  { code: 'NL', flag: '🇳🇱', name: '荷兰', regex: /(?:荷兰|荷蘭|Netherlands|NL|NLD|Amsterdam|阿姆斯特丹)/i },
+  { code: 'CH', flag: '🇨🇭', name: '瑞士', regex: /(?:瑞士|Switzerland|CH|CHE|Zurich|苏黎世)/i },
+  { code: 'SE', flag: '🇸🇪', name: '瑞典', regex: /(?:瑞典|Sweden|SE|SWE|Stockholm|斯德哥尔摩)/i },
+  { code: 'IT', flag: '🇮🇹', name: '意大利', regex: /(?:意大利|Italy|IT|ITA|Milan|米兰|罗马)/i },
+  { code: 'ES', flag: '🇪🇸', name: '西班牙', regex: /(?:西班牙|Spain|ES|ESP|Madrid|马德里)/i },
+  { code: 'IE', flag: '🇮🇪', name: '爱尔兰', regex: /(?:爱尔兰|愛爾蘭|Ireland|IE|IRL|Dublin|都柏林)/i },
+  { code: 'AE', flag: '🇦🇪', name: '阿联酋', regex: /(?:阿联酋|迪拜|UAE|AE|ARE|Dubai)/i },
+  { code: 'CN', flag: '🇨🇳', name: '中国', regex: /(?:中国|中國|China|CN|CHN|回国|北京|上海|广州|深圳|杭州)/i },
+];
+
+/**
+ * 识别节点地区并返回国旗
+ */
+export function getRegionByNodeName(name: string): RegionInfo | null {
+  for (const region of REGIONS) {
+    if (region.regex.test(name)) {
+      return region;
+    }
+  }
+  return null;
+}
+
+/**
+ * 智能为节点名称添加国旗 Emoji 前缀
+ */
+export function addFlagToNodeName(name: string): string {
+  // 检查是否已有 Emoji 国旗
+  const flagRegex = /[\uD83C][\uDDE6-\uDDFF][\uD83C][\uDDE6-\uDDFF]/;
+  if (flagRegex.test(name)) {
     return name;
   }
 
-  const upper = name.toUpperCase();
+  const region = getRegionByNodeName(name);
+  if (region) {
+    return `${region.flag} ${name}`;
+  }
 
-  const isMatch = (codes: string, keywords: string) => {
-    const codeRegex = new RegExp(`(?:^|[^A-Z])(${codes})(?![A-Z])`);
-    const keywordRegex = new RegExp(`(${keywords})`);
-    return codeRegex.test(upper) || keywordRegex.test(upper);
-  };
-
-  if (isMatch('HK|HKG', '香港|深港|HONGKONG|HONG KONG')) return "🇭🇰 " + name;
-  if (isMatch('TW|TWN|TPE', '台灣|台湾|台北|新北|彰化')) return "🇹🇼 " + name;
-  if (isMatch('JP|JPN|TYO|OSA|NRT|HND|KIX', '日本|东京|大阪|埼玉|慢日|川日|JAPAN')) return "🇯🇵 " + name;
-  if (isMatch('SG|SGP|SIN', '新加坡|狮城|SINGAPORE')) return "🇸🇬 " + name;
-  if (isMatch('US|USA|LAX|SFO|SJC|SEA|NYC|JFK|EWR', '美国|美利堅|洛杉矶|圣何塞|硅谷|波特兰|西雅图|AMERICA|UNITED STATES')) return "🇺🇸 " + name;
-  if (isMatch('KR|KOR|ICN|SEL', '韩国|首尔|KOREA')) return "🇰🇷 " + name;
-  if (isMatch('UK|GB|GBR|LHR|LON', '英国|英國|伦敦|BRITAIN|ENGLAND')) return "🇬🇧 " + name;
-  if (isMatch('NL|NLD|AMS', '荷兰|荷蘭|阿姆斯特丹|NETHERLANDS')) return "🇳🇱 " + name;
-  if (isMatch('BR|BRA|SAO', '巴西|圣保罗|聖保羅|BRAZIL')) return "🇧🇷 " + name;
-  if (isMatch('EG|EGY|CAI', '埃及|开罗|開羅|EGYPT')) return "🇪🇬 " + name;
-  if (isMatch('VN|VNM|HAN|SGN', '越南|河内|河內|西贡|VIETNAM')) return "🇻🇳 " + name;
-  
-  if (isMatch('MO|MAC|MFM', '澳門|澳门')) return "🇲🇴 " + name;
-  if (isMatch('KH|KHM|PNH', '柬埔寨|金边|金邊|CAMBODIA')) return "🇰🇭 " + name;
-  if (isMatch('GR|GRC|ATH', '希腊|希臘|雅典|GREECE')) return "🇬🇷 " + name;
-  if (isMatch('PL|POL|WAW', '波兰|波蘭|华沙|華沙|POLAND')) return "🇵🇱 " + name;
-  
-  if (isMatch('IT|ITA|MIL', '意大利|義大和|米兰|羅馬|ITALY')) return "🇮🇹 " + name;
-  if (isMatch('ES|ESP|MAD', '西班牙|马德里|巴塞隆納|SPAIN')) return "🇪🇸 " + name;
-  if (isMatch('DE|DEU|FRA', '德国|德國|法兰克福|GERMANY')) return "🇩🇪 " + name;
-  if (isMatch('FR|FRA|CDG', '法国|法國|巴黎|FRANCE')) return "🇫🇷 " + name;
-  if (isMatch('RU|RUS', '俄罗斯|俄羅斯|莫斯科|RUSSIA')) return "🇷🇺 " + name;
-  if (isMatch('CH|CHE|ZRH', '瑞士|苏黎世|日内瓦|SWITZERLAND')) return "🇨🇭 " + name;
-  if (isMatch('SE|SWE|ARN', '瑞典|斯德哥尔摩|SWEDEN')) return "🇸🇪 " + name;
-  if (isMatch('NO|NOR|OSL', '挪威|奥斯陆|NORWAY')) return "🇳🇴 " + name;
-  if (isMatch('FI|FIN|HEL', '芬兰|芬蘭|赫尔辛基|FINLAND')) return "🇫🇮 " + name;
-  if (isMatch('DK|DNK|CPH', '丹麦|丹麥|哥本哈根|DENMARK')) return "🇩🇰 " + name;
-  if (isMatch('IE|IRL|DUB', '爱玩|愛爾蘭|都柏林|IRELAND')) return "🇮🇪 " + name;
-  if (isMatch('PT|PRT|LIS', '葡萄牙|里斯本|PORTUGAL')) return "🇵🇹 " + name;
-  if (isMatch('TH|THA|BKK', '泰国|泰國|曼谷|THAILAND')) return "🇹🇭 " + name;
-  if (isMatch('MY|MYS|KUL', '马来西亚|馬來西亞|吉隆坡|MALAYSIA')) return "🇲🇾 " + name;
-  if (isMatch('PH|PHL|MNL', '物理宾|物理賓|马尼拉|PHILIPPINES')) return "🇵🇭 " + name;
-  if (isMatch('ID|IDN|CGK', '印度尼西亚|印尼|雅加达|INDONESIA')) return "🇮🇩 " + name;
-  if (isMatch('TR|TUR|IST', '土耳其|伊斯坦堡|TURKEY')) return "🇹🇷 " + name;
-  if (isMatch('IN|IND|BOM', '印度|孟买|INDIA')) return "🇮🇳 " + name;
-  if (isMatch('CA|CAN|YVR|YYZ', '加拿大|多伦多|温哥华|CANADA')) return "🇨🇦 " + name;
-  if (isMatch('AU|AUS|SYD|MEL', '澳大利亚|澳洲|悉尼|墨本|AUSTRALIA')) return "🇦🇺 " + name;
-  if (isMatch('CN|CHN', '中国|回国|国内|北京|上海|廣州|深圳|CHINA')) return "🇨🇳 " + name;
-  if (isMatch('NZ|NZL|AKL', '新西兰|紐西蘭|奥克兰|NEW ZEALAND')) return "🇳🇿 " + name;
-  if (isMatch('AE|ARE|DXB', '阿联酋|迪拜|杜拜|UAE')) return "🇦🇪 " + name;
-  if (isMatch('SA|SAU|RUH', '沙特|沙烏地阿拉伯|利雅德|SAUDI')) return "🇸🇦 " + name;
-  if (isMatch('IL|ISR|TLV', '以色列|特拉维夫|ISRAEL')) return "🇮🇱 " + name;
-  if (isMatch('KZ|KAZ', '哈萨克斯坦|哈薩克|KAZAKHSTAN')) return "🇰🇿 " + name;
-  if (isMatch('PK|PAK', '巴基斯坦|PAKISTAN')) return "🇵🇰 " + name;
-  if (isMatch('ZA|ZAF|CPT', '南非|开普敦|SOUTH AFRICA')) return "🇿🇦 " + name;
-
-  return "🇺🇳 " + name;
+  return `🌐 ${name}`;
 }
 
-// 按國旗進行歸類排序（🇺🇳 置於最頂部，其餘依黃金順序排布）
-export function groupNodesByFlag(nodes: ProxyNode[]): ProxyNode[] {
-  const groups = new Map<string, ProxyNode[]>();
-  const flagOrder: string[] = [];
-  
-  for (const node of nodes) {
-    const flaggedName = addFlag(node.name || 'node');
-    
-    // 提取國旗 Emoji (包含 surrogate pairs)
-    let flag = '';
-    const match = flaggedName.match(/^([\uD83C][\uDDE6-\uDDFF][\uD83C][\uDDE6-\uDDFF])/);
-    if (match) {
-      flag = match[1];
+/**
+ * 节点名称去重
+ */
+export function deduplicateNodeNames(nodes: ProxyNode[]): ProxyNode[] {
+  const nameCount: Record<string, number> = {};
+
+  return nodes.map(node => {
+    let name = node.name.trim() || 'Node';
+    if (nameCount[name] === undefined) {
+      nameCount[name] = 1;
+      return { ...node, name };
     } else {
-      flag = '🇺🇳';
+      const count = nameCount[name]! + 1;
+      nameCount[name] = count;
+      const newName = `${name} ${String(count).padStart(2, '0')}`;
+      return { ...node, name: newName };
     }
-    
-    if (!groups.has(flag)) {
-      groups.set(flag, []);
-      flagOrder.push(flag);
-    }
-    groups.get(flag)!.push(node);
-  }
-  
-  // 黃金地區排序順序
-  const standardOrder = [
-    '🇭🇰', '🇹🇼', '🇯🇵', '🇸🇬', '🇰🇷',  // 1. 亞太一線核心
-    '🇺🇸', '🇬🇧', '🇨🇦', '🇦🇺',        // 2. 歐美主流大戶
-    '🇲🇴', '🇨🇳', '🇹🇭', '🇻🇳', '🇲🇾', '🇵🇭', '🇮🇩', // 3. 特區與東南亞
-    '🇩🇪', '🇫🇷', '🇳🇱', '🇷🇺', '🇮🇳', '🇹🇷'  // 4. 歐洲與全球主流
-  ];
-  
-  flagOrder.sort((a, b) => {
-    // 🇺🇳 (聯合國國旗/臨時佔位符/官網提示) 優先排序在最前面
-    if (a === '🇺🇳' && b !== '🇺🇳') return -1;
-    if (b === '🇺🇳' && a !== '🇺🇳') return 1;
-    
-    const idxA = standardOrder.indexOf(a);
-    const idxB = standardOrder.indexOf(b);
-    
-    if (idxA !== -1 && idxB !== -1) return idxA - idxB;
-    if (idxA !== -1) return -1;
-    if (idxB !== -1) return 1;
-    
-    return a.localeCompare(b);
   });
-  
-  const result: ProxyNode[] = [];
-  for (const flag of flagOrder) {
-    result.push(...groups.get(flag)!);
+}
+
+/**
+ * 节点过滤与重命名处理
+ */
+export function processNodes(
+  rawNodes: ProxyNode[],
+  options: {
+    includeRegex?: string;
+    excludeRegex?: string;
+    renameRules?: Array<{ search: string; replace: string }>;
+    addEmoji?: boolean;
+    enableUdp?: boolean;
   }
+): ProxyNode[] {
+  let nodes = [...rawNodes];
+
+  // 1. 包含过滤 (Include Regex)
+  if (options.includeRegex && options.includeRegex.trim()) {
+    try {
+      const inc = new RegExp(options.includeRegex.trim(), 'i');
+      nodes = nodes.filter(n => inc.test(n.name));
+    } catch {}
+  }
+
+  // 2. 排除过滤 (Exclude Regex)
+  if (options.excludeRegex && options.excludeRegex.trim()) {
+    try {
+      const exc = new RegExp(options.excludeRegex.trim(), 'i');
+      nodes = nodes.filter(n => !exc.test(n.name));
+    } catch {}
+  }
+
+  // 3. 重命名规则 (Rename Rules)
+  if (options.renameRules && options.renameRules.length > 0) {
+    nodes = nodes.map(node => {
+      let newName = node.name;
+      for (const rule of options.renameRules!) {
+        if (!rule.search) continue;
+        try {
+          const reg = new RegExp(rule.search, 'g');
+          newName = newName.replace(reg, rule.replace || '');
+        } catch {
+          newName = newName.split(rule.search).join(rule.replace || '');
+        }
+      }
+      return { ...node, name: newName.trim() || node.name };
+    });
+  }
+
+  // 4. 国旗添加 (Emoji Flag)
+  if (options.addEmoji) {
+    nodes = nodes.map(node => ({
+      ...node,
+      name: addFlagToNodeName(node.name)
+    }));
+  }
+
+  // 5. UDP 强制开启/关闭
+  if (options.enableUdp !== undefined) {
+    nodes = nodes.map(node => ({
+      ...node,
+      udp: options.enableUdp
+    }));
+  }
+
+  // 6. 名称去重
+  return deduplicateNodeNames(nodes);
+}
+
+/**
+ * 字节数转可读格式 (GB, MB, KB)
+ */
+export function formatBytes(bytes: number): string {
+  if (bytes <= 0 || isNaN(bytes)) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
+}
+
+/**
+ * 时间戳转日期格式 (YYYY-MM-DD)
+ */
+export function formatDate(timestamp: number): string {
+  if (!timestamp || isNaN(timestamp)) return '无限期';
+  const date = new Date(timestamp * 1000);
+  if (isNaN(date.getTime())) return '无限期';
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+/**
+ * 解析 subscription-userinfo 响应头
+ */
+export function parseUserinfo(userinfoStr?: string): { upload: number; download: number; total: number; expire: number } | null {
+  if (!userinfoStr) return null;
+  const parts = userinfoStr.split(';');
+  const result = { upload: 0, download: 0, total: 0, expire: 0 };
+
+  for (const part of parts) {
+    const [k, v] = part.trim().split('=');
+    if (!k || !v) continue;
+    const num = parseInt(v, 10);
+    if (isNaN(num)) continue;
+    if (k.toLowerCase() === 'upload') result.upload = num;
+    if (k.toLowerCase() === 'download') result.download = num;
+    if (k.toLowerCase() === 'total') result.total = num;
+    if (k.toLowerCase() === 'expire') result.expire = num;
+  }
+
+  if (result.total === 0 && result.expire === 0) return null;
   return result;
 }
 
-// --- 去重複命名與還原機場預設排序 ---
-export function deduplicateNodeNames(nodes: ProxyNode[]): ProxyNode[] {
-  const seenKey = new Set<string>();
-  const nameCount = new Map<string, number>();
+/**
+ * 根据机场流量信息生成置顶展示节点 (适用于 Shadowrocket, V2RayN, Clash)
+ */
+export function createUserinfoNodes(userinfoStr?: string): ProxyNode[] {
+  const info = parseUserinfo(userinfoStr);
+  if (!info) return [];
 
-  return nodes.filter(node => {
-    const key = `${node.server}:${node.port}:${node.uuid || node.password || ''}`;
+  const used = info.upload + info.download;
+  const remaining = Math.max(0, info.total - used);
+  const trafficText = `📊 剩余: ${formatBytes(remaining)} / ${formatBytes(info.total)}`;
+  const expireText = `📅 到期: ${formatDate(info.expire)}`;
 
-    if (seenKey.has(key)) return false;
-    seenKey.add(key);
+  const dummyCipherPass = safeBase64Encode('none:info');
 
-    let baseName = node.name || 'node';
-    baseName = addFlag(baseName);
+  const trafficNode: ProxyNode = {
+    name: trafficText,
+    type: 'shadowsocks',
+    server: '127.0.0.1',
+    port: 0,
+    cipher: 'none',
+    password: 'info',
+    udp: false,
+    raw: `ss://${dummyCipherPass}@127.0.0.1:0#${encodeURIComponent(trafficText)}`
+  };
 
-    if (!nameCount.has(baseName)) {
-      nameCount.set(baseName, 1);
-      node.name = baseName;
-    } else {
-      const count = nameCount.get(baseName)! + 1;
-      nameCount.set(baseName, count);
-      // 💥 修正：將原本的 " (count)" 格式修改為 "_count"
-      node.name = `${baseName}_${count}`;
-    }
-    
-    if (node.singboxObj) node.singboxObj.tag = node.name;
-    if (node.clashObj) node.clashObj.name = node.name;
+  const expireNode: ProxyNode = {
+    name: expireText,
+    type: 'shadowsocks',
+    server: '127.0.0.1',
+    port: 0,
+    cipher: 'none',
+    password: 'info',
+    udp: false,
+    raw: `ss://${dummyCipherPass}@127.0.0.1:0#${encodeURIComponent(expireText)}`
+  };
 
-    return true;
-  });
+  return [trafficNode, expireNode];
 }

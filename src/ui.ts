@@ -1,0 +1,701 @@
+// src/ui.ts
+
+export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
+  return `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SubConverter Pro | 安全无状态订阅转换器</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <style>
+    :root {
+      --bg-app: #090d16;
+      --bg-panel: #111827;
+      --bg-card: #1f2937;
+      --bg-input: #0b1120;
+      --bg-hover: #374151;
+      --text-main: #f9fafb;
+      --text-muted: #9ca3af;
+      --text-dim: #6b7280;
+      --border: #374151;
+      --border-focus: #3b82f6;
+      --primary: #2563eb;
+      --primary-hover: #1d4ed8;
+      --accent: #38bdf8;
+      --success: #10b981;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+      --radius-sm: 6px;
+      --radius-md: 10px;
+      --radius-lg: 14px;
+      --shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.4), 0 4px 6px -2px rgba(0, 0, 0, 0.2);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background-color: var(--bg-app);
+      color: var(--text-main);
+      line-height: 1.5;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    header {
+      background-color: var(--bg-panel);
+      border-bottom: 1px solid var(--border);
+      padding: 1rem 1.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 50;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 700;
+      font-size: 1.2rem;
+      letter-spacing: -0.02em;
+    }
+    .brand-icon {
+      width: 28px;
+      height: 28px;
+      background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-size: 16px;
+    }
+    .badge {
+      background: rgba(16, 185, 129, 0.15);
+      color: #34d399;
+      font-size: 0.75rem;
+      padding: 2px 8px;
+      border-radius: 9999px;
+      font-weight: 600;
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .container {
+      max-width: 860px;
+      width: 100%;
+      margin: 2rem auto;
+      padding: 0 1.25rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+      flex: 1;
+    }
+    .panel {
+      background-color: var(--bg-panel);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 1.5rem;
+      box-shadow: var(--shadow);
+    }
+    .panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 1.25rem;
+    }
+    .panel-title {
+      font-size: 1.05rem;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--text-main);
+    }
+    .form-group {
+      margin-bottom: 1.25rem;
+    }
+    .form-group:last-child {
+      margin-bottom: 0;
+    }
+    label {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: var(--text-muted);
+      margin-bottom: 0.5rem;
+    }
+    textarea, input[type="text"], select {
+      width: 100%;
+      background-color: var(--bg-input);
+      border: 1px solid var(--border);
+      color: var(--text-main);
+      border-radius: var(--radius-md);
+      padding: 0.75rem 1rem;
+      font-size: 0.925rem;
+      transition: all 0.2s ease;
+      outline: none;
+    }
+    textarea {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.85rem;
+      min-height: 120px;
+      resize: vertical;
+      line-height: 1.6;
+    }
+    textarea:focus, input[type="text"]:focus, select:focus {
+      border-color: var(--border-focus);
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+    }
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+    }
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem;
+    }
+    .checkbox-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+      font-size: 0.875rem;
+      color: var(--text-muted);
+      user-select: none;
+    }
+    .checkbox-group input[type="checkbox"] {
+      width: 16px;
+      height: 16px;
+      accent-color: var(--primary);
+      cursor: pointer;
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 0.75rem 1.25rem;
+      border-radius: var(--radius-md);
+      font-weight: 600;
+      font-size: 0.95rem;
+      border: none;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      user-select: none;
+      text-decoration: none;
+    }
+    .btn-primary {
+      background-color: var(--primary);
+      color: white;
+      width: 100%;
+      padding: 0.9rem;
+      font-size: 1rem;
+    }
+    .btn-primary:hover {
+      background-color: var(--primary-hover);
+      box-shadow: 0 4px 12px rgba(37, 99, 235, 0.4);
+    }
+    .btn-secondary {
+      background-color: var(--bg-card);
+      color: var(--text-main);
+      border: 1px solid var(--border);
+    }
+    .btn-secondary:hover {
+      background-color: var(--bg-hover);
+      border-color: var(--text-muted);
+    }
+    .btn-sm {
+      padding: 0.45rem 0.75rem;
+      font-size: 0.8rem;
+    }
+    .results-wrapper {
+      display: none;
+      animation: fadeIn 0.3s ease;
+    }
+    .results-wrapper.show {
+      display: block;
+    }
+    .result-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 1.25rem;
+      margin-bottom: 1rem;
+    }
+    .result-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 0.75rem;
+    }
+    .result-title {
+      font-weight: 600;
+      font-size: 0.95rem;
+      color: var(--text-main);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .url-box {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 1rem;
+    }
+    .url-box input {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.8rem;
+      color: var(--accent);
+      background: var(--bg-input);
+    }
+    .action-buttons {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .toast {
+      position: fixed;
+      bottom: 2rem;
+      left: 50%;
+      transform: translateX(-50%) translateY(30px);
+      background: var(--bg-card);
+      color: var(--text-main);
+      border: 1px solid var(--border);
+      padding: 0.75rem 1.5rem;
+      border-radius: 999px;
+      font-size: 0.875rem;
+      font-weight: 500;
+      box-shadow: var(--shadow);
+      opacity: 0;
+      pointer-events: none;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      z-index: 100;
+    }
+    .toast.show {
+      transform: translateX(-50%) translateY(0);
+      opacity: 1;
+    }
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.75);
+      backdrop-filter: blur(4px);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+    }
+    .modal-overlay.show {
+      display: flex;
+    }
+    .modal-content {
+      background: var(--bg-panel);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 1.5rem;
+      max-width: 380px;
+      width: 90%;
+      text-align: center;
+    }
+    #qrcode {
+      background: white;
+      padding: 12px;
+      border-radius: var(--radius-md);
+      display: inline-block;
+      margin: 1rem 0;
+    }
+    .fav-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-top: 1rem;
+    }
+    .fav-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.75rem 1rem;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      font-size: 0.875rem;
+    }
+    .fav-info {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      margin-right: 8px;
+    }
+    .fav-name {
+      font-weight: 600;
+      color: var(--text-main);
+    }
+    .fav-meta {
+      font-size: 0.75rem;
+      color: var(--text-dim);
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @media (max-width: 640px) {
+      .grid-2 { grid-template-columns: 1fr; }
+      .container { padding: 0 1rem; margin: 1rem auto; }
+      .panel { padding: 1.25rem; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <div class="brand-icon">⚡</div>
+      <span>SubConverter Pro</span>
+    </div>
+    <div class="badge">
+      <span>🛡️ 纯净加固版 v${version}</span>
+    </div>
+  </header>
+
+  <div class="container">
+    <!-- 主配置面板 -->
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">
+          <span>📡 订阅链接与节点转换</span>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="subUrl">
+          <span>订阅链接 / 节点链接 (支持多个链接换行或 | 分隔)</span>
+        </label>
+        <textarea id="subUrl" placeholder="https://airport.com/api/v1/client/subscribe?token=...&#10;或输入 vless://, vmess://, trojan://, ss://, hysteria2://, tuic:// 节点链接"></textarea>
+      </div>
+
+      <div class="grid-2 form-group">
+        <div>
+          <label for="targetClient">目标客户端 / 格式</label>
+          <select id="targetClient">
+            <option value="clash" selected>Clash Meta / Mihomo (YAML)</option>
+            <option value="shadowrocket">Shadowrocket (小火箭 - 标准订阅)</option>
+            <option value="singbox">Sing-Box 1.8+ (JSON)</option>
+            <option value="base64">Base64 (V2RayN / 通用订阅)</option>
+            <option value="shadowrocket-conf">Shadowrocket (.conf 规则配置)</option>
+            <option value="raw">Raw Links (明文链接列表)</option>
+            <option value="surge">Surge (Proxy 列表)</option>
+          </select>
+        </div>
+
+        <div>
+          <label for="authToken">访问密钥 Token (若服务端开启)</label>
+          <input type="text" id="authToken" placeholder="可选：填写您的 AUTH_TOKEN">
+        </div>
+      </div>
+
+      <!-- 高级设置 -->
+      <div class="form-group" style="margin-top: 1rem; border-top: 1px dashed var(--border); padding-top: 1rem;">
+        <div class="grid-2">
+          <div>
+            <label for="includeRegex">包含节点正则 (Include)</label>
+            <input type="text" id="includeRegex" placeholder="例如: 香港|日本|US|专线">
+          </div>
+          <div>
+            <label for="excludeRegex">排除节点正则 (Exclude)</label>
+            <input type="text" id="excludeRegex" placeholder="例如: 剩余|到期|官网|0.1x">
+          </div>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="renameRules">节点重命名 (寻=替，多个用换行或逗号隔开)</label>
+        <input type="text" id="renameRules" placeholder="例如: 香港=HK, 日本=JP, IPLC=专线">
+      </div>
+
+      <div class="form-group grid-3" style="margin-top: 1rem;">
+        <label class="checkbox-group">
+          <input type="checkbox" id="addEmoji" checked>
+          <span>智能添加国旗 Emoji (🇭🇰 🇯🇵 🇺🇸)</span>
+        </label>
+        <label class="checkbox-group">
+          <input type="checkbox" id="showInfo" checked>
+          <span>置顶显示剩余流量与到期时间</span>
+        </label>
+        <label class="checkbox-group">
+          <input type="checkbox" id="enableUdp" checked>
+          <span>开启 UDP 转发支持</span>
+        </label>
+      </div>
+
+      <div style="margin-top: 1.5rem;">
+        <button class="btn btn-primary" id="btnGenerate" onclick="generateLink()">
+          <span>⚡ 生成转换订阅链接</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- 结果面板 -->
+    <div class="panel results-wrapper" id="resultsPanel">
+      <div class="panel-header">
+        <div class="panel-title">
+          <span>🎉 转换链接已生成</span>
+        </div>
+      </div>
+
+      <div class="result-card">
+        <div class="result-header">
+          <span class="result-title">🔗 转换后订阅地址</span>
+          <span id="targetBadge" class="badge">Clash Meta</span>
+        </div>
+        <div class="url-box">
+          <input type="text" id="outputUrl" readonly>
+          <button class="btn btn-secondary btn-sm" onclick="copyLink()">复制</button>
+          <button class="btn btn-secondary btn-sm" onclick="showQrCode()">二维码</button>
+        </div>
+
+        <div class="action-buttons">
+          <button class="btn btn-secondary btn-sm" id="btnImportClash" onclick="importClash()">🚀 导入 Clash / Mihomo</button>
+          <button class="btn btn-secondary btn-sm" id="btnImportSingbox" onclick="importSingbox()">📦 导入 Sing-Box</button>
+          <button class="btn btn-secondary btn-sm" id="btnImportShadowrocket" onclick="importShadowrocket()">🚀 导入 Shadowrocket</button>
+          <button class="btn btn-secondary btn-sm" onclick="saveToLocalFavorites()">⭐ 保存至本地收藏</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 本地收藏夹 (纯浏览器 localStorage，零泄露风险) -->
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">
+          <span>⭐ 本地配置收藏夹</span>
+        </div>
+        <span style="font-size: 0.75rem; color: var(--text-dim);">仅存储于当前浏览器，绝不上传云端</span>
+      </div>
+
+      <div id="favList" class="fav-list">
+        <div style="color: var(--text-dim); font-size: 0.85rem; text-align: center; padding: 1rem;">暂无保存的本地配置</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- QR Code Modal -->
+  <div class="modal-overlay" id="qrModal" onclick="closeQrModal(event)">
+    <div class="modal-content" onclick="event.stopPropagation()">
+      <h3>📱 扫描二维码导入订阅</h3>
+      <div id="qrcode"></div>
+      <button class="btn btn-secondary" onclick="closeQrModal()">关闭</button>
+    </div>
+  </div>
+
+  <div class="toast" id="toast">已复制到剪贴板</div>
+
+  <script>
+    function showToast(msg) {
+      const toast = document.getElementById('toast');
+      toast.textContent = msg;
+      toast.classList.add('show');
+      setTimeout(() => toast.classList.remove('show'), 2000);
+    }
+
+    function buildConvertedUrl() {
+      const rawUrl = document.getElementById('subUrl').value.trim();
+      if (!rawUrl) {
+        alert('请输入订阅链接或节点链接');
+        return '';
+      }
+
+      const target = document.getElementById('targetClient').value;
+      const authToken = document.getElementById('authToken').value.trim();
+      const includeRegex = document.getElementById('includeRegex').value.trim();
+      const excludeRegex = document.getElementById('excludeRegex').value.trim();
+      const renameRules = document.getElementById('renameRules').value.trim();
+      const addEmoji = document.getElementById('addEmoji').checked;
+      const showInfo = document.getElementById('showInfo').checked;
+      const enableUdp = document.getElementById('enableUdp').checked;
+
+      const origin = window.location.origin;
+      const params = new URLSearchParams();
+      params.set('url', rawUrl);
+      params.set('target', target);
+
+      if (authToken) params.set('token', authToken);
+      if (includeRegex) params.set('include', includeRegex);
+      if (excludeRegex) params.set('exclude', excludeRegex);
+      if (renameRules) params.set('rename', renameRules);
+      if (!addEmoji) params.set('emoji', '0');
+      if (!showInfo) params.set('info', '0');
+      if (!enableUdp) params.set('udp', '0');
+
+      return \`\${origin}/sub?\${params.toString()}\`;
+    }
+
+    function generateLink() {
+      const url = buildConvertedUrl();
+      if (!url) return;
+
+      const outputInput = document.getElementById('outputUrl');
+      outputInput.value = url;
+
+      const target = document.getElementById('targetClient').value;
+      document.getElementById('targetBadge').textContent = target.toUpperCase();
+
+      const results = document.getElementById('resultsPanel');
+      results.classList.add('show');
+      results.scrollIntoView({ behavior: 'smooth' });
+    }
+
+    function copyLink() {
+      const outputInput = document.getElementById('outputUrl');
+      if (!outputInput.value) return;
+      navigator.clipboard.writeText(outputInput.value).then(() => {
+        showToast('✅ 订阅链接已复制');
+      }).catch(() => {
+        outputInput.select();
+        document.execCommand('copy');
+        showToast('✅ 订阅链接已复制');
+      });
+    }
+
+    function importClash() {
+      const url = document.getElementById('outputUrl').value;
+      if (!url) return;
+      window.location.href = \`clash://install-config?url=\${encodeURIComponent(url)}\`;
+    }
+
+    function importSingbox() {
+      const url = document.getElementById('outputUrl').value;
+      if (!url) return;
+      window.location.href = \`sing-box://import-remote-profile?url=\${encodeURIComponent(url)}\`;
+    }
+
+    function importShadowrocket() {
+      const url = document.getElementById('outputUrl').value;
+      if (!url) return;
+      try {
+        const b64 = btoa(unescape(encodeURIComponent(url)));
+        window.location.href = \`shadowrocket://add/sub://\${b64}?remarks=SubConverter\`;
+      } catch (e) {
+        window.location.href = \`shadowrocket://add/sub://\${btoa(url)}?remarks=SubConverter\`;
+      }
+    }
+
+    let qrcodeObj = null;
+    function showQrCode() {
+      const url = document.getElementById('outputUrl').value;
+      if (!url) return;
+
+      const qrContainer = document.getElementById('qrcode');
+      qrContainer.innerHTML = '';
+      qrcodeObj = new QRCode(qrContainer, {
+        text: url,
+        width: 200,
+        height: 200,
+        colorDark: '#000000',
+        colorLight: '#ffffff',
+        correctLevel: QRCode.CorrectLevel.M
+      });
+
+      document.getElementById('qrModal').classList.add('show');
+    }
+
+    function closeQrModal(e) {
+      document.getElementById('qrModal').classList.remove('show');
+    }
+
+    // 本地收藏夹功能 (纯 localStorage)
+    const STORAGE_KEY = 'subconv_local_favs';
+
+    function getFavorites() {
+      try {
+        return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+      } catch {
+        return [];
+      }
+    }
+
+    function saveToLocalFavorites() {
+      const subUrl = document.getElementById('subUrl').value.trim();
+      if (!subUrl) return;
+
+      const name = prompt('请输入该配置名称 (如: 主力香港专线):', '我的订阅 ' + (new Date().toLocaleDateString()));
+      if (!name) return;
+
+      const item = {
+        id: Date.now(),
+        name,
+        subUrl,
+        target: document.getElementById('targetClient').value,
+        include: document.getElementById('includeRegex').value.trim(),
+        exclude: document.getElementById('excludeRegex').value.trim(),
+        rename: document.getElementById('renameRules').value.trim(),
+        addEmoji: document.getElementById('addEmoji').checked,
+        showInfo: document.getElementById('showInfo').checked,
+        enableUdp: document.getElementById('enableUdp').checked,
+        date: new Date().toISOString()
+      };
+
+      const favs = getFavorites();
+      favs.unshift(item);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(favs.slice(0, 20))); // 最多存 20 个
+      renderFavorites();
+      showToast('⭐ 已保存至本地浏览器收藏');
+    }
+
+    function deleteFavorite(id) {
+      const favs = getFavorites().filter(f => f.id !== id);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(favs));
+      renderFavorites();
+    }
+
+    function loadFavorite(id) {
+      const item = getFavorites().find(f => f.id === id);
+      if (!item) return;
+
+      document.getElementById('subUrl').value = item.subUrl || '';
+      document.getElementById('targetClient').value = item.target || 'clash';
+      document.getElementById('includeRegex').value = item.include || '';
+      document.getElementById('excludeRegex').value = item.exclude || '';
+      document.getElementById('renameRules').value = item.rename || '';
+      document.getElementById('addEmoji').checked = item.addEmoji !== false;
+      document.getElementById('showInfo').checked = item.showInfo !== false;
+      document.getElementById('enableUdp').checked = item.enableUdp !== false;
+
+      generateLink();
+      showToast('⚡ 已加载配置: ' + item.name);
+    }
+
+    function renderFavorites() {
+      const list = document.getElementById('favList');
+      const favs = getFavorites();
+
+      if (favs.length === 0) {
+        list.innerHTML = '<div style="color: var(--text-dim); font-size: 0.85rem; text-align: center; padding: 1rem;">暂无保存的本地配置</div>';
+        return;
+      }
+
+      list.innerHTML = favs.map(f => \`
+        <div class="fav-item">
+          <div class="fav-info" onclick="loadFavorite(\${f.id})" style="cursor: pointer;">
+            <div class="fav-name">⚡ \${f.name}</div>
+            <div class="fav-meta">\${f.target.toUpperCase()} · \${new Date(f.date).toLocaleDateString()}</div>
+          </div>
+          <div style="display: flex; gap: 6px;">
+            <button class="btn btn-secondary btn-sm" onclick="loadFavorite(\${f.id})">载入</button>
+            <button class="btn btn-secondary btn-sm" style="color: var(--danger);" onclick="deleteFavorite(\${f.id})">删除</button>
+          </div>
+        </div>
+      \`).join('');
+    }
+
+    // 初始化
+    renderFavorites();
+  </script>
+</body>
+</html>`;
+}

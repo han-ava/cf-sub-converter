@@ -1,21 +1,31 @@
 {
   "name": "cf-sub-converter",
-  "version": "3.0.6",
-  "private": true,
+  "version": "3.0.0-hardened",
+  "description": "A secure, hardened, serverless subscription converter for Cloudflare Workers",
+  "main": "src/index.ts",
+  "type": "module",
   "scripts": {
-    "deploy": "wrangler deploy",
     "dev": "wrangler dev",
-    "start": "wrangler dev",
-    "argo": "tsx scripts/argo-converter.ts"
+    "deploy": "wrangler deploy",
+    "types": "wrangler types"
   },
   "dependencies": {
     "js-yaml": "^4.1.0"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20240208.0",
+    "@cloudflare/workers-types": "^4.20241127.0",
     "@types/js-yaml": "^4.0.9",
-    "tsx": "^4.7.1",
-    "typescript": "^5.3.3",
-    "wrangler": "^3.28.1"
-  }
+    "typescript": "^5.7.2",
+    "wrangler": "^3.91.0"
+  },
+  "keywords": [
+    "cloudflare-workers",
+    "subconverter",
+    "clash-meta",
+    "mihomo",
+    "sing-box",
+    "v2ray"
+  ],
+  "author": "",
+  "license": "MIT"
 }
