@@ -4,7 +4,7 @@ import { Env, ProxyNode } from './types';
 import { parseContent } from './parser';
 import { toClashMeta, toSingBox, toBase64, toRawLinks, toSurge, toShadowrocketConf } from './generator';
 import { processNodes, createUserinfoNodes, parseUserinfo, getRegionByNodeName, parseRenameRules, formatContentDisposition } from './utils';
-import { isAuthorized, fetchSubscriptionWithTimeout, extractRequestToken, sanitizeUrlForLog } from './security';
+import { isAuthorized, checkAuthStatus, fetchSubscriptionWithTimeout, extractRequestToken, sanitizeUrlForLog } from './security';
 import { renderHtmlPage } from './ui';
 
 const APP_VERSION = packageJson.version || '3.0.0-hardened';
@@ -166,12 +166,12 @@ export default {
       return new Response(null, { status: 204, headers: CORS_HEADERS });
     }
 
-    // 2. 首页 UI
+    // 2. 首页 UI (禁止客户端与边缘缓存 HTML，确保更新即时生效)
     if (request.method === 'GET' && (url.pathname === '/' || url.pathname === '/index.html')) {
       return new Response(renderHtmlPage(APP_VERSION), {
         headers: {
           'Content-Type': 'text/html; charset=utf-8',
-          'Cache-Control': 'public, max-age=3600',
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
           ...CORS_HEADERS,
           ...SECURITY_PAGE_HEADERS
         }
@@ -180,12 +180,15 @@ export default {
 
     // 3. 版本与健康检查接口 (/version)
     if (request.method === 'GET' && url.pathname === '/version') {
+      const isTokenSet = typeof env.AUTH_TOKEN === 'string' && env.AUTH_TOKEN.trim().length > 0;
       return new Response(
         JSON.stringify({
           name: 'cf-sub-converter',
           version: APP_VERSION,
           status: 'ok',
-          security: 'hardened'
+          security: 'hardened',
+          auth_token_configured: isTokenSet,
+          token_length: isTokenSet ? env.AUTH_TOKEN!.trim().length : 0
         }),
         {
           headers: {
@@ -204,9 +207,10 @@ export default {
         const rawUrl = body.url || '';
         const requestToken = body.token || extractRequestToken(request, url);
 
-        // 严格 Token 校验
-        if (!isAuthorized(env.AUTH_TOKEN, requestToken)) {
-          return new Response(JSON.stringify({ error: '未经授权: AUTH_TOKEN 未配置或无效' }), {
+        // 详细 Token 鉴权诊断
+        const authResult = checkAuthStatus(env.AUTH_TOKEN, requestToken);
+        if (!authResult.authorized) {
+          return new Response(JSON.stringify({ error: authResult.reason }), {
             status: 401,
             headers: { 'Content-Type': 'application/json', ...CORS_HEADERS }
           });
@@ -351,11 +355,12 @@ export default {
       }
 
       // 严格鉴权校验：未配置 AUTH_TOKEN 或 Token 不匹配直接拒绝
-      if (!isAuthorized(env.AUTH_TOKEN, requestToken)) {
+      const authResult = checkAuthStatus(env.AUTH_TOKEN, requestToken);
+      if (!authResult.authorized) {
         return new Response(
           JSON.stringify({
-            error: '未经授权: AUTH_TOKEN 未配置或无效',
-            hint: '请在 Cloudflare Secret 中设置 AUTH_TOKEN，并在订阅链接中添加 &token=你的密码'
+            error: authResult.reason,
+            hint: '请确认网页或订阅链接中的 &token= 与 Cloudflare Dashboard 中设置的 AUTH_TOKEN 一致'
           }),
           {
             status: 401,

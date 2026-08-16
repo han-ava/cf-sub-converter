@@ -147,19 +147,39 @@ export function extractRequestToken(request: Request, url: URL): string {
 }
 
 /**
+ * 详细鉴权诊断（返回明确的原因，便于用户在控制台与前端排查）
+ */
+export function checkAuthStatus(authTokenInEnv?: string, requestToken?: string | null): { authorized: boolean; reason?: string } {
+  if (!authTokenInEnv || authTokenInEnv.trim() === '') {
+    return {
+      authorized: false,
+      reason: '服务端未检测到 AUTH_TOKEN 环境变量（请确认 Cloudflare 后台 Settings ➔ Variables and Secrets 中变量名是否为大写 AUTH_TOKEN 并已保存部署）'
+    };
+  }
+
+  if (!requestToken || requestToken.trim() === '') {
+    return {
+      authorized: false,
+      reason: '请求缺少 Token（请在网页输入框中填入您的 AUTH_TOKEN 密码）'
+    };
+  }
+
+  const valid = safeCompareToken(authTokenInEnv.trim(), requestToken.trim());
+  if (!valid) {
+    return {
+      authorized: false,
+      reason: 'Token 不匹配（网页输入的密码与 Cloudflare 后台设置的不一致，请核对拼写、大小写及前后空格）'
+    };
+  }
+
+  return { authorized: true };
+}
+
+/**
  * 严格访问权限校验（默认必须设置 AUTH_TOKEN，未设置直接拒绝）
  */
 export function isAuthorized(authTokenInEnv?: string, requestToken?: string | null): boolean {
-  // 私有部署核心原则：AUTH_TOKEN 未配置直接拒绝访问，防止未设密码导致 Worker 变成公用代理
-  if (!authTokenInEnv || authTokenInEnv.trim() === '') {
-    return false;
-  }
-
-  if (!requestToken) {
-    return false;
-  }
-
-  return safeCompareToken(authTokenInEnv.trim(), requestToken.trim());
+  return checkAuthStatus(authTokenInEnv, requestToken).authorized;
 }
 
 /**
