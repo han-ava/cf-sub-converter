@@ -340,33 +340,36 @@ export function toClashMeta(
   const proxies = nodes.map(n => nodeToClashProxy(n));
   const proxyNames = nodes.map(n => n.name);
 
-  // 地区节点分组
+  const isMinimal = preset === 'minimal';
+
+  // 地区节点分组 (非极简模式下自动按国家/地区生成 url-test 自动测速组)
   const regionNodeMap: Record<string, string[]> = {};
-
-  for (const node of nodes) {
-    const region = getRegionByNodeName(node.name);
-    if (region) {
-      if (!regionNodeMap[region.code]) regionNodeMap[region.code] = [];
-      regionNodeMap[region.code]!.push(node.name);
-    }
-  }
-
   const regionalGroups: any[] = [];
   const regionalGroupNames: string[] = [];
 
-  for (const region of REGIONS) {
-    const matchedNodes = regionNodeMap[region.code];
-    if (matchedNodes && matchedNodes.length > 0) {
-      const groupName = `${region.flag} ${region.name}节点`;
-      regionalGroupNames.push(groupName);
-      regionalGroups.push({
-        name: groupName,
-        type: 'url-test',
-        url: testUrl,
-        interval: 300,
-        tolerance: 50,
-        proxies: matchedNodes
-      });
+  if (!isMinimal) {
+    for (const node of nodes) {
+      const region = getRegionByNodeName(node.name);
+      if (region) {
+        if (!regionNodeMap[region.code]) regionNodeMap[region.code] = [];
+        regionNodeMap[region.code]!.push(node.name);
+      }
+    }
+
+    for (const region of REGIONS) {
+      const matchedNodes = regionNodeMap[region.code];
+      if (matchedNodes && matchedNodes.length > 0) {
+        const groupName = `${region.flag} ${region.name}节点`;
+        regionalGroupNames.push(groupName);
+        regionalGroups.push({
+          name: groupName,
+          type: 'url-test',
+          url: testUrl,
+          interval: 300,
+          tolerance: 50,
+          proxies: matchedNodes
+        });
+      }
     }
   }
 
@@ -452,7 +455,15 @@ export function toClashMeta(
     config['proxy-groups'] = defaultGroups;
   }
 
-  if (extraRules.length > 0 && Array.isArray(config.rules)) {
+  if (isMinimal) {
+    // 极简模式：免下载庞大外部规则集，极速启动，仅保留核心国内直连与代理
+    config.rules = [
+      'GEOIP,LAN,🎯 全球直连,no-resolve',
+      'GEOIP,CN,🎯 全球直连,no-resolve',
+      'MATCH,🚀 节点选择'
+    ];
+    delete config['rule-providers'];
+  } else if (extraRules.length > 0 && Array.isArray(config.rules)) {
     config.rules = [...extraRules, ...config.rules];
   }
 
