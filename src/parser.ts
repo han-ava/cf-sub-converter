@@ -521,18 +521,14 @@ export function isValidNode(node: ProxyNode | null): boolean {
     return false;
   }
 
-  const type = node.type.toLowerCase();
-
-  if (type === 'vless') {
-    if (!node.uuid) return false;
-    // Reality 模式必须包含公钥
-    if (node.reality && (!node.reality.publicKey || !node.reality.publicKey.trim())) {
-      return false;
-    }
+  // 若自带完整的上游对象且拥有有效服务器与端口，直接信任通过
+  if (node.clashObj || node.singboxObj) {
     return true;
   }
 
-  if (type === 'vmess') {
+  const type = node.type.toLowerCase();
+
+  if (type === 'vless' || type === 'vmess') {
     return !!node.uuid;
   }
 
@@ -541,19 +537,19 @@ export function isValidNode(node: ProxyNode | null): boolean {
   }
 
   if (type === 'ss' || type === 'shadowsocks') {
-    return !!node.password && !!node.cipher;
-  }
-
-  if (type === 'ssr' || type === 'shadowsocksr') {
-    return !!node.password && !!node.cipher;
-  }
-
-  if (type === 'hysteria2' || type === 'hy2') {
     return !!node.password;
   }
 
+  if (type === 'ssr' || type === 'shadowsocksr') {
+    return !!node.password;
+  }
+
+  if (type === 'hysteria2' || type === 'hy2' || type === 'hysteria') {
+    return !!node.password || !!node.uuid;
+  }
+
   if (type === 'tuic') {
-    return !!node.uuid && !!node.password;
+    return !!node.uuid || !!node.password;
   }
 
   return true;
@@ -563,7 +559,7 @@ export function isValidNode(node: ProxyNode | null): boolean {
  * 单条节点链接识别并解析
  */
 export function parseSingleNode(link: string): ProxyNode | null {
-  const trimmed = link.trim();
+  const trimmed = link.trim().replace(/^["']|["']$/g, '');
   if (!trimmed) return null;
 
   let node: ProxyNode | null = null;
@@ -599,22 +595,26 @@ export async function parseContent(text: string): Promise<ProxyNode[]> {
               type: String(p.type || 'ss').toLowerCase(),
               server: String(p.server),
               port: Number(p.port),
-              uuid: p.uuid,
-              password: p.password,
-              cipher: p.cipher,
+              uuid: p.uuid || p.password,
+              password: p.password || p.secret || p.uuid,
+              cipher: p.cipher || p.method || (String(p.type).toLowerCase() === 'ss' ? 'chacha20-ietf-poly1305' : undefined),
               network: p.network,
-              tls: p.tls,
-              sni: p.sni || p.servername,
+              tls: p.tls || p.ssl || (p['reality-opts'] ? true : false),
+              sni: p.sni || p.servername || p['server-name'] || p.host,
               alpn: p.alpn,
               fingerprint: p['client-fingerprint'] || p.fingerprint,
-              wsPath: p['ws-opts']?.path || p['ws-path'],
+              wsPath: p['ws-opts']?.path || p['ws-path'] || p.path,
               wsHeaders: p['ws-opts']?.headers || p['ws-headers'],
               flow: p.flow,
               reality: p['reality-opts'] ? {
-                publicKey: p['reality-opts']['public-key'],
-                shortId: p['reality-opts']['short-id'],
-                spiderX: p['reality-opts']['spider-x']
-              } : undefined,
+                publicKey: p['reality-opts']['public-key'] || p['reality-opts']['publicKey'],
+                shortId: p['reality-opts']['short-id'] || p['reality-opts']['shortId'],
+                spiderX: p['reality-opts']['spider-x'] || p['reality-opts']['spiderX']
+              } : (p.reality ? {
+                publicKey: p.reality['public-key'] || p.reality.publicKey,
+                shortId: p.reality['short-id'] || p.reality.shortId,
+                spiderX: p.reality['spider-x'] || p.reality.spiderX
+              } : undefined),
               udp: p.udp !== false,
               clashObj: p
             };
@@ -629,23 +629,24 @@ export async function parseContent(text: string): Promise<ProxyNode[]> {
   }
 
   // 2. 尝试解析为 Sing-Box JSON
-  if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+  if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
     try {
       const json = JSON.parse(trimmed);
-      if (Array.isArray(json.outbounds)) {
-        for (const ob of json.outbounds) {
-          if (ob && ob.tag && ob.server && ob.server_port) {
+      const outbounds = Array.isArray(json) ? json : json.outbounds;
+      if (Array.isArray(outbounds)) {
+        for (const ob of outbounds) {
+          if (ob && (ob.tag || ob.name) && ob.server && (ob.server_port || ob.port)) {
             const node: ProxyNode = {
-              name: String(ob.tag),
-              type: String(ob.type).toLowerCase(),
+              name: String(ob.tag || ob.name),
+              type: String(ob.type || 'ss').toLowerCase(),
               server: String(ob.server),
-              port: Number(ob.server_port),
-              uuid: ob.uuid,
-              password: ob.password,
-              cipher: ob.method,
+              port: Number(ob.server_port || ob.port),
+              uuid: ob.uuid || ob.password,
+              password: ob.password || ob.uuid,
+              cipher: ob.method || ob.cipher,
               network: ob.transport?.type,
-              tls: ob.tls?.enabled,
-              sni: ob.tls?.server_name,
+              tls: ob.tls?.enabled !== false && !!ob.tls,
+              sni: ob.tls?.server_name || ob.tls?.sni,
               alpn: ob.tls?.alpn,
               udp: true,
               singboxObj: ob
@@ -662,30 +663,22 @@ export async function parseContent(text: string): Promise<ProxyNode[]> {
 
   // 3. 尝试作为多行链接直接解析
   const lines = trimmed.split(/[\r\n]+/);
-  let parsedFromLines = false;
   for (const line of lines) {
     const node = parseSingleNode(line);
     if (node) {
       nodes.push(node);
-      parsedFromLines = true;
     }
   }
 
-  if (parsedFromLines && nodes.length > 0) {
+  if (nodes.length > 0) {
     return nodes;
   }
 
-  // 4. 尝试 Base64 解码后解析
+  // 4. 尝试 Base64 解码后解析 (递归调用，无缝支持 Base64 内嵌 YAML/JSON/多行)
   try {
     const decoded = safeBase64Decode(trimmed);
     if (decoded && decoded !== trimmed) {
-      const decodedLines = decoded.split(/[\r\n]+/);
-      for (const line of decodedLines) {
-        const node = parseSingleNode(line);
-        if (node) {
-          nodes.push(node);
-        }
-      }
+      return await parseContent(decoded);
     }
   } catch {}
 

@@ -65,7 +65,7 @@ export function isPrivateIp(ip: string): boolean {
 }
 
 /**
- * 校验订阅 URL 是否合法且安全（协议、主机、内网 IP、端口白名单）
+ * 校验订阅 URL 是否合法且安全（协议、主机、内网 IP 阻断）
  */
 export function isSafeSubscriptionUrl(urlStr: string): boolean {
   try {
@@ -91,10 +91,10 @@ export function isSafeSubscriptionUrl(urlStr: string): boolean {
       return false;
     }
 
-    // 端口限制检查
+    // 端口合法性校验（1-65535）
     if (parsed.port) {
       const portNum = parseInt(parsed.port, 10);
-      if (isNaN(portNum) || !ALLOWED_PORTS.has(portNum)) {
+      if (isNaN(portNum) || portNum < 1 || portNum > 65535) {
         return false;
       }
     }

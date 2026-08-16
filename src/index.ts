@@ -254,7 +254,7 @@ export default {
             totalMatched: processedNodes.length,
             userinfo: userinfoObj,
             regions: regionStats,
-            nodes: processedNodes.slice(0, 150).map(n => ({
+            nodes: processedNodes.slice(0, 1000).map(n => ({
               name: n.name,
               type: n.type,
               server: n.server,
