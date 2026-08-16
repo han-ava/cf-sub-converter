@@ -6,9 +6,5 @@
   "compatibility_flags": ["nodejs_compat"],
   "observability": {
     "enabled": true
-  },
-  "vars": {
-    // 设置访问密钥（可选）。如果不为空，则所有 /sub 转换请求必须带上 ?token=YOUR_TOKEN
-    "AUTH_TOKEN": ""
   }
 }

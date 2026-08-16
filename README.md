@@ -53,9 +53,20 @@
 
 1. 登录 [Cloudflare Dashboard](https://dash.cloudflare.com/)，进入 **Workers & Pages** -> **Create Application** -> **Create Worker**。
 2. 粘贴本项目打包后的代码或连接 GitHub 仓库即可。
-3. （可选）如果需要开启私有密码保护：
-   - 进入 Worker -> **Settings** -> **Variables and Secrets**。
-   - 添加环境变量 `AUTH_TOKEN`，值设为你的私有密钥。
+### 🔒 私有密钥设置（安全推荐）
+
+本项目将 `AUTH_TOKEN` 与代码仓库完全解耦，**绝不硬编码在配置文件中**。你可以通过以下任意一种方式设置：
+
+* **命令行方式（推荐）**：
+  ```bash
+  npx wrangler secret put AUTH_TOKEN
+  ```
+  根据提示输入你的私有密码（例如 `mySecretKey888`）。
+
+* **网页控制台方式**：
+  进入 Cloudflare Dashboard ➔ **Workers & Pages** ➔ 点击 **`cf-sub-converter`** ➔ **Settings** ➔ **Variables and Secrets** ➔ 点击 **Add** ➔ 选择 **Secret** 类型 ➔ 变量名填 `AUTH_TOKEN`，值填你的密码 ➔ 保存并部署。
+
+> 💡 **提示**：通过 Secret 方式配置的 Token 在以后的任何 Git 提交、重推仓库或自动构建中都会**永久保留**，绝不会被代码覆盖清空。
 
 ---
 

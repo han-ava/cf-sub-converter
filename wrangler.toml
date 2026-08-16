@@ -5,6 +5,3 @@ compatibility_flags = ["nodejs_compat"]
 
 [observability]
 enabled = true
-
-[vars]
-AUTH_TOKEN = ""
