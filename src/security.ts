@@ -106,16 +106,22 @@ export function isSafeSubscriptionUrl(urlStr: string): boolean {
 }
 
 /**
- * 恒定时间字符串比较（防止时序侧信道攻击）
+ * 严格恒定时间字符串比较（消除长度差异的时序侧信道）
  */
 export function safeCompareToken(a: string, b: string): boolean {
   if (typeof a !== 'string' || typeof b !== 'string') return false;
-  if (a.length !== b.length) return false;
 
-  let mismatch = 0;
-  for (let i = 0; i < a.length; i++) {
-    mismatch |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  const lenA = a.length;
+  const lenB = b.length;
+  let mismatch = lenA ^ lenB;
+  const maxLen = Math.max(lenA, lenB);
+
+  for (let i = 0; i < maxLen; i++) {
+    const charA = i < lenA ? a.charCodeAt(i) : 0;
+    const charB = i < lenB ? b.charCodeAt(i) : 0;
+    mismatch |= charA ^ charB;
   }
+
   return mismatch === 0;
 }
 
@@ -202,7 +208,20 @@ export async function fetchSubscriptionWithTimeout(
   const maxRedirects = 5;
   let redirectCount = 0;
 
+  // 全局外层超时信号：在循环外注册一次，避免每次重定向叠加监听器
+  let outerAborted = false;
+  if (outerSignal) {
+    if (outerSignal.aborted) {
+      throw new Error('请求订阅上游超时 (全局超时)');
+    }
+    outerSignal.addEventListener('abort', () => { outerAborted = true; }, { once: true });
+  }
+
   while (redirectCount <= maxRedirects) {
+    if (outerAborted) {
+      throw new Error('请求订阅上游超时 (全局超时)');
+    }
+
     if (!isSafeSubscriptionUrl(currentUrl)) {
       throw new Error('安全策略拦截: 目标地址不符合安全规范或指向内网');
     }
@@ -210,9 +229,10 @@ export async function fetchSubscriptionWithTimeout(
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 15000); // 单个订阅 15 秒超时
 
-    // 监听全局外层超时信号
-    if (outerSignal) {
-      outerSignal.addEventListener('abort', () => controller.abort());
+    // 将外层信号连接到当前请求的 controller
+    const onOuterAbort = () => controller.abort();
+    if (outerSignal && !outerSignal.aborted) {
+      outerSignal.addEventListener('abort', onOuterAbort, { once: true });
     }
 
     try {

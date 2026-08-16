@@ -2,7 +2,6 @@
 
 export interface Env {
   AUTH_TOKEN?: string;
-  [key: string]: unknown;
 }
 
 export type ProxyType =

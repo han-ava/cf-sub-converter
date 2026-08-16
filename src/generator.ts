@@ -637,14 +637,44 @@ export function toShadowrocketConf(nodes: ProxyNode[]): string {
     'ipv6 = false',
     'update-url = ',
     '',
+    '[Proxy]'
+  ];
+
+  // 将节点写入 [Proxy] 段
+  for (const node of nodes) {
+    if (node.type === 'ss' || node.type === 'shadowsocks') {
+      lines.push(`${node.name} = ss, ${node.server}, ${node.port}, encrypt-method=${node.cipher}, password=${node.password}`);
+    } else if (node.type === 'trojan') {
+      lines.push(`${node.name} = trojan, ${node.server}, ${node.port}, password=${node.password}, over-tls=true, tls-name=${node.sni || node.server}`);
+    } else if (node.type === 'vmess') {
+      const wsParam = node.network === 'ws' ? `, obfs=websocket, obfs-uri=${node.wsPath || '/'}` : '';
+      const tlsParam = node.tls ? `, tls=true, tls-name=${node.sni || node.server}` : '';
+      lines.push(`${node.name} = vmess, ${node.server}, ${node.port}, method=${node.cipher || 'auto'}, password=${node.uuid}${wsParam}${tlsParam}`);
+    } else if (node.type === 'vless') {
+      // Shadowrocket 支持 VLESS 通过 URI 导入，.conf 中使用简化写法
+      lines.push(`${node.name} = vless, ${node.server}, ${node.port}, password=${node.uuid}, over-tls=${node.tls ? 'true' : 'false'}, tls-name=${node.sni || node.server}`);
+    } else if (node.type === 'hysteria2' || node.type === 'hy2') {
+      lines.push(`${node.name} = hysteria2, ${node.server}, ${node.port}, password=${node.password}, over-tls=true, tls-name=${node.sni || node.server}`);
+    } else if (node.type === 'tuic') {
+      lines.push(`${node.name} = tuic, ${node.server}, ${node.port}, password=${node.password}, uuid=${node.uuid || ''}, tls-name=${node.sni || node.server}`);
+    }
+  }
+
+  const groupNodes = nodes.length > 0 ? nodes.map(n => n.name).join(', ') : 'DIRECT';
+
+  lines.push(
+    '',
+    '[Proxy Group]',
+    `🚀 节点选择 = select, ${groupNodes}, DIRECT`,
+    '',
     '[Rule]',
     'DOMAIN-SUFFIX,cn,DIRECT',
-    'DOMAIN-KEYWORD,google,PROXY',
-    'DOMAIN-KEYWORD,github,PROXY',
-    'DOMAIN-KEYWORD,telegram,PROXY',
-    'DOMAIN-KEYWORD,twitter,PROXY',
+    'DOMAIN-KEYWORD,google,🚀 节点选择',
+    'DOMAIN-KEYWORD,github,🚀 节点选择',
+    'DOMAIN-KEYWORD,telegram,🚀 节点选择',
+    'DOMAIN-KEYWORD,twitter,🚀 节点选择',
     'GEOIP,CN,DIRECT',
-    'FINAL,PROXY',
+    'FINAL,🚀 节点选择',
     '',
     '[Host]',
     'localhost = 127.0.0.1',
@@ -654,7 +684,7 @@ export function toShadowrocketConf(nodes: ProxyNode[]): string {
     '[Header Rewrite]',
     '',
     '[MITM]'
-  ];
+  );
 
   return lines.join('\n');
 }

@@ -251,7 +251,7 @@ export function processNodes(
     });
   }
 
-  // 4. 国旗添加 (Emoji Flag)
+  // 5. 国旗添加 (Emoji Flag)
   if (options.addEmoji) {
     nodes = nodes.map(node => ({
       ...node,
@@ -259,7 +259,7 @@ export function processNodes(
     }));
   }
 
-  // 5. UDP 强制开启/关闭
+  // 6. UDP 强制开启/关闭
   if (options.enableUdp !== undefined) {
     nodes = nodes.map(node => ({
       ...node,
@@ -267,7 +267,7 @@ export function processNodes(
     }));
   }
 
-  // 6. 名称去重
+  // 7. 名称去重
   return deduplicateNodeNames(nodes);
 }
 

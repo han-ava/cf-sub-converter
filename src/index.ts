@@ -27,18 +27,21 @@ const SECURITY_PAGE_HEADERS = {
 
 /**
  * 限制并发的异步任务执行器（Worker Pool，默认最大并发 6）
+ * 使用显式任务队列避免共享可变索引的竞态隐患
  */
 async function pMap<T, R>(items: T[], fn: (item: T) => Promise<R>, concurrency = 6): Promise<R[]> {
+  if (items.length === 0) return [];
+
   const results: R[] = new Array(items.length);
-  let index = 0;
+  // 构建带索引的任务队列，通过 pop 逐个消费（pop 是同步原子操作）
+  const queue = items.map((item, i) => ({ item, i }));
+  queue.reverse(); // reverse 使 pop 按原始顺序消费
 
   const workerCount = Math.min(concurrency, items.length);
-  if (workerCount === 0) return [];
-
   const workers = Array.from({ length: workerCount }, async () => {
-    while (index < items.length) {
-      const i = index++;
-      results[i] = await fn(items[i]!);
+    let task: { item: T; i: number } | undefined;
+    while ((task = queue.pop()) !== undefined) {
+      results[task.i] = await fn(task.item);
     }
   });
 
