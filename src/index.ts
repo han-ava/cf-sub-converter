@@ -3,7 +3,7 @@ import packageJson from '../package.json';
 import { Env, ProxyNode } from './types';
 import { parseContent } from './parser';
 import { toClashMeta, toSingBox, toBase64, toRawLinks, toSurge, toShadowrocketConf } from './generator';
-import { processNodes, createUserinfoNodes, parseUserinfo, getRegionByNodeName } from './utils';
+import { processNodes, createUserinfoNodes, parseUserinfo, getRegionByNodeName, parseRenameRules } from './utils';
 import { isAuthorized, fetchSubscriptionWithTimeout, extractRequestToken, sanitizeUrlForLog } from './security';
 import { renderHtmlPage } from './ui';
 
@@ -223,18 +223,7 @@ export default {
         const { nodes: rawNodes, userinfo } = await loadAllNodes(rawUrl, clientUserAgent, true, 180, 'first');
 
         // 过滤与重命名
-        const renameRules: Array<{ search: string; replace: string }> = [];
-        if (body.rename) {
-          const pairs = String(body.rename).split(/[\n,;]+/);
-          for (const pair of pairs) {
-            const trimmed = pair.trim();
-            if (!trimmed) continue;
-            if (trimmed.includes('=')) {
-              const [search, ...rest] = trimmed.split('=');
-              if (search) renameRules.push({ search, replace: rest.join('=') });
-            }
-          }
-        }
+        const renameRules = parseRenameRules(body.rename ? String(body.rename) : '');
 
         const processedNodes = processNodes(rawNodes, {
           includeRegex: body.include,
@@ -387,22 +376,8 @@ export default {
       const globalTimeout = setTimeout(() => globalAbortController.abort(), 25000);
 
       try {
-        // 解析重命名规则 (格式: "香港=HK, 日本=JP" 或换行)
-        const renameRules: Array<{ search: string; replace: string }> = [];
-        if (renameRulesStr) {
-          const pairs = renameRulesStr.split(/[\n,;]+/);
-          for (const pair of pairs) {
-            const trimmed = pair.trim();
-            if (!trimmed) continue;
-            if (trimmed.includes('=')) {
-              const [search, ...rest] = trimmed.split('=');
-              if (search) renameRules.push({ search, replace: rest.join('=') });
-            } else if (trimmed.includes('@')) {
-              const [search, ...rest] = trimmed.split('@');
-              if (search) renameRules.push({ search, replace: rest.join('@') });
-            }
-          }
-        }
+        // 解析重命名规则 (支持 DEL-前缀、=、@、- 以及逗号/换行/分号/竖线分隔)
+        const renameRules = parseRenameRules(renameRulesStr);
 
         // 并发池拉取并解析节点
         const { nodes: rawNodes, userinfo } = await loadAllNodes(

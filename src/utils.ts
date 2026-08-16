@@ -184,6 +184,64 @@ export function deduplicateNodeNames(nodes: ProxyNode[]): ProxyNode[] {
 }
 
 /**
+ * 解析各种格式的节点重命名规则
+ * 支持:
+ * 1. 分隔符: 换行, 逗号, 分号, 竖线 |
+ * 2. 语法:
+ *    - 赋值语法: "香港=HK", "香港@HK"
+ *    - 删除语法: "DEL-[69云]", "RM-广告" -> 搜索 [69云] 并替换为空
+ *    - 连字符语法: "移动优化-專線" -> 搜索 移动优化 并替换为 專線
+ */
+export function parseRenameRules(rulesStr?: string): Array<{ search: string; replace: string }> {
+  if (!rulesStr || !rulesStr.trim()) return [];
+
+  const rawRules = rulesStr.split(/[\n\r,;|]+/);
+  const result: Array<{ search: string; replace: string }> = [];
+
+  for (const raw of rawRules) {
+    const trimmed = raw.trim();
+    if (!trimmed) continue;
+
+    // 1. 删除前缀: DEL-xxx 或 RM-xxx
+    if (/^(?:DEL|RM)[-_@=]/i.test(trimmed)) {
+      const search = trimmed.replace(/^(?:DEL|RM)[-_@=]/i, '').trim();
+      if (search) {
+        result.push({ search, replace: '' });
+        continue;
+      }
+    }
+
+    // 2. 等号与 @ 符号分隔: search=replace, search@replace
+    if (trimmed.includes('=')) {
+      const [search, ...rest] = trimmed.split('=');
+      if (search) {
+        result.push({ search: search.trim(), replace: rest.join('=').trim() });
+        continue;
+      }
+    }
+
+    if (trimmed.includes('@')) {
+      const [search, ...rest] = trimmed.split('@');
+      if (search) {
+        result.push({ search: search.trim(), replace: rest.join('@').trim() });
+        continue;
+      }
+    }
+
+    // 3. 连字符分隔: search-replace (例如 移动优化-專線)
+    if (trimmed.includes('-')) {
+      const [search, ...rest] = trimmed.split('-');
+      if (search) {
+        result.push({ search: search.trim(), replace: rest.join('-').trim() });
+        continue;
+      }
+    }
+  }
+
+  return result.slice(0, 30);
+}
+
+/**
  * 节点过滤、重命名与特征去重综合处理
  */
 export function processNodes(
