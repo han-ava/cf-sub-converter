@@ -13,15 +13,15 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
   <style>
     :root {
-      --bg-app: #090d16;
-      --bg-panel: #111827;
-      --bg-card: #1f2937;
+      --bg-app: #080c14;
+      --bg-panel: #0f172a;
+      --bg-card: #1e293b;
       --bg-input: #0b1120;
-      --bg-hover: #374151;
-      --text-main: #f9fafb;
-      --text-muted: #9ca3af;
-      --text-dim: #6b7280;
-      --border: #374151;
+      --bg-hover: #334155;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --text-dim: #64748b;
+      --border: #334155;
       --border-focus: #3b82f6;
       --primary: #2563eb;
       --primary-hover: #1d4ed8;
@@ -31,8 +31,8 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       --danger: #ef4444;
       --radius-sm: 6px;
       --radius-md: 10px;
-      --radius-lg: 14px;
-      --shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.4), 0 4px 6px -2px rgba(0, 0, 0, 0.2);
+      --radius-lg: 16px;
+      --shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.3);
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -54,40 +54,42 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       position: sticky;
       top: 0;
       z-index: 50;
+      backdrop-filter: blur(8px);
     }
     .brand {
       display: flex;
       align-items: center;
       gap: 10px;
       font-weight: 700;
-      font-size: 1.2rem;
+      font-size: 1.25rem;
       letter-spacing: -0.02em;
     }
     .brand-icon {
-      width: 28px;
-      height: 28px;
+      width: 32px;
+      height: 32px;
       background: linear-gradient(135deg, #3b82f6, #8b5cf6);
-      border-radius: 8px;
+      border-radius: 9px;
       display: flex;
       align-items: center;
       justify-content: center;
       color: white;
-      font-size: 16px;
+      font-size: 18px;
+      box-shadow: 0 0 15px rgba(59, 130, 246, 0.4);
     }
     .badge {
-      background: rgba(16, 185, 129, 0.15);
+      background: rgba(16, 185, 129, 0.12);
       color: #34d399;
       font-size: 0.75rem;
-      padding: 2px 8px;
+      padding: 3px 10px;
       border-radius: 9999px;
       font-weight: 600;
-      border: 1px solid rgba(16, 185, 129, 0.3);
+      border: 1px solid rgba(16, 185, 129, 0.25);
       display: flex;
       align-items: center;
-      gap: 4px;
+      gap: 5px;
     }
     .container {
-      max-width: 860px;
+      max-width: 900px;
       width: 100%;
       margin: 2rem auto;
       padding: 0 1.25rem;
@@ -110,7 +112,7 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       margin-bottom: 1.25rem;
     }
     .panel-title {
-      font-size: 1.05rem;
+      font-size: 1.1rem;
       font-weight: 600;
       display: flex;
       align-items: center;
@@ -178,6 +180,11 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       accent-color: var(--primary);
       cursor: pointer;
     }
+    .btn-row {
+      display: flex;
+      gap: 12px;
+      margin-top: 1.5rem;
+    }
     .btn {
       display: inline-flex;
       align-items: center;
@@ -196,13 +203,13 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
     .btn-primary {
       background-color: var(--primary);
       color: white;
-      width: 100%;
+      flex: 2;
       padding: 0.9rem;
       font-size: 1rem;
     }
     .btn-primary:hover {
       background-color: var(--primary-hover);
-      box-shadow: 0 4px 12px rgba(37, 99, 235, 0.4);
+      box-shadow: 0 4px 15px rgba(37, 99, 235, 0.4);
     }
     .btn-secondary {
       background-color: var(--bg-card);
@@ -213,9 +220,18 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       background-color: var(--bg-hover);
       border-color: var(--text-muted);
     }
+    .btn-inspect {
+      flex: 1;
+      background: rgba(56, 189, 248, 0.1);
+      color: var(--accent);
+      border: 1px solid rgba(56, 189, 248, 0.3);
+    }
+    .btn-inspect:hover {
+      background: rgba(56, 189, 248, 0.2);
+    }
     .btn-sm {
-      padding: 0.45rem 0.75rem;
-      font-size: 0.8rem;
+      padding: 0.5rem 0.85rem;
+      font-size: 0.825rem;
     }
     .results-wrapper {
       display: none;
@@ -261,6 +277,83 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       flex-wrap: wrap;
       gap: 8px;
     }
+    
+    /* 流量与节点看板样式 */
+    .traffic-bar-container {
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 1rem;
+      margin-bottom: 1rem;
+    }
+    .traffic-header {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+    }
+    .traffic-progress-bg {
+      height: 8px;
+      background: var(--bg-card);
+      border-radius: 999px;
+      overflow: hidden;
+    }
+    .traffic-progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #10b981, #3b82f6);
+      border-radius: 999px;
+      width: 0%;
+      transition: width 0.5s ease;
+    }
+    .region-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 1rem 0;
+    }
+    .region-chip {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 4px 12px;
+      font-size: 0.8rem;
+      color: var(--text-main);
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .region-chip:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+      transform: translateY(-1px);
+    }
+    .node-list-box {
+      max-height: 280px;
+      overflow-y: auto;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      background: var(--bg-input);
+    }
+    .node-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 12px;
+      font-size: 0.825rem;
+      border-bottom: 1px solid rgba(51, 65, 85, 0.5);
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .node-item:last-child {
+      border-bottom: none;
+    }
+    .node-tag {
+      background: rgba(59, 130, 246, 0.15);
+      color: var(--accent);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 0.7rem;
+    }
+    
     .toast {
       position: fixed;
       bottom: 2rem;
@@ -348,6 +441,7 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
     }
     @media (max-width: 640px) {
       .grid-2 { grid-template-columns: 1fr; }
+      .btn-row { flex-direction: column; }
       .container { padding: 0 1rem; margin: 1rem auto; }
       .panel { padding: 1.25rem; }
     }
@@ -369,7 +463,7 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
     <div class="panel">
       <div class="panel-header">
         <div class="panel-title">
-          <span>📡 订阅链接与节点转换</span>
+          <span>📡 订阅链接与节点配置</span>
         </div>
       </div>
 
@@ -377,7 +471,7 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
         <label for="subUrl">
           <span>订阅链接 / 节点链接 (支持多个链接换行或 | 分隔)</span>
         </label>
-        <textarea id="subUrl" placeholder="https://airport.com/api/v1/client/subscribe?token=...&#10;或输入 vless://, vmess://, trojan://, ss://, hysteria2://, tuic:// 节点链接"></textarea>
+        <textarea id="subUrl" placeholder="https://airport.com/api/v1/client/subscribe?token=...&#10;或直接输入 vless://, vmess://, trojan://, ss://, hysteria2://, tuic:// 节点链接"></textarea>
       </div>
 
       <div class="grid-2 form-group">
@@ -395,9 +489,19 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
         </div>
 
         <div>
-          <label for="authToken">访问密钥 Token (若服务端开启)</label>
-          <input type="text" id="authToken" placeholder="可选：填写您的 AUTH_TOKEN">
+          <label for="rulePreset">分流规则预设方案</label>
+          <select id="rulePreset">
+            <option value="standard" selected>🎯 标准全能分流 (国内直连+自动测速+去广告)</option>
+            <option value="ai">🤖 智算 AI 增强 (ChatGPT/Claude/Copilot 专属分组)</option>
+            <option value="media">🎬 国际流媒体专线 (YouTube/Netflix/Disney+ 专属)</option>
+            <option value="minimal">⚡ 极简纯节点模式 (仅节点与自动选择)</option>
+          </select>
         </div>
+      </div>
+
+      <div class="form-group">
+        <label for="authToken">访问密钥 Token (若服务端开启)</label>
+        <input type="text" id="authToken" placeholder="可选：填写您的 AUTH_TOKEN">
       </div>
 
       <!-- 高级设置 -->
@@ -405,11 +509,11 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
         <div class="grid-2">
           <div>
             <label for="includeRegex">包含节点正则 (Include)</label>
-            <input type="text" id="includeRegex" placeholder="例如: 香港|日本|US|专线">
+            <input type="text" id="includeRegex" placeholder="例如: 香港|日本|US|专线" oninput="debounceInspect()">
           </div>
           <div>
             <label for="excludeRegex">排除节点正则 (Exclude)</label>
-            <input type="text" id="excludeRegex" placeholder="例如: 剩余|到期|官网|0.1x">
+            <input type="text" id="excludeRegex" placeholder="例如: 剩余|到期|官网|0.1x" oninput="debounceInspect()">
           </div>
         </div>
       </div>
@@ -434,11 +538,38 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
         </label>
       </div>
 
-      <div style="margin-top: 1.5rem;">
+      <div class="btn-row">
         <button class="btn btn-primary" id="btnGenerate" onclick="generateLink()">
           <span>⚡ 生成转换订阅链接</span>
         </button>
+        <button class="btn btn-inspect" id="btnInspect" onclick="inspectNodes()">
+          <span>🔍 即时解析看板</span>
+        </button>
       </div>
+    </div>
+
+    <!-- 实时解析与流量看板 (Live Inspector) -->
+    <div class="panel results-wrapper" id="inspectPanel">
+      <div class="panel-header">
+        <div class="panel-title">
+          <span>📊 节点与流量实时看板</span>
+        </div>
+        <span id="inspectCount" class="badge">0 节点</span>
+      </div>
+
+      <div id="trafficCard" class="traffic-bar-container" style="display: none;">
+        <div class="traffic-header">
+          <span id="trafficText">流量使用情况</span>
+          <span id="expireText">到期时间: 未知</span>
+        </div>
+        <div class="traffic-progress-bg">
+          <div id="trafficFill" class="traffic-progress-fill"></div>
+        </div>
+      </div>
+
+      <div id="regionChips" class="region-chips"></div>
+
+      <div class="node-list-box" id="nodeList"></div>
     </div>
 
     <!-- 结果面板 -->
@@ -461,9 +592,13 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
         </div>
 
         <div class="action-buttons">
-          <button class="btn btn-secondary btn-sm" id="btnImportClash" onclick="importClash()">🚀 导入 Clash / Mihomo</button>
-          <button class="btn btn-secondary btn-sm" id="btnImportSingbox" onclick="importSingbox()">📦 导入 Sing-Box</button>
-          <button class="btn btn-secondary btn-sm" id="btnImportShadowrocket" onclick="importShadowrocket()">🚀 导入 Shadowrocket</button>
+          <button class="btn btn-secondary btn-sm" onclick="importClash()">🚀 Clash / Mihomo</button>
+          <button class="btn btn-secondary btn-sm" onclick="importShadowrocket()">🚀 Shadowrocket</button>
+          <button class="btn btn-secondary btn-sm" onclick="importSingbox()">📦 Sing-Box</button>
+          <button class="btn btn-secondary btn-sm" onclick="importSurge()">🌊 Surge</button>
+          <button class="btn btn-secondary btn-sm" onclick="importQuanX()">📱 Quantumult X</button>
+          <button class="btn btn-secondary btn-sm" onclick="importLoon()">🎈 Loon</button>
+          <button class="btn btn-secondary btn-sm" onclick="importStash()">🐱 Stash</button>
           <button class="btn btn-secondary btn-sm" onclick="saveToLocalFavorites()">⭐ 保存至本地收藏</button>
         </div>
       </div>
@@ -511,6 +646,7 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       }
 
       const target = document.getElementById('targetClient').value;
+      const preset = document.getElementById('rulePreset').value;
       const authToken = document.getElementById('authToken').value.trim();
       const includeRegex = document.getElementById('includeRegex').value.trim();
       const excludeRegex = document.getElementById('excludeRegex').value.trim();
@@ -524,6 +660,7 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       params.set('url', rawUrl);
       params.set('target', target);
 
+      if (preset && preset !== 'standard') params.set('preset', preset);
       if (authToken) params.set('token', authToken);
       if (includeRegex) params.set('include', includeRegex);
       if (excludeRegex) params.set('exclude', excludeRegex);
@@ -550,6 +687,117 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       results.scrollIntoView({ behavior: 'smooth' });
     }
 
+    // 实时节点与流量看板预览
+    async function inspectNodes() {
+      const rawUrl = document.getElementById('subUrl').value.trim();
+      if (!rawUrl) {
+        alert('请先输入订阅链接');
+        return;
+      }
+
+      const inspectBtn = document.getElementById('btnInspect');
+      inspectBtn.textContent = '⏳ 解析中...';
+      inspectBtn.disabled = true;
+
+      try {
+        const payload = {
+          url: rawUrl,
+          token: document.getElementById('authToken').value.trim(),
+          include: document.getElementById('includeRegex').value.trim(),
+          exclude: document.getElementById('excludeRegex').value.trim(),
+          rename: document.getElementById('renameRules').value.trim(),
+          emoji: document.getElementById('addEmoji').checked,
+          udp: document.getElementById('enableUdp').checked
+        };
+
+        const resp = await fetch('/api/preview', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await resp.json();
+        if (!resp.ok || !data.ok) {
+          alert('解析失败: ' + (data.error || '未知错误'));
+          return;
+        }
+
+        const inspectPanel = document.getElementById('inspectPanel');
+        inspectPanel.classList.add('show');
+
+        // 更新数量
+        document.getElementById('inspectCount').textContent = \`匹配 \${data.totalMatched} / 原始 \${data.totalRaw} 节点\`;
+
+        // 流量信息
+        const trafficCard = document.getElementById('trafficCard');
+        if (data.userinfo) {
+          trafficCard.style.display = 'block';
+          const used = data.userinfo.upload + data.userinfo.download;
+          const total = data.userinfo.total;
+          const pct = total > 0 ? Math.min(100, (used / total * 100)).toFixed(1) : 0;
+
+          document.getElementById('trafficText').textContent = \`已用: \${formatBytes(used)} / 总计: \${formatBytes(total)} (\${pct}%)\`;
+          document.getElementById('expireText').textContent = \`到期时间: \${formatDate(data.userinfo.expire)}\`;
+          document.getElementById('trafficFill').style.width = pct + '%';
+        } else {
+          trafficCard.style.display = 'none';
+        }
+
+        // 地区标签
+        const chips = document.getElementById('regionChips');
+        chips.innerHTML = '';
+        for (const [region, count] of Object.entries(data.regions || {})) {
+          const chip = document.createElement('div');
+          chip.className = 'region-chip';
+          chip.textContent = \`\${region}: \${count}\`;
+          chip.onclick = () => {
+            const rawReg = region.split(' ')[1] || region;
+            document.getElementById('includeRegex').value = rawReg;
+            inspectNodes();
+          };
+          chips.appendChild(chip);
+        }
+
+        // 节点列表
+        const nodeList = document.getElementById('nodeList');
+        nodeList.innerHTML = (data.nodes || []).map(n => \`
+          <div class="node-item">
+            <span>\${n.name}</span>
+            <span class="node-tag">\${n.type.toUpperCase()}</span>
+          </div>
+        \`).join('');
+
+        inspectPanel.scrollIntoView({ behavior: 'smooth' });
+      } catch (err) {
+        alert('请求失败: ' + err.message);
+      } finally {
+        inspectBtn.textContent = '🔍 即时解析看板';
+        inspectBtn.disabled = false;
+      }
+    }
+
+    let inspectTimer = null;
+    function debounceInspect() {
+      const inspectPanel = document.getElementById('inspectPanel');
+      if (!inspectPanel.classList.contains('show')) return;
+      clearTimeout(inspectTimer);
+      inspectTimer = setTimeout(inspectNodes, 400);
+    }
+
+    function formatBytes(bytes) {
+      if (!bytes || bytes <= 0) return '0 B';
+      const k = 1024;
+      const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      return (bytes / Math.pow(k, i)).toFixed(2) + ' ' + sizes[i];
+    }
+
+    function formatDate(timestamp) {
+      if (!timestamp) return '无限期';
+      const d = new Date(timestamp * 1000);
+      return isNaN(d.getTime()) ? '无限期' : d.toLocaleDateString();
+    }
+
     function copyLink() {
       const outputInput = document.getElementById('outputUrl');
       if (!outputInput.value) return;
@@ -562,6 +810,7 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       });
     }
 
+    // 客户端一键唤起
     function importClash() {
       const url = document.getElementById('outputUrl').value;
       if (!url) return;
@@ -583,6 +832,30 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       } catch (e) {
         window.location.href = \`shadowrocket://add/sub://\${btoa(url)}?remarks=SubConverter\`;
       }
+    }
+
+    function importSurge() {
+      const url = document.getElementById('outputUrl').value;
+      if (!url) return;
+      window.location.href = \`surge3:///install-config?url=\${encodeURIComponent(url)}\`;
+    }
+
+    function importQuanX() {
+      const url = document.getElementById('outputUrl').value;
+      if (!url) return;
+      window.location.href = \`quantumult-x:///add-resource?remote-resource=\${encodeURIComponent(url)}\`;
+    }
+
+    function importLoon() {
+      const url = document.getElementById('outputUrl').value;
+      if (!url) return;
+      window.location.href = \`loon://import?profile=\${encodeURIComponent(url)}\`;
+    }
+
+    function importStash() {
+      const url = document.getElementById('outputUrl').value;
+      if (!url) return;
+      window.location.href = \`stash://install-config?url=\${encodeURIComponent(url)}\`;
     }
 
     let qrcodeObj = null;
@@ -631,6 +904,7 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
         name,
         subUrl,
         target: document.getElementById('targetClient').value,
+        preset: document.getElementById('rulePreset').value,
         include: document.getElementById('includeRegex').value.trim(),
         exclude: document.getElementById('excludeRegex').value.trim(),
         rename: document.getElementById('renameRules').value.trim(),
@@ -642,7 +916,7 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
 
       const favs = getFavorites();
       favs.unshift(item);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(favs.slice(0, 20))); // 最多存 20 个
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(favs.slice(0, 20)));
       renderFavorites();
       showToast('⭐ 已保存至本地浏览器收藏');
     }
@@ -659,6 +933,7 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
 
       document.getElementById('subUrl').value = item.subUrl || '';
       document.getElementById('targetClient').value = item.target || 'clash';
+      document.getElementById('rulePreset').value = item.preset || 'standard';
       document.getElementById('includeRegex').value = item.include || '';
       document.getElementById('excludeRegex').value = item.exclude || '';
       document.getElementById('renameRules').value = item.rename || '';

@@ -319,7 +319,7 @@ export function nodeToSingBoxOutbound(node: ProxyNode): Record<string, any> {
 /**
  * 转换为 Clash Meta / Mihomo 配置文件 (YAML)
  */
-export function toClashMeta(nodes: ProxyNode[], customTemplateYaml?: string): string {
+export function toClashMeta(nodes: ProxyNode[], customTemplateYaml?: string, preset: string = 'standard'): string {
   let config: any = null;
 
   if (customTemplateYaml && customTemplateYaml.trim()) {
@@ -337,7 +337,6 @@ export function toClashMeta(nodes: ProxyNode[], customTemplateYaml?: string): st
 
   // 地区节点分组
   const regionNodeMap: Record<string, string[]> = {};
-  const allGroupCodes = ['HK', 'TW', 'JP', 'SG', 'US', 'KR', 'GB', 'DE'];
 
   for (const node of nodes) {
     const region = getRegionByNodeName(node.name);
@@ -366,6 +365,44 @@ export function toClashMeta(nodes: ProxyNode[], customTemplateYaml?: string): st
     }
   }
 
+  // 额外策略组与规则注入
+  const extraGroups: any[] = [];
+  const extraRules: string[] = [];
+
+  if (preset === 'ai') {
+    extraGroups.push({
+      name: '🤖 智算 AI',
+      type: 'select',
+      proxies: ['🚀 节点选择', '⚡ 自动选择', ...regionalGroupNames, ...(proxyNames.length > 0 ? proxyNames : ['DIRECT'])]
+    });
+    extraRules.push(
+      'DOMAIN-SUFFIX,openai.com,🤖 智算 AI',
+      'DOMAIN-SUFFIX,oaistatic.com,🤖 智算 AI',
+      'DOMAIN-SUFFIX,oaiusercontent.com,🤖 智算 AI',
+      'DOMAIN-SUFFIX,chatgpt.com,🤖 智算 AI',
+      'DOMAIN-SUFFIX,anthropic.com,🤖 智算 AI',
+      'DOMAIN-SUFFIX,claude.ai,🤖 智算 AI',
+      'DOMAIN-SUFFIX,perplexity.ai,🤖 智算 AI',
+      'DOMAIN-KEYWORD,copilot,🤖 智算 AI',
+      'DOMAIN-SUFFIX,groq.com,🤖 智算 AI'
+    );
+  } else if (preset === 'media') {
+    extraGroups.push({
+      name: '🎬 国际流媒体',
+      type: 'select',
+      proxies: ['🚀 节点选择', '⚡ 自动选择', ...regionalGroupNames, ...(proxyNames.length > 0 ? proxyNames : ['DIRECT'])]
+    });
+    extraRules.push(
+      'DOMAIN-SUFFIX,youtube.com,🎬 国际流媒体',
+      'DOMAIN-SUFFIX,googlevideo.com,🎬 国际流媒体',
+      'DOMAIN-SUFFIX,netflix.com,🎬 国际流媒体',
+      'DOMAIN-SUFFIX,nflxvideo.net,🎬 国际流媒体',
+      'DOMAIN-SUFFIX,disneyplus.com,🎬 国际流媒体',
+      'DOMAIN-SUFFIX,spotify.com,🎬 国际流媒体',
+      'DOMAIN-SUFFIX,tiktok.com,🎬 国际流媒体'
+    );
+  }
+
   // 构建默认 Proxy Groups
   const defaultGroups = [
     {
@@ -387,6 +424,7 @@ export function toClashMeta(nodes: ProxyNode[], customTemplateYaml?: string): st
       proxies: proxyNames.length > 0 ? proxyNames : ['DIRECT']
     },
     ...regionalGroups,
+    ...extraGroups,
     {
       name: '🎯 全球直连',
       type: 'select',
@@ -407,6 +445,10 @@ export function toClashMeta(nodes: ProxyNode[], customTemplateYaml?: string): st
   config.proxies = proxies;
   if (!config['proxy-groups'] || !Array.isArray(config['proxy-groups']) || config['proxy-groups'].length === 0) {
     config['proxy-groups'] = defaultGroups;
+  }
+
+  if (extraRules.length > 0 && Array.isArray(config.rules)) {
+    config.rules = [...extraRules, ...config.rules];
   }
 
   return yaml.dump(config, { indent: 2, lineWidth: -1, noRefs: true });

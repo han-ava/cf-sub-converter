@@ -8,6 +8,16 @@ const ALLOWED_PORTS = new Set([
 ]);
 
 /**
+ * 计算字符串的 SHA-256 哈希值
+ */
+export async function sha256Hex(message: string): Promise<string> {
+  const msgUint8 = new TextEncoder().encode(message);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', msgUint8);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+/**
  * 校验是否为私有 IP 或本地回环 IP（防止 SSRF 漏洞）
  */
 export function isPrivateIp(ip: string): boolean {
@@ -161,12 +171,30 @@ export function sanitizeUrlForLog(urlStr: string): string {
 }
 
 /**
- * 带有 302 重定向核验与超时防护的安全订阅抓取
+ * 带有 302 重定向核验、边缘短效缓存与超时防护的安全订阅抓取
  */
 export async function fetchSubscriptionWithTimeout(
   initialUrl: string,
-  customUserAgent?: string
+  customUserAgent?: string,
+  enableCache = true
 ): Promise<{ ok: boolean; status: number; text: string; userinfo?: string }> {
+  // 1. 边缘缓存查询 (3 分钟短效缓存，大幅提升重复测速与配置拉取性能)
+  let cacheKeyUrl = '';
+  const cache = typeof caches !== 'undefined' ? (caches as any).default : null;
+
+  if (enableCache && cache) {
+    try {
+      const hash = await sha256Hex(initialUrl);
+      cacheKeyUrl = `https://sub-cache.internal/${hash}`;
+      const cachedResp = await cache.match(cacheKeyUrl);
+      if (cachedResp) {
+        const userinfo = cachedResp.headers.get('subscription-userinfo') || undefined;
+        const text = await cachedResp.text();
+        return { ok: true, status: 200, text, userinfo };
+      }
+    } catch {}
+  }
+
   let currentUrl = initialUrl;
   const userAgent = customUserAgent || 'ClashMeta/1.18.0 (v2rayNG/1.8.5)';
   const maxRedirects = 5;
@@ -218,6 +246,19 @@ export async function fetchSubscriptionWithTimeout(
       const text = await response.text();
       if (text.length > 10 * 1024 * 1024) {
         throw new Error('订阅内容超过 10MB 上限，已中止处理');
+      }
+
+      // 异步存入边缘短效缓存
+      if (enableCache && cache && cacheKeyUrl) {
+        try {
+          const cacheHeaders: Record<string, string> = {
+            'Content-Type': 'text/plain; charset=utf-8',
+            'Cache-Control': 'public, max-age=180'
+          };
+          if (userinfo) cacheHeaders['subscription-userinfo'] = userinfo;
+          const cacheResp = new Response(text, { headers: cacheHeaders });
+          cache.put(cacheKeyUrl, cacheResp).catch(() => {});
+        } catch {}
       }
 
       return { ok: true, status: response.status, text, userinfo };
