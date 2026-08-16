@@ -1026,28 +1026,36 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       const list = document.getElementById('favList');
       const favs = getFavorites();
 
-      if (favs.length === 0) {
+      if (!favs || favs.length === 0) {
         list.innerHTML = '<div style="color: var(--text-dim); font-size: 0.85rem; text-align: center; padding: 1.25rem; background: var(--bg-input); border-radius: var(--radius-md); border: 1px dashed var(--border);">⭐ 暂无保存的配置<br><span style="font-size: 0.78rem; color: var(--text-muted); margin-top: 4px; display: inline-block;">在上方配置好订阅与规则后，点击「+ 收藏当前配置」即可保存</span></div>';
         return;
       }
 
-      list.innerHTML = favs.map(f => \`
-        <div class="fav-item">
-          <div class="fav-info" onclick="loadFavorite(\${f.id})" style="cursor: pointer; flex: 1;">
-            <div class="fav-name">⭐ \${f.name}</div>
-            <div class="fav-meta" style="margin-top: 4px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
-              <span class="badge" style="font-size: 0.65rem; padding: 1px 6px;">\${f.target.toUpperCase()}</span>
-              \${f.preset && f.preset !== 'standard' ? \`<span class="badge" style="font-size: 0.65rem; padding: 1px 6px; background: rgba(16,185,129,0.15); color: #10b981;">\${f.preset.toUpperCase()}</span>\` : ''}
-              \${f.include ? \`<span style="font-family: monospace; font-size: 0.75rem; color: var(--accent);">[\${f.include}]</span>\` : ''}
-              <span style="font-size: 0.75rem; color: var(--text-dim);">· \${new Date(f.date).toLocaleDateString()}</span>
-            </div>
-          </div>
-          <div style="display: flex; gap: 6px; align-items: center;">
-            <button class="btn btn-primary btn-sm" onclick="loadFavorite(\${f.id})" title="载入并立即转换">⚡ 载入</button>
-            <button class="btn btn-secondary btn-sm" style="color: var(--danger);" onclick="deleteFavorite(\${f.id})" title="删除此收藏">🗑️</button>
-          </div>
-        </div>
-      \`).join('');
+      let html = '';
+      for (let i = 0; i < favs.length; i++) {
+        const f = favs[i];
+        const targetBadge = (f.target || 'clash').toUpperCase();
+        const dateStr = f.date ? new Date(f.date).toLocaleDateString() : '';
+        const includeTag = f.include ? '<span style="font-family: monospace; font-size: 0.75rem; color: var(--accent);">[' + f.include + ']</span>' : '';
+        const presetTag = (f.preset && f.preset !== 'standard') ? '<span class="badge" style="font-size: 0.65rem; padding: 1px 6px; background: rgba(16,185,129,0.15); color: #10b981;">' + f.preset.toUpperCase() + '</span>' : '';
+
+        html += '<div class="fav-item">' +
+          '<div class="fav-info" onclick="loadFavorite(' + f.id + ')" style="cursor: pointer; flex: 1;">' +
+            '<div class="fav-name">⭐ ' + f.name + '</div>' +
+            '<div class="fav-meta" style="margin-top: 4px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">' +
+              '<span class="badge" style="font-size: 0.65rem; padding: 1px 6px;">' + targetBadge + '</span>' +
+              presetTag +
+              includeTag +
+              '<span style="font-size: 0.75rem; color: var(--text-dim);">· ' + dateStr + '</span>' +
+            '</div>' +
+          '</div>' +
+          '<div style="display: flex; gap: 6px; align-items: center;">' +
+            '<button class="btn btn-primary btn-sm" onclick="loadFavorite(' + f.id + ')" title="载入并立即转换">⚡ 载入</button>' +
+            '<button class="btn btn-secondary btn-sm" style="color: var(--danger);" onclick="deleteFavorite(' + f.id + ')" title="删除此收藏">🗑️</button>' +
+          '</div>' +
+        '</div>';
+      }
+      list.innerHTML = html;
     }
 
     // Token 本地持久化 (localStorage)
