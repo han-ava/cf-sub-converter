@@ -4,12 +4,12 @@ import { Env, ProxyNode } from './types';
 import { parseContent } from './parser';
 import { toClashMeta, toSingBox, toBase64, toRawLinks, toSurge, toShadowrocketConf } from './generator';
 import { processNodes, createUserinfoNodes } from './utils';
-import { isAuthorized, fetchSubscriptionWithTimeout } from './security';
+import { isAuthorized, fetchSubscriptionWithTimeout, extractRequestToken, sanitizeUrlForLog } from './security';
 import { renderHtmlPage } from './ui';
 
 const APP_VERSION = packageJson.version || '3.0.0-hardened';
 
-// 允许跨域响应头
+// 基础跨域响应头（保持客户端兼容）
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
@@ -17,15 +17,26 @@ const CORS_HEADERS = {
   'Access-Control-Max-Age': '86400'
 };
 
+// 首页安全防护响应头
+const SECURITY_PAGE_HEADERS = {
+  'X-Content-Type-Options': 'nosniff',
+  'X-Frame-Options': 'DENY',
+  'Referrer-Policy': 'no-referrer',
+  'Permissions-Policy': 'interest-cohort=()'
+};
+
 /**
- * 核心节点聚合与拉取逻辑
+ * 核心节点聚合与拉取逻辑（内置日志脱敏与最大并发/数量限制）
  */
 async function loadAllNodes(urlParam: string, customUserAgent?: string): Promise<{ nodes: ProxyNode[]; userinfo?: string }> {
   const inputs = urlParam.split(/[\n\r|]+/);
   const allNodes: ProxyNode[] = [];
   let userinfo: string | undefined = undefined;
 
-  for (const input of inputs) {
+  // 限制单次最多聚合 30 个订阅链接，防止无限循环
+  const safeInputs = inputs.slice(0, 30);
+
+  for (const input of safeInputs) {
     const trimmed = input.trim();
     if (!trimmed) continue;
 
@@ -39,16 +50,17 @@ async function loadAllNodes(urlParam: string, customUserAgent?: string): Promise
           const parsed = await parseContent(fetchResult.text);
           allNodes.push(...parsed);
         }
-      } catch (err) {
-        console.error(`Fetch subscription failed for: ${trimmed}`, err);
+      } catch (err: any) {
+        // 日志脱敏：仅打印 Host 与安全错误信息，绝不打印完整 Token 链接
+        console.error(`Fetch subscription failed for: ${sanitizeUrlForLog(trimmed)} - ${err.message}`);
       }
     } else {
       // 直接作为节点链接或 Base64 解析
       try {
         const parsed = await parseContent(trimmed);
         allNodes.push(...parsed);
-      } catch (err) {
-        console.error(`Parse raw node input failed: ${trimmed}`, err);
+      } catch (err: any) {
+        console.error(`Parse raw node input failed - ${err.message}`);
       }
     }
   }
@@ -71,7 +83,8 @@ export default {
         headers: {
           'Content-Type': 'text/html; charset=utf-8',
           'Cache-Control': 'public, max-age=3600',
-          ...CORS_HEADERS
+          ...CORS_HEADERS,
+          ...SECURITY_PAGE_HEADERS
         }
       });
     }
@@ -88,6 +101,7 @@ export default {
         {
           headers: {
             'Content-Type': 'application/json; charset=utf-8',
+            'Cache-Control': 'no-store',
             ...CORS_HEADERS
           }
         }
@@ -117,7 +131,7 @@ export default {
       let addEmoji = true;
       let enableUdp = true;
       let showInfo = true;
-      let requestToken = '';
+      let requestToken = extractRequestToken(request, url);
       let filename = 'SubConverter';
 
       if (request.method === 'GET') {
@@ -129,7 +143,6 @@ export default {
         addEmoji = url.searchParams.get('emoji') !== '0' && url.searchParams.get('flag') !== '0';
         enableUdp = url.searchParams.get('udp') !== '0';
         showInfo = url.searchParams.get('info') !== '0' && url.searchParams.get('show_info') !== '0';
-        requestToken = url.searchParams.get('token') || request.headers.get('Authorization') || '';
         filename = url.searchParams.get('filename') || 'SubConverter';
       } else if (request.method === 'POST') {
         try {
@@ -142,7 +155,7 @@ export default {
           addEmoji = body.emoji !== false && body.flag !== false;
           enableUdp = body.udp !== false;
           showInfo = body.info !== false && body.show_info !== false;
-          requestToken = body.token || request.headers.get('Authorization') || '';
+          if (body.token) requestToken = body.token;
           filename = body.filename || 'SubConverter';
         } catch {
           return new Response(JSON.stringify({ error: '无效的 JSON 请求体' }), {
@@ -153,7 +166,7 @@ export default {
       }
 
       // 访问鉴权校验
-      if (!isAuthorized(env.AUTH_TOKEN, requestToken)) {
+      if (!isAuthorized(env.AUTH_TOKEN, requestToken, env.PUBLIC_MODE as string)) {
         return new Response(JSON.stringify({ error: '未经授权: Token 缺失或无效' }), {
           status: 401,
           headers: { 'Content-Type': 'application/json', ...CORS_HEADERS }
@@ -191,11 +204,15 @@ export default {
         if (rawNodes.length === 0) {
           return new Response('未成功解析到任何可用代理节点，请检查原始订阅链接是否有效。', {
             status: 404,
-            headers: { 'Content-Type': 'text/plain; charset=utf-8', ...CORS_HEADERS }
+            headers: {
+              'Content-Type': 'text/plain; charset=utf-8',
+              'Cache-Control': 'private, no-store, no-cache, must-revalidate',
+              ...CORS_HEADERS
+            }
           });
         }
 
-        // 过滤与重命名
+        // 过滤与重命名（内部包含字符清洗与长度截断）
         let processedNodes = processNodes(rawNodes, {
           includeRegex,
           excludeRegex,
@@ -204,9 +221,10 @@ export default {
           enableUdp
         });
 
-        // 响应头构建
+        // 响应头构建：禁止私密订阅被中间缓存
         const responseHeaders: Record<string, string> = {
           ...CORS_HEADERS,
+          'Cache-Control': 'private, no-store, no-cache, must-revalidate',
           'profile-update-interval': '24',
           'profile-web-page-url': url.origin
         };
@@ -268,7 +286,11 @@ export default {
       } catch (err: any) {
         return new Response(JSON.stringify({ error: `订阅转换失败: ${err.message}` }), {
           status: 500,
-          headers: { 'Content-Type': 'application/json', ...CORS_HEADERS }
+          headers: {
+            'Content-Type': 'application/json',
+            'Cache-Control': 'private, no-store',
+            ...CORS_HEADERS
+          }
         });
       }
     }

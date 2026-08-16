@@ -159,7 +159,17 @@ export function processNodes(
     enableUdp?: boolean;
   }
 ): ProxyNode[] {
-  let nodes = [...rawNodes];
+  // 0. 节点名称安全清洗（过滤控制字符与换行，限制最大长度）
+  let nodes = rawNodes.map(node => {
+    let cleanName = (node.name || '')
+      .replace(/[\x00-\x1f\x7f]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (cleanName.length > 200) {
+      cleanName = cleanName.substring(0, 200);
+    }
+    return { ...node, name: cleanName || 'Node' };
+  });
 
   // 1. 包含过滤 (Include Regex)
   if (options.includeRegex && options.includeRegex.trim()) {
