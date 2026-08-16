@@ -204,7 +204,8 @@ export async function fetchSubscriptionWithTimeout(
   cacheTtlSeconds = 180,
   outerSignal?: AbortSignal
 ): Promise<{ ok: boolean; status: number; text: string; userinfo?: string }> {
-  const userAgent = customUserAgent || 'ClashMeta/1.18.0 (v2rayNG/1.8.5)';
+  // 向上游请求时始终携带全协议支持的 User-Agent，防止机场面板对某些客户端过滤/阉割节点
+  const userAgent = customUserAgent || 'ClashMeta/1.18.0; Mihomo/1.18.0; Shadowrocket/1990; v2rayNG/1.8.5; QuantumultX/1.0.30';
 
   // 1. 精确 Cache Key (URL + UserAgent 哈希，防止不同客户端拉取到混淆格式)
   let cacheKeyUrl = '';

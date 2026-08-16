@@ -142,6 +142,7 @@ export function addFlagToNodeName(name: string): string {
  */
 export function getNodeFingerprint(node: ProxyNode): string {
   return [
+    node.name || '',
     node.type || '',
     node.server || '',
     node.port || '',

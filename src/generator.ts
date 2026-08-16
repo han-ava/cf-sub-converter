@@ -150,6 +150,42 @@ export function nodeToClashProxy(node: ProxyNode): Record<string, any> {
         'skip-cert-verify': !!node.skipCertVerify
       };
     }
+    case 'hysteria': {
+      return {
+        ...base,
+        type: 'hysteria',
+        auth_str: node.password || node.uuid || '',
+        sni: node.sni || node.server,
+        'skip-cert-verify': !!node.skipCertVerify,
+        alpn: node.alpn || ['h3']
+      };
+    }
+    case 'socks5':
+    case 'socks': {
+      return {
+        ...base,
+        type: 'socks5',
+        username: node.uuid || '',
+        password: node.password || '',
+        tls: !!node.tls,
+        'skip-cert-verify': !!node.skipCertVerify
+      };
+    }
+    case 'http':
+    case 'https': {
+      return {
+        ...base,
+        type: 'http',
+        username: node.uuid || '',
+        password: node.password || '',
+        tls: node.type === 'https' || !!node.tls,
+        'skip-cert-verify': !!node.skipCertVerify
+      };
+    }
+    case 'wireguard':
+    case 'wg': {
+      return { ...base, type: 'wireguard' };
+    }
     default:
       return base;
   }
