@@ -56,6 +56,17 @@ export function tryDecodeURIComponent(str: string): string {
   }
 }
 
+/**
+ * 构造符合 RFC 6266 / RFC 5987 标准的 Content-Disposition 响应头
+ * 避免部分客户端解析带双引号文件名时产生 \" 转义残留问题
+ */
+export function formatContentDisposition(filename: string, ext: string): string {
+  const cleanName = filename.replace(/[^\w\u4e00-\u9fa5\-_.]/g, '').trim() || 'SubConverter';
+  const asciiName = cleanName.replace(/[^\x20-\x7E]/g, '_');
+  const encodedName = encodeURIComponent(cleanName);
+  return `attachment; filename=${asciiName}.${ext}; filename*=UTF-8''${encodedName}.${ext}`;
+}
+
 export interface RegionInfo {
   code: string;
   flag: string;

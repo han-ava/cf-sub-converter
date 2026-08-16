@@ -477,7 +477,7 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       <div class="grid-2 form-group">
         <div>
           <label for="targetClient">目标客户端 / 格式</label>
-          <select id="targetClient">
+          <select id="targetClient" onchange="onTargetChange()">
             <option value="clash" selected>Clash Meta / Mihomo (YAML)</option>
             <option value="shadowrocket">Shadowrocket (小火箭 - 标准订阅)</option>
             <option value="singbox">Sing-Box 1.8+ (JSON)</option>
@@ -592,14 +592,10 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
         </div>
 
         <div class="action-buttons">
-          <button class="btn btn-secondary btn-sm" onclick="importClash()">🚀 Clash / Mihomo</button>
-          <button class="btn btn-secondary btn-sm" onclick="importShadowrocket()">🚀 Shadowrocket</button>
-          <button class="btn btn-secondary btn-sm" onclick="importSingbox()">📦 Sing-Box</button>
-          <button class="btn btn-secondary btn-sm" onclick="importSurge()">🌊 Surge</button>
-          <button class="btn btn-secondary btn-sm" onclick="importQuanX()">📱 Quantumult X</button>
-          <button class="btn btn-secondary btn-sm" onclick="importLoon()">🎈 Loon</button>
-          <button class="btn btn-secondary btn-sm" onclick="importStash()">🐱 Stash</button>
-          <button class="btn btn-secondary btn-sm" onclick="saveToLocalFavorites()">⭐ 保存至本地收藏</button>
+          <button class="btn btn-primary btn-sm" id="btnImportCurrent" onclick="importCurrentClient()">🚀 一键导入到 Clash</button>
+          <button class="btn btn-secondary btn-sm" onclick="copyLink()">📋 复制链接</button>
+          <button class="btn btn-secondary btn-sm" onclick="showQrCode()">📱 二维码</button>
+          <button class="btn btn-secondary btn-sm" onclick="saveToLocalFavorites()">⭐ 收藏配置</button>
         </div>
       </div>
     </div>
@@ -682,9 +678,43 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       const target = document.getElementById('targetClient').value;
       document.getElementById('targetBadge').textContent = target.toUpperCase();
 
+      updateDynamicImportButton(target);
+
       const results = document.getElementById('resultsPanel');
       results.classList.add('show');
       results.scrollIntoView({ behavior: 'smooth' });
+    }
+
+    function updateDynamicImportButton(target) {
+      const btnImport = document.getElementById('btnImportCurrent');
+      if (!btnImport) return;
+      if (target === 'clash') {
+        btnImport.textContent = '🚀 一键导入到 Clash / Mihomo';
+      } else if (target === 'shadowrocket' || target === 'shadowrocket-conf') {
+        btnImport.textContent = '🚀 一键导入到 Shadowrocket';
+      } else if (target === 'singbox') {
+        btnImport.textContent = '📦 一键导入到 Sing-Box';
+      } else if (target === 'surge') {
+        btnImport.textContent = '🌊 一键导入到 Surge';
+      } else {
+        btnImport.textContent = '📋 复制订阅链接';
+      }
+    }
+
+    function onTargetChange() {
+      const target = document.getElementById('targetClient').value;
+      const targetBadge = document.getElementById('targetBadge');
+      if (targetBadge) targetBadge.textContent = target.toUpperCase();
+      updateDynamicImportButton(target);
+
+      // 若结果区域已展示，则同步自动刷新 URL
+      const outputInput = document.getElementById('outputUrl');
+      if (outputInput && outputInput.value) {
+        const rawUrl = document.getElementById('subUrl').value.trim();
+        if (rawUrl) {
+          outputInput.value = buildConvertedUrl();
+        }
+      }
     }
 
     // 实时节点与流量看板预览
@@ -810,17 +840,33 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       });
     }
 
+    // 动态智能导入当前选中的客户端
+    function importCurrentClient() {
+      const target = document.getElementById('targetClient').value;
+      if (target === 'clash') {
+        importClash();
+      } else if (target === 'shadowrocket' || target === 'shadowrocket-conf') {
+        importShadowrocket();
+      } else if (target === 'singbox') {
+        importSingbox();
+      } else if (target === 'surge') {
+        importSurge();
+      } else {
+        copyLink();
+      }
+    }
+
     // 客户端一键唤起
     function importClash() {
       const url = document.getElementById('outputUrl').value;
       if (!url) return;
-      window.location.href = \`clash://install-config?url=\${encodeURIComponent(url)}\`;
+      window.location.href = \`clash://install-config?url=\${encodeURIComponent(url)}&name=SubConverter\`;
     }
 
     function importSingbox() {
       const url = document.getElementById('outputUrl').value;
       if (!url) return;
-      window.location.href = \`sing-box://import-remote-profile?url=\${encodeURIComponent(url)}\`;
+      window.location.href = \`sing-box://import-remote-profile?url=\${encodeURIComponent(url)}#SubConverter\`;
     }
 
     function importShadowrocket() {

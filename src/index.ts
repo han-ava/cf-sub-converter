@@ -3,7 +3,7 @@ import packageJson from '../package.json';
 import { Env, ProxyNode } from './types';
 import { parseContent } from './parser';
 import { toClashMeta, toSingBox, toBase64, toRawLinks, toSurge, toShadowrocketConf } from './generator';
-import { processNodes, createUserinfoNodes, parseUserinfo, getRegionByNodeName, parseRenameRules } from './utils';
+import { processNodes, createUserinfoNodes, parseUserinfo, getRegionByNodeName, parseRenameRules, formatContentDisposition } from './utils';
 import { isAuthorized, fetchSubscriptionWithTimeout, extractRequestToken, sanitizeUrlForLog } from './security';
 import { renderHtmlPage } from './ui';
 
@@ -416,7 +416,9 @@ export default {
           ...CORS_HEADERS,
           'Cache-Control': 'private, no-store, no-cache, must-revalidate',
           'profile-update-interval': '24',
-          'profile-web-page-url': url.origin
+          'profile-web-page-url': url.origin,
+          'profile-title': filename,
+          'subscription-title': filename
         };
 
         if (userinfo) {
@@ -433,14 +435,14 @@ export default {
         if (target === 'clash' || target === 'meta' || target === 'mihomo') {
           const yamlOutput = toClashMeta(processedNodes, undefined, preset, testUrl);
           responseHeaders['Content-Type'] = 'text/yaml; charset=utf-8';
-          responseHeaders['Content-Disposition'] = `attachment; filename="${encodeURIComponent(filename)}.yaml"`;
+          responseHeaders['Content-Disposition'] = formatContentDisposition(filename, 'yaml');
           return new Response(yamlOutput, { headers: responseHeaders });
         }
 
         if (target === 'singbox' || target === 'sing-box') {
           const jsonOutput = toSingBox(processedNodes);
           responseHeaders['Content-Type'] = 'application/json; charset=utf-8';
-          responseHeaders['Content-Disposition'] = `attachment; filename="${encodeURIComponent(filename)}.json"`;
+          responseHeaders['Content-Disposition'] = formatContentDisposition(filename, 'json');
           return new Response(jsonOutput, { headers: responseHeaders });
         }
 
@@ -453,7 +455,7 @@ export default {
         if (target === 'shadowrocket-conf') {
           const confOutput = toShadowrocketConf(processedNodes);
           responseHeaders['Content-Type'] = 'text/plain; charset=utf-8';
-          responseHeaders['Content-Disposition'] = `attachment; filename="${encodeURIComponent(filename)}.conf"`;
+          responseHeaders['Content-Disposition'] = formatContentDisposition(filename, 'conf');
           return new Response(confOutput, { headers: responseHeaders });
         }
 
@@ -472,6 +474,7 @@ export default {
         // 默认返回 Clash Meta
         const defaultOutput = toClashMeta(processedNodes, undefined, preset, testUrl);
         responseHeaders['Content-Type'] = 'text/yaml; charset=utf-8';
+        responseHeaders['Content-Disposition'] = formatContentDisposition(filename, 'yaml');
         return new Response(defaultOutput, { headers: responseHeaders });
       } catch (err: any) {
         clearTimeout(globalTimeout);
