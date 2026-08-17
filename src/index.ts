@@ -223,8 +223,7 @@ export default {
           });
         }
 
-        const clientUserAgent = request.headers.get('User-Agent') || undefined;
-        const { nodes: rawNodes, userinfo } = await loadAllNodes(rawUrl, clientUserAgent, true, 180, 'first');
+        const { nodes: rawNodes, userinfo } = await loadAllNodes(rawUrl, undefined, true, 180, 'first');
 
         // 过滤与重命名
         const renameRules = parseRenameRules(body.rename ? String(body.rename) : '');
@@ -384,10 +383,10 @@ export default {
         // 解析重命名规则 (支持 DEL-前缀、=、@、- 以及逗号/换行/分号/竖线分隔)
         const renameRules = parseRenameRules(renameRulesStr);
 
-        // 并发池拉取并解析节点
+        // 并发池拉取并解析节点 (统一使用 UPSTREAM_USER_AGENT)
         const { nodes: rawNodes, userinfo } = await loadAllNodes(
           rawUrl,
-          clientUserAgent,
+          undefined,
           enableCache,
           cacheTtl,
           infoStrategy,
