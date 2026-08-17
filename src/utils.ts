@@ -153,7 +153,9 @@ export function getNodeFingerprint(node: ProxyNode): string {
     node.grpcServiceName || '',
     node.sni || '',
     node.reality?.publicKey || '',
-    node.flow || ''
+    node.flow || '',
+    node.packetEncoding || '',
+    node.encryption || ''
   ].join('|');
 }
 

@@ -55,6 +55,12 @@ export function parseVless(urlStr: string): ProxyNode | null {
 
     const type = (getUrlParam(urlStr, 'type') || 'tcp').toLowerCase();
     const security = (getUrlParam(urlStr, 'security') || 'none').toLowerCase();
+    const packetEncoding =
+      getUrlParam(urlStr, 'packetEncoding') ||
+      getUrlParam(urlStr, 'packet-encoding') ||
+      undefined;
+    const encryption = getUrlParam(urlStr, 'encryption') || undefined;
+
     const flow = getUrlParam(urlStr, 'flow') || undefined;
     const sni = getUrlParam(urlStr, 'sni') || getUrlParam(urlStr, 'host') || server;
     const fp = getUrlParam(urlStr, 'fp') || 'chrome';
@@ -82,6 +88,8 @@ export function parseVless(urlStr: string): ProxyNode | null {
       fingerprint: isTls ? fp : undefined,
       alpn,
       flow,
+      packetEncoding,
+      encryption,
       udp: true,
       raw: urlStr
     };
@@ -606,6 +614,8 @@ export async function parseContent(text: string): Promise<ProxyNode[]> {
               wsPath: p['ws-opts']?.path || p['ws-path'] || p.path,
               wsHeaders: p['ws-opts']?.headers || p['ws-headers'],
               flow: p.flow,
+              packetEncoding: p['packet-encoding'] || p.packetEncoding || p['packet_encoding'],
+              encryption: p.encryption,
               reality: p['reality-opts'] ? {
                 publicKey: p['reality-opts']['public-key'] || p['reality-opts']['publicKey'],
                 shortId: p['reality-opts']['short-id'] || p['reality-opts']['shortId'],
@@ -648,6 +658,7 @@ export async function parseContent(text: string): Promise<ProxyNode[]> {
               tls: ob.tls?.enabled !== false && !!ob.tls,
               sni: ob.tls?.server_name || ob.tls?.sni,
               alpn: ob.tls?.alpn,
+              packetEncoding: ob.packet_encoding || ob['packet-encoding'] || ob.packetEncoding,
               udp: true,
               singboxObj: ob
             };

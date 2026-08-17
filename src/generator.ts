@@ -77,6 +77,12 @@ export function nodeToClashProxy(node: ProxyNode): Record<string, any> {
         servername: node.sni || node.server,
         network: node.network || 'tcp'
       };
+      if (node.packetEncoding) {
+        vless['packet-encoding'] = node.packetEncoding;
+      }
+      if (node.encryption) {
+        vless.encryption = node.encryption;
+      }
       if (node.flow) vless.flow = node.flow;
       if (node.fingerprint) vless['client-fingerprint'] = node.fingerprint;
       if (node.alpn) vless.alpn = node.alpn;
@@ -251,6 +257,9 @@ export function nodeToSingBoxOutbound(node: ProxyNode): Record<string, any> {
         uuid: node.uuid,
         flow: node.flow || undefined
       };
+      if (node.packetEncoding) {
+        ob.packet_encoding = node.packetEncoding;
+      }
       if (node.tls) {
         ob.tls = {
           enabled: true,
@@ -571,6 +580,8 @@ export function toRawLinks(nodes: ProxyNode[]): string {
         const params = new URLSearchParams();
         params.set('security', node.reality ? 'reality' : (node.tls ? 'tls' : 'none'));
         params.set('type', node.network || 'tcp');
+        if (node.packetEncoding) params.set('packetEncoding', node.packetEncoding);
+        if (node.encryption) params.set('encryption', node.encryption);
         if (node.flow) params.set('flow', node.flow);
         if (node.sni) params.set('sni', node.sni);
         if (node.fingerprint) params.set('fp', node.fingerprint);

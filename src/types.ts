@@ -38,6 +38,8 @@ export interface ProxyNode {
   wsHeaders?: Record<string, string>;
   grpcServiceName?: string;
   flow?: string;
+  packetEncoding?: string;
+  encryption?: string;
   reality?: {
     publicKey: string;
     shortId?: string;
