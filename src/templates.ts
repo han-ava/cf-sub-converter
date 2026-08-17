@@ -46,7 +46,7 @@ export const DEFAULT_CLASH_TEMPLATE = {
     'RULE-SET,cncidr,🎯 全球直连,no-resolve',
     'RULE-SET,telegramcidr,🚀 节点选择,no-resolve',
     'GEOIP,LAN,🎯 全球直连,no-resolve',
-    'GEOIP,CN,🎯 全球直连,no-resolve',
+    'GEOIP,CN,🎯 全球直连',
     'MATCH,🐟 漏网之鱼'
   ],
   'rule-providers': {
@@ -192,7 +192,10 @@ export const DEFAULT_SINGBOX_TEMPLATE = {
         outbound: 'block'
       },
       {
-        geosite: ['cn'],
+        geosite: ['cn', 'private'],
+        outbound: 'direct'
+      },
+      {
         geoip: ['cn', 'private'],
         outbound: 'direct'
       }

@@ -508,7 +508,7 @@ export function toClashMeta(
     // 极简模式：免下载庞大外部规则集，极速启动，仅保留核心国内直连与代理
     config.rules = [
       'GEOIP,LAN,🎯 全球直连,no-resolve',
-      'GEOIP,CN,🎯 全球直连,no-resolve',
+      'GEOIP,CN,🎯 全球直连',
       'MATCH,🚀 节点选择'
     ];
     delete config['rule-providers'];
