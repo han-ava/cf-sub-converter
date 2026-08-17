@@ -29,7 +29,7 @@ export function parseVless(urlStr: string): ProxyNode | null {
     const atIndex = content.indexOf('@');
     if (atIndex === -1) return null;
 
-    const uuid = content.substring(0, atIndex);
+    const uuid = tryDecodeURIComponent(content.substring(0, atIndex));
     const rest = content.substring(atIndex + 1);
 
     const questionIndex = rest.indexOf('?');
@@ -42,8 +42,8 @@ export function parseVless(urlStr: string): ProxyNode | null {
       const closingBracket = serverPortStr.indexOf(']');
       if (closingBracket !== -1) {
         server = serverPortStr.substring(1, closingBracket);
-        const portPart = serverPortStr.substring(closingBracket + 2);
-        port = parseInt(portPart, 10) || 443;
+        const portPart = serverPortStr.substring(closingBracket + 1);
+        port = parseInt(portPart.startsWith(':') ? portPart.substring(1) : portPart, 10) || 443;
       }
     } else {
       const parts = serverPortStr.split(':');
@@ -275,23 +275,41 @@ export function parseShadowsocks(urlStr: string): ProxyNode | null {
       const userPart = raw.substring(0, atIndex);
       const serverPart = raw.substring(atIndex + 1);
 
-      const colonIndex = serverPart.lastIndexOf(':');
-      if (colonIndex === -1) return null;
-      server = serverPart.substring(0, colonIndex);
-      portStr = serverPart.substring(colonIndex + 1);
+      if (serverPart.startsWith('[')) {
+        const closingBracket = serverPart.indexOf(']');
+        if (closingBracket !== -1) {
+          server = serverPart.substring(1, closingBracket);
+          const portPart = serverPart.substring(closingBracket + 1);
+          portStr = portPart.startsWith(':') ? portPart.substring(1) : portPart;
+        }
+      }
+      if (!server) {
+        const colonIndex = serverPart.lastIndexOf(':');
+        if (colonIndex === -1) return null;
+        server = serverPart.substring(0, colonIndex);
+        portStr = serverPart.substring(colonIndex + 1);
+      }
 
-      const decodedUser = safeBase64Decode(userPart);
+      // userPart 可以是 Base64 编码的 (method:password)，也可以是明文 (method:password) 或含 URL 编码
+      let decodedUser = safeBase64Decode(userPart);
+      if (!decodedUser) {
+        decodedUser = safeBase64Decode(tryDecodeURIComponent(userPart));
+      }
+
       if (decodedUser && decodedUser.includes(':')) {
         const uParts = decodedUser.split(':');
         method = uParts[0] || '';
-        password = uParts.slice(1).join(':');
-      } else if (userPart.includes(':')) {
-        const uParts = userPart.split(':');
-        method = uParts[0] || '';
-        password = uParts.slice(1).join(':');
+        password = tryDecodeURIComponent(uParts.slice(1).join(':'));
+      } else {
+        const decodedUserPart = tryDecodeURIComponent(userPart);
+        if (decodedUserPart.includes(':')) {
+          const uParts = decodedUserPart.split(':');
+          method = uParts[0] || '';
+          password = tryDecodeURIComponent(uParts.slice(1).join(':'));
+        }
       }
     } else {
-      const decoded = safeBase64Decode(raw);
+      const decoded = safeBase64Decode(raw) || safeBase64Decode(tryDecodeURIComponent(raw));
       if (!decoded) return null;
       const atIndex = decoded.lastIndexOf('@');
       if (atIndex === -1) return null;
@@ -299,14 +317,24 @@ export function parseShadowsocks(urlStr: string): ProxyNode | null {
       const userPart = decoded.substring(0, atIndex);
       const serverPart = decoded.substring(atIndex + 1);
 
-      const colonIndex = serverPart.lastIndexOf(':');
-      if (colonIndex === -1) return null;
-      server = serverPart.substring(0, colonIndex);
-      portStr = serverPart.substring(colonIndex + 1);
+      if (serverPart.startsWith('[')) {
+        const closingBracket = serverPart.indexOf(']');
+        if (closingBracket !== -1) {
+          server = serverPart.substring(1, closingBracket);
+          const portPart = serverPart.substring(closingBracket + 1);
+          portStr = portPart.startsWith(':') ? portPart.substring(1) : portPart;
+        }
+      }
+      if (!server) {
+        const colonIndex = serverPart.lastIndexOf(':');
+        if (colonIndex === -1) return null;
+        server = serverPart.substring(0, colonIndex);
+        portStr = serverPart.substring(colonIndex + 1);
+      }
 
       const uParts = userPart.split(':');
       method = uParts[0] || '';
-      password = uParts.slice(1).join(':');
+      password = tryDecodeURIComponent(uParts.slice(1).join(':'));
     }
 
     if (!server || !portStr || !method || !password) return null;
@@ -323,7 +351,7 @@ export function parseShadowsocks(urlStr: string): ProxyNode | null {
       server,
       port,
       cipher: method,
-      password,
+      password: tryDecodeURIComponent(password),
       udp: true,
       raw: urlStr
     };
@@ -468,8 +496,8 @@ export function parseTuic(urlStr: string): ProxyNode | null {
     if (atIndex === -1) return null;
 
     const userPass = raw.substring(0, atIndex).split(':');
-    const uuid = userPass[0] || '';
-    const password = userPass[1] || '';
+    const uuid = tryDecodeURIComponent(userPass[0] || '');
+    const password = tryDecodeURIComponent(userPass[1] || '');
 
     const rest = raw.substring(atIndex + 1);
     const questionIndex = rest.indexOf('?');
@@ -482,8 +510,8 @@ export function parseTuic(urlStr: string): ProxyNode | null {
       const closingBracket = serverPortStr.indexOf(']');
       if (closingBracket !== -1) {
         server = serverPortStr.substring(1, closingBracket);
-        const portPart = serverPortStr.substring(closingBracket + 2);
-        port = parseInt(portPart, 10) || 443;
+        const portPart = serverPortStr.substring(closingBracket + 1);
+        port = parseInt(portPart.startsWith(':') ? portPart.substring(1) : portPart, 10) || 443;
       }
     } else {
       const parts = serverPortStr.split(':');
@@ -598,13 +626,21 @@ export async function parseContent(text: string): Promise<ProxyNode[]> {
       if (doc && Array.isArray(doc.proxies)) {
         for (const p of doc.proxies) {
           if (p && p.name && p.server && p.port) {
+            const rawPass = p.password || p.secret || p.uuid;
+            const password = rawPass ? tryDecodeURIComponent(String(rawPass)) : undefined;
+            const uuid = p.uuid ? tryDecodeURIComponent(String(p.uuid)) : password;
+
+            if (p.password) p.password = tryDecodeURIComponent(String(p.password));
+            if (p.uuid) p.uuid = tryDecodeURIComponent(String(p.uuid));
+            if (p.secret) p.secret = tryDecodeURIComponent(String(p.secret));
+
             const node: ProxyNode = {
               name: String(p.name),
               type: String(p.type || 'ss').toLowerCase(),
               server: String(p.server),
               port: Number(p.port),
-              uuid: p.uuid || p.password,
-              password: p.password || p.secret || p.uuid,
+              uuid,
+              password,
               cipher: p.cipher || p.method || (String(p.type).toLowerCase() === 'ss' ? 'chacha20-ietf-poly1305' : undefined),
               network: p.network,
               tls: p.tls || p.ssl || (p['reality-opts'] ? true : false),
@@ -646,13 +682,20 @@ export async function parseContent(text: string): Promise<ProxyNode[]> {
       if (Array.isArray(outbounds)) {
         for (const ob of outbounds) {
           if (ob && (ob.tag || ob.name) && ob.server && (ob.server_port || ob.port)) {
+            const rawPass = ob.password || ob.uuid;
+            const password = rawPass ? tryDecodeURIComponent(String(rawPass)) : undefined;
+            const uuid = ob.uuid ? tryDecodeURIComponent(String(ob.uuid)) : password;
+
+            if (ob.password) ob.password = tryDecodeURIComponent(String(ob.password));
+            if (ob.uuid) ob.uuid = tryDecodeURIComponent(String(ob.uuid));
+
             const node: ProxyNode = {
               name: String(ob.tag || ob.name),
               type: String(ob.type || 'ss').toLowerCase(),
               server: String(ob.server),
               port: Number(ob.server_port || ob.port),
-              uuid: ob.uuid || ob.password,
-              password: ob.password || ob.uuid,
+              uuid,
+              password,
               cipher: ob.method || ob.cipher,
               network: ob.transport?.type,
               tls: ob.tls?.enabled !== false && !!ob.tls,

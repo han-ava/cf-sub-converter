@@ -2,14 +2,18 @@
 import yaml from 'js-yaml';
 import { ProxyNode } from './types';
 import { DEFAULT_CLASH_TEMPLATE, DEFAULT_SINGBOX_TEMPLATE } from './templates';
-import { safeBase64Encode, getRegionByNodeName, REGIONS } from './utils';
+import { safeBase64Encode, getRegionByNodeName, REGIONS, tryDecodeURIComponent } from './utils';
 
 /**
  * 转换 ProxyNode 为 Clash Meta / Mihomo 节点对象
  */
 export function nodeToClashProxy(node: ProxyNode): Record<string, any> {
   if (node.clashObj) {
-    return { ...node.clashObj, name: node.name };
+    const res: Record<string, any> = { ...node.clashObj, name: node.name };
+    if (res.password && typeof res.password === 'string') {
+      res.password = tryDecodeURIComponent(res.password);
+    }
+    return res;
   }
 
   const base: Record<string, any> = {
@@ -27,7 +31,7 @@ export function nodeToClashProxy(node: ProxyNode): Record<string, any> {
         ...base,
         type: 'ss',
         cipher: node.cipher || 'aes-128-gcm',
-        password: node.password || ''
+        password: node.password ? tryDecodeURIComponent(node.password) : ''
       };
     }
     case 'ssr':
@@ -574,8 +578,13 @@ export function toSingBox(nodes: ProxyNode[], customTemplateJson?: string): stri
 export function toRawLinks(nodes: ProxyNode[]): string {
   const links: string[] = [];
 
+  const formatHost = (server: string) => {
+    return server.includes(':') && !server.startsWith('[') ? `[${server}]` : server;
+  };
+
   for (const node of nodes) {
     try {
+      const host = formatHost(node.server);
       if (node.type === 'vless') {
         const params = new URLSearchParams();
         params.set('security', node.reality ? 'reality' : (node.tls ? 'tls' : 'none'));
@@ -596,7 +605,7 @@ export function toRawLinks(nodes: ProxyNode[]): string {
         } else if (node.network === 'grpc' && node.grpcServiceName) {
           params.set('serviceName', node.grpcServiceName);
         }
-        links.push(`vless://${node.uuid}@${node.server}:${node.port}?${params.toString()}#${encodeURIComponent(node.name)}`);
+        links.push(`vless://${node.uuid}@${host}:${node.port}?${params.toString()}#${encodeURIComponent(node.name)}`);
       } else if (node.type === 'hysteria2' || node.type === 'hy2') {
         const params = new URLSearchParams();
         if (node.sni) params.set('sni', node.sni);
@@ -605,7 +614,7 @@ export function toRawLinks(nodes: ProxyNode[]): string {
           if (node.obfsPassword) params.set('obfs-password', node.obfsPassword);
         }
         if (node.skipCertVerify) params.set('insecure', '1');
-        links.push(`hysteria2://${node.password}@${node.server}:${node.port}?${params.toString()}#${encodeURIComponent(node.name)}`);
+        links.push(`hysteria2://${node.password}@${host}:${node.port}?${params.toString()}#${encodeURIComponent(node.name)}`);
       } else if (node.type === 'vmess') {
         const vmessObj = {
           v: '2',
@@ -633,16 +642,16 @@ export function toRawLinks(nodes: ProxyNode[]): string {
           if (node.wsHeaders?.Host) params.set('host', node.wsHeaders.Host);
         }
         if (node.skipCertVerify) params.set('allowInsecure', '1');
-        links.push(`trojan://${node.password}@${node.server}:${node.port}?${params.toString()}#${encodeURIComponent(node.name)}`);
+        links.push(`trojan://${node.password}@${host}:${node.port}?${params.toString()}#${encodeURIComponent(node.name)}`);
       } else if (node.type === 'ss' || node.type === 'shadowsocks') {
         const userPass = safeBase64Encode(`${node.cipher}:${node.password}`);
-        links.push(`ss://${userPass}@${node.server}:${node.port}#${encodeURIComponent(node.name)}`);
+        links.push(`ss://${userPass}@${host}:${node.port}#${encodeURIComponent(node.name)}`);
       } else if (node.type === 'tuic') {
         const params = new URLSearchParams();
         if (node.sni) params.set('sni', node.sni);
         if (node.congestionControl) params.set('congestion_control', node.congestionControl);
         if (node.udpRelayMode) params.set('udp_relay_mode', node.udpRelayMode);
-        links.push(`tuic://${node.uuid}:${node.password}@${node.server}:${node.port}?${params.toString()}#${encodeURIComponent(node.name)}`);
+        links.push(`tuic://${node.uuid}:${node.password}@${host}:${node.port}?${params.toString()}#${encodeURIComponent(node.name)}`);
       } else if (node.raw) {
         links.push(node.raw);
       }
