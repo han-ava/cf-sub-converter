@@ -99,12 +99,22 @@ export interface VmessNode extends BaseNode {
       serviceName?: string;
       httpHost?: string[];
       httpPath?: string[];
-      // mKCP / MeKya fields
+      // mKCP fields
       seed?: string;
       headerType?: string;
       congestion?: boolean;
       uplinkCapacity?: number;
       downlinkCapacity?: number;
+      mtu?: number;
+      tti?: number;
+      writeBuffer?: number;
+      readBuffer?: number;
+      // MeKya fields
+      url?: string;
+      maxWriteDelay?: number;
+      maxRequestSize?: number;
+      pollingIntervalInitial?: number;
+      h2PoolSize?: number;
     };
     rawJson: Record<string, unknown>;
     extras: Record<string, unknown>;

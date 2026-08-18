@@ -132,26 +132,77 @@ describe('Tower-Inspired Compatibility Gate Suite', () => {
     }
   });
 
-  // ── P0-1: XHTTP extra 展平到 xhttp-opts 顶层 ──────────────────────────────
+  // ── P0-1: XHTTP extra 展平到 xhttp-opts 顶层与递归映射 ───────────────────
 
-  test('9. VLESS XHTTP: downloadSettings in extra triggers fatal (P0-1)', () => {
-    // downloadSettings 是关键连接字段，但实际上 Mihomo 支持它；
-    // 在 EXTRA_FIELD_MAP 中映射，不应 fatal 而应展平到顶层
-    const xhttpWithDownload = parseSingleNode(
+  test('9. VLESS XHTTP: downloadSettings and reuseSettings recursive mapping (P0-1)', () => {
+    const xhttpComplexExtra = parseSingleNode(
       'vless://b831381d-6324-4d53-ad4f-8cda48b30811@1.2.3.4:443' +
       '?type=xhttp&security=tls&sni=cdn.example.com' +
-      '&extra=%7B%22downloadSettings%22%3A%7B%22type%22%3A%22splithttp%22%7D%7D' +
-      '#XHTTP%20Download%20Settings'
+      '&extra=' + encodeURIComponent(JSON.stringify({
+        reuseSettings: {
+          maxConcurrency: 16,
+          maxConnections: 4,
+          cMaxReuseTimes: 100,
+          hMaxRequestTimes: 50,
+          hMaxReusableSecs: 30,
+          hKeepAlivePeriod: 15
+        },
+        downloadSettings: {
+          address: 'download.example.com',
+          port: 8443,
+          noGRPCHeader: true,
+          xPaddingBytes: '10-20',
+          tlsSettings: {
+            serverName: 'dl.example.com',
+            alpn: ['h2'],
+            insecure: true,
+            realitySettings: {
+              publicKey: 'pubkey123',
+              shortId: 'sid123'
+            }
+          },
+          reuseSettings: {
+            maxConcurrency: 8
+          }
+        }
+      })) +
+      '#XHTTP%20Complex%20Settings'
     );
-    expect(xhttpWithDownload).not.toBeNull();
-    const res = adaptNodeToMihomo(xhttpWithDownload!);
-    // downloadSettings IS in official Mihomo XHTTP opts → should emit, mapped to download-settings
+    expect(xhttpComplexExtra).not.toBeNull();
+    const res = adaptNodeToMihomo(xhttpComplexExtra!);
     expect(res.fatal).toBe(false);
     expect(res.emitted).toBe(true);
     const xhttpOpts = res.config!['xhttp-opts'] as Record<string, any>;
     expect(xhttpOpts).toBeDefined();
-    // 展平到顶层：download-settings，无 .extra 子层
+
+    // 验证 reuse-settings 递归映射
+    expect(xhttpOpts['reuse-settings']).toEqual({
+      'max-concurrency': 16,
+      'max-connections': 4,
+      'c-max-reuse-times': 100,
+      'h-max-request-times': 50,
+      'h-max-reusable-secs': 30,
+      'h-keep-alive-period': 15
+    });
+
+    // 验证 download-settings 递归映射
     expect(xhttpOpts['download-settings']).toBeDefined();
+    expect(xhttpOpts['download-settings'].address).toBe('download.example.com');
+    expect(xhttpOpts['download-settings'].port).toBe(8443);
+    expect(xhttpOpts['download-settings']['no-grpc-header']).toBe(true);
+    expect(xhttpOpts['download-settings']['x-padding-bytes']).toBe('10-20');
+    expect(xhttpOpts['download-settings']['tls-settings']).toEqual({
+      'server-name': 'dl.example.com',
+      'alpn': ['h2'],
+      'insecure': true,
+      'reality-settings': {
+        'public-key': 'pubkey123',
+        'short-id': 'sid123'
+      }
+    });
+    expect(xhttpOpts['download-settings']['reuse-settings']).toEqual({
+      'max-concurrency': 8
+    });
     expect(xhttpOpts['extra']).toBeUndefined();
   });
 
@@ -190,9 +241,25 @@ describe('Tower-Inspired Compatibility Gate Suite', () => {
     expect(xhttpOpts['extra']).toBeUndefined();
   });
 
+  test('10c. VLESS XHTTP: unknown extra fields are NOT silently dropped (recorded as lossy & warnings) (P0-2)', () => {
+    const xhttpUnknownExtra = parseSingleNode(
+      'vless://b831381d-6324-4d53-ad4f-8cda48b30811@1.2.3.4:443' +
+      '?type=xhttp&security=tls&sni=cdn.example.com' +
+      '&extra=%7B%22someUnknownField%22%3A%22customVal%22%7D' +
+      '#XHTTP%20Unknown%20Extra'
+    );
+    expect(xhttpUnknownExtra).not.toBeNull();
+    const res = adaptNodeToMihomo(xhttpUnknownExtra!);
+    expect(res.fatal).toBe(false);
+    expect(res.emitted).toBe(true);
+    expect(res.lossy).toBe(true);
+    expect(res.unsupportedParams).toContain('xhttp-opts.extra.someUnknownField');
+    expect(res.warnings.some(w => w.field === 'xhttp-opts.extra.someUnknownField')).toBe(true);
+  });
+
   // ── P0-3: splithttp → normalize to xhttp ─────────────────────────────────
 
-  test('10c. VLESS splithttp normalized to network: xhttp (P0-3)', () => {
+  test('10d. VLESS splithttp normalized to network: xhttp (P0-3)', () => {
     const splitNode = parseSingleNode(
       'vless://b831381d-6324-4d53-ad4f-8cda48b30811@1.2.3.4:443' +
       '?type=splithttp&security=tls&sni=cdn.example.com&path=%2Fpath' +
@@ -236,13 +303,21 @@ describe('Tower-Inspired Compatibility Gate Suite', () => {
     expect(res.config!['h2-opts']).toBeUndefined();
   });
 
-  // ── P0-4: VMess mKCP parser reads headerType from JSON "type" field ────────
+  // ── P0-4: VMess mKCP full parameters ──────────────────────────────────────
 
-  test('13. VMess mKCP: headerType (wechat-video) mapped to mkcp-opts.header.type (P0-4)', () => {
+  test('13. VMess mKCP: full options (mtu, tti, write-buffer, read-buffer, capacities, headerType) (P0-4)', () => {
     const mkcpVmess = 'vmess://' + Buffer.from(JSON.stringify({
-      v: '2', ps: 'HK mKCP WeChat', add: '1.2.3.4', port: 12345,
+      v: '2', ps: 'HK mKCP Full', add: '1.2.3.4', port: 12345,
       id: 'a3d9059f-7db9-4674-8be0-b530263f848a', aid: 0,
-      net: 'mkcp', type: 'wechat-video', tls: ''
+      net: 'mkcp', type: 'wechat-video', tls: '',
+      seed: 'my-kcp-seed',
+      mtu: 1350,
+      tti: 50,
+      'uplink-capacity': 100,
+      'downlink-capacity': 200,
+      congestion: true,
+      'write-buffer': 2,
+      'read-buffer': 2
     })).toString('base64');
     const node = parseSingleNode(mkcpVmess);
     expect(node).not.toBeNull();
@@ -250,9 +325,17 @@ describe('Tower-Inspired Compatibility Gate Suite', () => {
     expect(res.fatal).toBe(false);
     expect(res.emitted).toBe(true);
     expect(res.config!.network).toBe('mkcp');
-    // 关键断言：mkcp-opts.header.type 正确传递
+
     const mkcpOpts = res.config!['mkcp-opts'] as Record<string, any>;
     expect(mkcpOpts).toBeDefined();
+    expect(mkcpOpts.mtu).toBe(1350);
+    expect(mkcpOpts.tti).toBe(50);
+    expect(mkcpOpts['uplink-capacity']).toBe(100);
+    expect(mkcpOpts['downlink-capacity']).toBe(200);
+    expect(mkcpOpts.congestion).toBe(true);
+    expect(mkcpOpts['write-buffer']).toBe(2);
+    expect(mkcpOpts['read-buffer']).toBe(2);
+    expect(mkcpOpts.seed).toBe('my-kcp-seed');
     expect(mkcpOpts.header?.type).toBe('wechat-video');
   });
 
@@ -272,13 +355,19 @@ describe('Tower-Inspired Compatibility Gate Suite', () => {
     expect(mkcpOpts.header?.type).toBe('dtls');
   });
 
-  // ── P0-5: MeKya correct mekya-opts structure ────────────────────────────────
+  // ── P0-5: MeKya full official structure ───────────────────────────────────
 
-  test('14. VMess MeKya: kcp sub-object under mekya-opts (P0-5)', () => {
+  test('14. VMess MeKya: full official mekya-opts fields and kcp sub-object (P0-5)', () => {
     const mekyaVmess = 'vmess://' + Buffer.from(JSON.stringify({
-      v: '2', ps: 'SG MeKya', add: '1.2.3.4', port: 9999,
+      v: '2', ps: 'SG MeKya Full', add: '1.2.3.4', port: 9999,
       id: 'a3d9059f-7db9-4674-8be0-b530263f848a', aid: 0,
-      net: 'mekya', type: 'wechat-video', tls: '', seed: 'mekya-seed'
+      net: 'mekya', type: 'wechat-video', tls: '',
+      seed: 'mekya-seed',
+      url: 'https://mekya.example.com/stream',
+      'max-write-delay': 500,
+      'max-request-size': 65536,
+      'polling-interval-initial': 1000,
+      'h2-pool-size': 4
     })).toString('base64');
     const node = parseSingleNode(mekyaVmess);
     expect(node).not.toBeNull();
@@ -286,14 +375,48 @@ describe('Tower-Inspired Compatibility Gate Suite', () => {
     expect(res.fatal).toBe(false);
     expect(res.emitted).toBe(true);
     expect(res.config!.network).toBe('mekya');
-    // 关键断言：seed / headerType 在 mekya-opts.kcp 子层下，而不是 mekya-opts 顶层
+
     const mekyaOpts = res.config!['mekya-opts'] as Record<string, any>;
     expect(mekyaOpts).toBeDefined();
+    expect(mekyaOpts.url).toBe('https://mekya.example.com/stream');
+    expect(mekyaOpts['max-write-delay']).toBe(500);
+    expect(mekyaOpts['max-request-size']).toBe(65536);
+    expect(mekyaOpts['polling-interval-initial']).toBe(1000);
+    expect(mekyaOpts['h2-pool-size']).toBe(4);
     expect(mekyaOpts.kcp).toBeDefined();
     expect(mekyaOpts.kcp.seed).toBe('mekya-seed');
     expect(mekyaOpts.kcp.header?.type).toBe('wechat-video');
-    // 顶层不应有 seed/header
     expect(mekyaOpts.seed).toBeUndefined();
     expect(mekyaOpts.header).toBeUndefined();
+  });
+
+  // ── P1: TLS=false should NOT emit servername / TLS options ────────────────
+
+  test('15. VLESS and VMess when TLS=false do NOT emit servername or TLS options (P1)', () => {
+    const plainVless = parseSingleNode(
+      'vless://b831381d-6324-4d53-ad4f-8cda48b30811@1.2.3.4:80?type=ws&path=%2F#Plain%20VLESS'
+    );
+    expect(plainVless).not.toBeNull();
+    const resVless = adaptNodeToMihomo(plainVless!);
+    expect(resVless.emitted).toBe(true);
+    expect(resVless.config!.tls).toBeUndefined();
+    expect(resVless.config!.servername).toBeUndefined();
+    expect(resVless.config!['client-fingerprint']).toBeUndefined();
+    expect(resVless.config!['skip-cert-verify']).toBeUndefined();
+    expect(resVless.config!['reality-opts']).toBeUndefined();
+
+    const plainVmess = 'vmess://' + Buffer.from(JSON.stringify({
+      v: '2', ps: 'Plain VMess', add: '1.2.3.4', port: 80,
+      id: 'a3d9059f-7db9-4674-8be0-b530263f848a', aid: 0,
+      net: 'ws', type: 'none', tls: ''
+    })).toString('base64');
+    const nodeVmess = parseSingleNode(plainVmess);
+    expect(nodeVmess).not.toBeNull();
+    const resVmess = adaptNodeToMihomo(nodeVmess!);
+    expect(resVmess.emitted).toBe(true);
+    expect(resVmess.config!.tls).toBeUndefined();
+    expect(resVmess.config!.servername).toBeUndefined();
+    expect(resVmess.config!['client-fingerprint']).toBeUndefined();
+    expect(resVmess.config!['skip-cert-verify']).toBeUndefined();
   });
 });

@@ -40,17 +40,20 @@ export function adaptVmessToMihomo(node: VmessNode): AdapterResult {
     uuid: p.uuid.trim(),
     alterId: p.alterId !== undefined ? p.alterId : 0,
     cipher: p.cipher || 'auto',
-    tls: !!p.tls,
-    servername: p.sni || node.server,
     network: normalizedNet,
     udp: node.udp !== false
   };
 
-  if (p.skipCertVerify) config['skip-cert-verify'] = true;
-  if (p.fingerprint) config['client-fingerprint'] = p.fingerprint;
+  // P1: 仅在 TLS 为真时输出 TLS 相关字段，避免 tls=false 产生假 servername
+  if (p.tls) {
+    config.tls = true;
+    config.servername = p.sni || node.server;
+    if (p.skipCertVerify) config['skip-cert-verify'] = true;
+    if (p.fingerprint) config['client-fingerprint'] = p.fingerprint;
+    const alpn = parseALPN(p.alpn);
+    if (alpn && alpn.length > 0) config.alpn = alpn;
+  }
 
-  const alpn = parseALPN(p.alpn);
-  if (alpn && alpn.length > 0) config.alpn = alpn;
   if (p.packetEncoding) config['packet-encoding'] = p.packetEncoding;
   if (p.globalPadding !== undefined) config['global-padding'] = p.globalPadding;
   if (p.authenticatedLength !== undefined) config['authenticated-length'] = p.authenticatedLength;
@@ -80,27 +83,31 @@ export function adaptVmessToMihomo(node: VmessNode): AdapterResult {
       };
 
     } else if (net === 'mkcp') {
-      // P0-4/P0-5: mkcp-opts 官方字段（metacubex.one/en/config/proxies/transport）
-      // mkcp-opts: mtu / tti / uplink-capacity / downlink-capacity / congestion /
-      //            write-buffer / read-buff / seed / header: { type }
+      // P0-3: mkcp-opts 官方完整字段映射（metacubex.one/en/config/proxies/transport）
+      // mtu, tti, uplink-capacity, downlink-capacity, congestion, write-buffer, read-buffer, seed, header: { type }
       const mkcpOpts: Record<string, any> = {};
+      if (t.mtu !== undefined && !isNaN(t.mtu)) mkcpOpts.mtu = t.mtu;
+      if (t.tti !== undefined && !isNaN(t.tti)) mkcpOpts.tti = t.tti;
+      if (t.uplinkCapacity !== undefined && !isNaN(t.uplinkCapacity)) mkcpOpts['uplink-capacity'] = t.uplinkCapacity;
+      if (t.downlinkCapacity !== undefined && !isNaN(t.downlinkCapacity)) mkcpOpts['downlink-capacity'] = t.downlinkCapacity;
       if (t.congestion !== undefined) mkcpOpts.congestion = t.congestion;
-      if (t.uplinkCapacity !== undefined) mkcpOpts['uplink-capacity'] = t.uplinkCapacity;
-      if (t.downlinkCapacity !== undefined) mkcpOpts['downlink-capacity'] = t.downlinkCapacity;
+      if (t.writeBuffer !== undefined && !isNaN(t.writeBuffer)) mkcpOpts['write-buffer'] = t.writeBuffer;
+      if (t.readBuffer !== undefined && !isNaN(t.readBuffer)) mkcpOpts['read-buffer'] = t.readBuffer;
       if (t.seed) mkcpOpts.seed = t.seed;
       if (t.headerType) mkcpOpts.header = { type: t.headerType };
 
       if (Object.keys(mkcpOpts).length > 0) config['mkcp-opts'] = mkcpOpts;
 
     } else if (net === 'mekya') {
-      // P0-5: mekya-opts 官方结构（metacubex.one/en/config/proxies/transport）
-      // mekya-opts: url / max-write-delay / max-request-size /
-      //             polling-interval-initial / h2-pool-size / kcp: { ... }
-      // MeKya 在 v2ray/xray 协议中无标准 URI 表示，VMess JSON 通常不包含这些字段。
-      // Parser 能读到的仅有 seed / headerType（属于 kcp 子项）。
+      // P0-4/5: mekya-opts 官方完整结构（metacubex.one/en/config/proxies/transport）
+      // url, max-write-delay, max-request-size, polling-interval-initial, h2-pool-size, kcp: { seed, header: { type } }
       const mekyaOpts: Record<string, any> = {};
+      if (t.url) mekyaOpts.url = t.url;
+      if (t.maxWriteDelay !== undefined && !isNaN(t.maxWriteDelay)) mekyaOpts['max-write-delay'] = t.maxWriteDelay;
+      if (t.maxRequestSize !== undefined && !isNaN(t.maxRequestSize)) mekyaOpts['max-request-size'] = t.maxRequestSize;
+      if (t.pollingIntervalInitial !== undefined && !isNaN(t.pollingIntervalInitial)) mekyaOpts['polling-interval-initial'] = t.pollingIntervalInitial;
+      if (t.h2PoolSize !== undefined && !isNaN(t.h2PoolSize)) mekyaOpts['h2-pool-size'] = t.h2PoolSize;
 
-      // kcp 子配置（seed / header 放在 kcp: {} 下）
       const kcpSub: Record<string, any> = {};
       if (t.seed) kcpSub.seed = t.seed;
       if (t.headerType) kcpSub.header = { type: t.headerType };

@@ -47,12 +47,22 @@ export function parseVmess(urlStr: string): VmessNode | null {
         ? (typeof vmess.host === 'string' ? vmess.host.split(',').map((s: string) => s.trim()) : vmess.host)
         : undefined,
       httpPath: (net === 'http' || net === 'h2') && vmess.path ? [vmess.path] : undefined,
-      // P0-4: mKCP / MeKya specific fields
+      // mKCP specific fields
       headerType,
       seed: (net === 'mkcp' || net === 'kcp' || net === 'mekya') ? (vmess.seed || undefined) : undefined,
       congestion: (net === 'mkcp' || net === 'kcp') ? (vmess.congestion ?? undefined) : undefined,
-      uplinkCapacity: (net === 'mkcp' || net === 'kcp') ? (vmess['uplink-capacity'] ?? vmess.uplinkCapacity ?? undefined) : undefined,
-      downlinkCapacity: (net === 'mkcp' || net === 'kcp') ? (vmess['downlink-capacity'] ?? vmess.downlinkCapacity ?? undefined) : undefined,
+      uplinkCapacity: (net === 'mkcp' || net === 'kcp') ? (typeof vmess['uplink-capacity'] === 'number' ? vmess['uplink-capacity'] : (typeof vmess.uplinkCapacity === 'number' ? vmess.uplinkCapacity : (vmess['uplink-capacity'] || vmess.uplinkCapacity ? parseInt(String(vmess['uplink-capacity'] || vmess.uplinkCapacity), 10) : undefined))) : undefined,
+      downlinkCapacity: (net === 'mkcp' || net === 'kcp') ? (typeof vmess['downlink-capacity'] === 'number' ? vmess['downlink-capacity'] : (typeof vmess.downlinkCapacity === 'number' ? vmess.downlinkCapacity : (vmess['downlink-capacity'] || vmess.downlinkCapacity ? parseInt(String(vmess['downlink-capacity'] || vmess.downlinkCapacity), 10) : undefined))) : undefined,
+      mtu: (net === 'mkcp' || net === 'kcp') ? (typeof vmess.mtu === 'number' ? vmess.mtu : (vmess.mtu ? parseInt(String(vmess.mtu), 10) : undefined)) : undefined,
+      tti: (net === 'mkcp' || net === 'kcp') ? (typeof vmess.tti === 'number' ? vmess.tti : (vmess.tti ? parseInt(String(vmess.tti), 10) : undefined)) : undefined,
+      writeBuffer: (net === 'mkcp' || net === 'kcp') ? (typeof vmess['write-buffer'] === 'number' ? vmess['write-buffer'] : (typeof vmess.writeBuffer === 'number' ? vmess.writeBuffer : (vmess['write-buffer'] || vmess.writeBuffer ? parseInt(String(vmess['write-buffer'] || vmess.writeBuffer), 10) : undefined))) : undefined,
+      readBuffer: (net === 'mkcp' || net === 'kcp') ? (typeof vmess['read-buffer'] === 'number' ? vmess['read-buffer'] : (typeof vmess['read-buff'] === 'number' ? vmess['read-buff'] : (typeof vmess.readBuffer === 'number' ? vmess.readBuffer : (vmess['read-buffer'] || vmess['read-buff'] || vmess.readBuffer ? parseInt(String(vmess['read-buffer'] || vmess['read-buff'] || vmess.readBuffer), 10) : undefined)))) : undefined,
+      // MeKya specific fields
+      url: net === 'mekya' ? (vmess.url ? String(vmess.url) : undefined) : undefined,
+      maxWriteDelay: net === 'mekya' ? (typeof vmess['max-write-delay'] === 'number' ? vmess['max-write-delay'] : (typeof vmess.maxWriteDelay === 'number' ? vmess.maxWriteDelay : (vmess['max-write-delay'] || vmess.maxWriteDelay ? parseInt(String(vmess['max-write-delay'] || vmess.maxWriteDelay), 10) : undefined))) : undefined,
+      maxRequestSize: net === 'mekya' ? (typeof vmess['max-request-size'] === 'number' ? vmess['max-request-size'] : (typeof vmess.maxRequestSize === 'number' ? vmess.maxRequestSize : (vmess['max-request-size'] || vmess.maxRequestSize ? parseInt(String(vmess['max-request-size'] || vmess.maxRequestSize), 10) : undefined))) : undefined,
+      pollingIntervalInitial: net === 'mekya' ? (typeof vmess['polling-interval-initial'] === 'number' ? vmess['polling-interval-initial'] : (typeof vmess.pollingIntervalInitial === 'number' ? vmess.pollingIntervalInitial : (vmess['polling-interval-initial'] || vmess.pollingIntervalInitial ? parseInt(String(vmess['polling-interval-initial'] || vmess.pollingIntervalInitial), 10) : undefined))) : undefined,
+      h2PoolSize: net === 'mekya' ? (typeof vmess['h2-pool-size'] === 'number' ? vmess['h2-pool-size'] : (typeof vmess.h2PoolSize === 'number' ? vmess.h2PoolSize : (vmess['h2-pool-size'] || vmess.h2PoolSize ? parseInt(String(vmess['h2-pool-size'] || vmess.h2PoolSize), 10) : undefined))) : undefined,
     };
 
     // Known keys that are explicitly parsed — must include all transport-type-specific keys
@@ -64,8 +74,10 @@ export function parseVmess(urlStr: string): VmessNode | null {
       'packet-encoding', 'global-padding', 'authenticated-length',
       // mKCP
       'seed', 'congestion', 'uplink-capacity', 'uplinkCapacity', 'downlink-capacity', 'downlinkCapacity',
-      'mtu', 'tti', 'write-buffer', 'read-buff',
-      // mekya
+      'mtu', 'tti', 'write-buffer', 'writeBuffer', 'read-buff', 'read-buffer', 'readBuffer',
+      // MeKya
+      'url', 'max-write-delay', 'maxWriteDelay', 'max-request-size', 'maxRequestSize',
+      'polling-interval-initial', 'pollingIntervalInitial', 'h2-pool-size', 'h2PoolSize',
       'serviceName',
     ]);
 

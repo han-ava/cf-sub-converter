@@ -7,12 +7,10 @@ const SUPPORTED_VLESS_TRANSPORTS = new Set([
 ]);
 
 /**
- * XHTTP extra 字段：camelCase → 官方 kebab-case 完整映射表
+ * XHTTP extra 顶层标量字段：camelCase → 官方 kebab-case 完整映射表
  * 来源：https://wiki.metacubex.one/en/config/proxies/transport/
- * extra JSON 中的 key → 直接展平到 xhttp-opts 的 kebab-case key
  */
-const EXTRA_FIELD_MAP: Record<string, string> = {
-  // 明确官方支持字段（camelCase 与 kebab-case 均接受）
+const EXTRA_SCALAR_FIELD_MAP: Record<string, string> = {
   'no-grpc-header':          'no-grpc-header',
   'noGRPCHeader':            'no-grpc-header',
   'nogrpcheader':            'no-grpc-header',
@@ -52,55 +50,161 @@ const EXTRA_FIELD_MAP: Record<string, string> = {
   'scMaxEachPostBytes':      'sc-max-each-post-bytes',
   'sc-min-posts-interval-ms':'sc-min-posts-interval-ms',
   'scMinPostsIntervalMs':    'sc-min-posts-interval-ms',
-  'reuse-settings':          'reuse-settings',
-  'reuseSettings':           'reuse-settings',
-  'download-settings':       'download-settings',
-  'downloadSettings':        'download-settings',
 };
 
+const REUSE_SETTINGS_FIELD_MAP: Record<string, string> = {
+  'max-concurrency':         'max-concurrency',
+  'maxConcurrency':          'max-concurrency',
+  'max-connections':         'max-connections',
+  'maxConnections':          'max-connections',
+  'c-max-reuse-times':       'c-max-reuse-times',
+  'cMaxReuseTimes':          'c-max-reuse-times',
+  'h-max-request-times':     'h-max-request-times',
+  'hMaxRequestTimes':        'h-max-request-times',
+  'h-max-reusable-secs':     'h-max-reusable-secs',
+  'hMaxReusableSecs':        'h-max-reusable-secs',
+  'h-keep-alive-period':     'h-keep-alive-period',
+  'hKeepAlivePeriod':        'h-keep-alive-period',
+};
+
+function mapReuseSettings(raw: unknown): { mapped: Record<string, unknown>; unmapped: string[] } {
+  if (!raw || typeof raw !== 'object') return { mapped: {}, unmapped: [] };
+  const mapped: Record<string, unknown> = {};
+  const unmapped: string[] = [];
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    const targetKey = REUSE_SETTINGS_FIELD_MAP[k];
+    if (targetKey) {
+      mapped[targetKey] = v;
+    } else {
+      unmapped.push(`reuse-settings.${k}`);
+    }
+  }
+  return { mapped, unmapped };
+}
+
+const DOWNLOAD_SETTINGS_FIELD_MAP: Record<string, string> = {
+  'address':                 'address',
+  'port':                    'port',
+  'network':                 'network',
+  'path':                    'path',
+  'host':                    'host',
+  'headers':                 'headers',
+  'mode':                    'mode',
+  'no-grpc-header':          'no-grpc-header',
+  'noGRPCHeader':            'no-grpc-header',
+  'x-padding-bytes':         'x-padding-bytes',
+  'xPaddingBytes':           'x-padding-bytes',
+  'tls-settings':            'tls-settings',
+  'tlsSettings':             'tls-settings',
+  'reuse-settings':          'reuse-settings',
+  'reuseSettings':           'reuse-settings',
+};
+
+function mapDownloadSettings(raw: unknown): { mapped: Record<string, unknown>; unmapped: string[] } {
+  if (!raw || typeof raw !== 'object') return { mapped: {}, unmapped: [] };
+  const mapped: Record<string, unknown> = {};
+  const unmapped: string[] = [];
+
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    const targetKey = DOWNLOAD_SETTINGS_FIELD_MAP[k];
+    if (targetKey === 'reuse-settings') {
+      const { mapped: subMapped, unmapped: subUnmapped } = mapReuseSettings(v);
+      if (Object.keys(subMapped).length > 0) mapped['reuse-settings'] = subMapped;
+      unmapped.push(...subUnmapped.map(u => `download-settings.${u}`));
+    } else if (targetKey === 'tls-settings') {
+      if (typeof v === 'object' && v !== null) {
+        const tlsMapped: Record<string, unknown> = {};
+        for (const [tk, tv] of Object.entries(v as Record<string, unknown>)) {
+          if (tk === 'serverName' || tk === 'server-name' || tk === 'sni') {
+            tlsMapped['server-name'] = tv;
+          } else if (tk === 'alpn') {
+            tlsMapped['alpn'] = tv;
+          } else if (tk === 'fingerprint' || tk === 'fp') {
+            tlsMapped['fingerprint'] = tv;
+          } else if (tk === 'insecure' || tk === 'allowInsecure' || tk === 'skipCertVerify') {
+            tlsMapped['insecure'] = tv;
+          } else if (tk === 'realitySettings' || tk === 'reality-settings') {
+            if (typeof tv === 'object' && tv !== null) {
+              const rMapped: Record<string, unknown> = {};
+              for (const [rk, rv] of Object.entries(tv as Record<string, unknown>)) {
+                if (rk === 'publicKey' || rk === 'public-key' || rk === 'pbk') rMapped['public-key'] = rv;
+                else if (rk === 'shortId' || rk === 'short-id' || rk === 'sid') rMapped['short-id'] = rv;
+                else if (rk === 'spiderX' || rk === 'spider-x' || rk === 'spx') rMapped['spider-x'] = rv;
+                else unmapped.push(`download-settings.tls-settings.reality-settings.${rk}`);
+              }
+              tlsMapped['reality-settings'] = rMapped;
+            }
+          } else {
+            unmapped.push(`download-settings.tls-settings.${tk}`);
+          }
+        }
+        mapped['tls-settings'] = tlsMapped;
+      } else {
+        mapped['tls-settings'] = v;
+      }
+    } else if (targetKey) {
+      mapped[targetKey] = v;
+    } else {
+      unmapped.push(`download-settings.${k}`);
+    }
+  }
+
+  return { mapped, unmapped };
+}
+
 /**
- * XHTTP extra 解析：把 extra JSON 展平到 xhttp-opts 顶层，无 extra 子层。
- * 不认识的 key → unknown（静默丢弃，仅警告）
- * 解析失败 → fatal
+ * XHTTP extra 解析：把 extra JSON 递归展平到 xhttp-opts，并收集未知/未识别字段
  */
 function applyXhttpExtra(
   rawExtra: string | object,
   opts: Record<string, unknown>,
   nodeName: string
-): { fatal: true; skipReason: string } | null {
+): { fatal?: true; skipReason?: string; unmapped: string[] } {
 
   let extraObj: Record<string, unknown> | null = null;
 
   if (typeof rawExtra === 'string') {
     const trimmed = rawExtra.trim();
     if (!trimmed.startsWith('{')) {
-      // 非 JSON 不可分析，原样保存（不影响连接语义，仅丢 warning）
-      // 不 fatal，由调用方添加 warning
-      return null;
+      return { unmapped: [`xhttp-opts.extra (非 JSON 格式: "${trimmed.slice(0, 40)}")`] };
     }
     try {
       extraObj = JSON.parse(trimmed);
     } catch {
       return {
         fatal: true,
-        skipReason: `节点 [${nodeName}] XHTTP extra 字段 JSON 解析失败，无法安全转换`
+        skipReason: `节点 [${nodeName}] XHTTP extra 字段 JSON 解析失败，无法安全转换`,
+        unmapped: ['xhttp-opts.extra']
       };
     }
   } else if (typeof rawExtra === 'object' && rawExtra !== null) {
     extraObj = rawExtra as Record<string, unknown>;
   }
 
-  if (!extraObj) return null;
+  if (!extraObj) return { unmapped: [] };
 
-  // 展平到 opts 顶层
+  const unmapped: string[] = [];
+
   for (const [k, v] of Object.entries(extraObj)) {
-    const mapped = EXTRA_FIELD_MAP[k];
-    if (mapped) {
-      opts[mapped] = v;
+    if (k === 'reuseSettings' || k === 'reuse-settings') {
+      const { mapped, unmapped: subUnmapped } = mapReuseSettings(v);
+      if (Object.keys(mapped).length > 0) opts['reuse-settings'] = mapped;
+      unmapped.push(...subUnmapped.map(u => `xhttp-opts.${u}`));
+    } else if (k === 'downloadSettings' || k === 'download-settings') {
+      const { mapped, unmapped: subUnmapped } = mapDownloadSettings(v);
+      if (Object.keys(mapped).length > 0) opts['download-settings'] = mapped;
+      unmapped.push(...subUnmapped.map(u => `xhttp-opts.${u}`));
+    } else {
+      const mappedKey = EXTRA_SCALAR_FIELD_MAP[k];
+      if (mappedKey) {
+        opts[mappedKey] = v;
+      } else {
+        unmapped.push(`xhttp-opts.extra.${k}`);
+      }
     }
-    // 未识别字段静默丢弃（不影响连接语义）
   }
-  return null;
+
+  return { unmapped };
 }
 
 export function adaptVlessToMihomo(node: VlessNode): AdapterResult {
@@ -137,7 +241,7 @@ export function adaptVlessToMihomo(node: VlessNode): AdapterResult {
       unsupportedParams: ['transport.type'] };
   }
 
-  // P0-3: splithttp 是 xhttp 的旧名/来源别名，统一 normalize
+  // P0-3: splithttp 规范化为 xhttp
   const transportType = rawTransportType === 'splithttp' ? 'xhttp' : rawTransportType;
 
   const config: Record<string, any> = {
@@ -146,8 +250,6 @@ export function adaptVlessToMihomo(node: VlessNode): AdapterResult {
     server: node.server,
     port: node.port,
     uuid: p.uuid.trim(),
-    tls: isTls,
-    servername: p.sni || node.server,
     network: transportType,
     udp: node.udp !== false
   };
@@ -155,18 +257,23 @@ export function adaptVlessToMihomo(node: VlessNode): AdapterResult {
   if (p.flow) config.flow = p.flow;
   if (p.packetEncoding) config['packet-encoding'] = p.packetEncoding;
   if (p.encryption) config.encryption = p.encryption;
-  if (p.fingerprint) config['client-fingerprint'] = p.fingerprint;
 
-  const alpn = parseALPN(p.alpn);
-  if (alpn && alpn.length > 0) config.alpn = alpn;
-  if (p.skipCertVerify) config['skip-cert-verify'] = true;
+  // P1: 仅在 TLS/Reality 为真时输出 TLS 相关字段，避免 tls=false 产生假 servername
+  if (isTls) {
+    config.tls = true;
+    config.servername = p.sni || node.server;
+    if (p.fingerprint) config['client-fingerprint'] = p.fingerprint;
+    const alpn = parseALPN(p.alpn);
+    if (alpn && alpn.length > 0) config.alpn = alpn;
+    if (p.skipCertVerify) config['skip-cert-verify'] = true;
 
-  if (isReality && p.realityOpts?.publicKey) {
-    config['reality-opts'] = {
-      'public-key': p.realityOpts.publicKey.trim(),
-      'short-id': p.realityOpts.shortId || '',
-      'spider-x': p.realityOpts.spiderX || ''
-    };
+    if (isReality && p.realityOpts?.publicKey) {
+      config['reality-opts'] = {
+        'public-key': p.realityOpts.publicKey.trim(),
+        'short-id': p.realityOpts.shortId || '',
+        'spider-x': p.realityOpts.spiderX || ''
+      };
+    }
   }
 
   const t = p.transport;
@@ -177,25 +284,28 @@ export function adaptVlessToMihomo(node: VlessNode): AdapterResult {
     } else if (net === 'grpc') {
       config['grpc-opts'] = { 'grpc-service-name': t.serviceName || '' };
     } else if (net === 'xhttp') {
-      // P0-1: 直接展平到 xhttp-opts 顶层，禁止生成 .extra 子层
       const xhttpOpts: Record<string, unknown> = {};
       if (t.path) xhttpOpts.path = t.path;
       if (t.headers?.Host) xhttpOpts.host = t.headers.Host;
       if (t.mode) xhttpOpts.mode = t.mode;
 
       if (t.extra) {
-        if (typeof t.extra === 'string' && !t.extra.trim().startsWith('{')) {
-          // 非 JSON 字符串（无法解析），降级 warning
-          warnings.push({ level: 'warn', field: 'xhttp-opts.extra',
-            message: `XHTTP extra 非 JSON 格式（"${t.extra.slice(0, 40)}"），已跳过` });
-          unsupportedParams.push('xhttp-opts.extra');
-        } else {
-          const err = applyXhttpExtra(t.extra, xhttpOpts, node.name);
-          if (err) {
-            return { fatal: true, lossy: true, emitted: false,
-              skipReason: err.skipReason,
-              warnings: [{ level: 'fatal', field: 'xhttp-opts.extra', message: err.skipReason }],
-              unsupportedParams: ['xhttp-opts.extra'] };
+        const extraRes = applyXhttpExtra(t.extra, xhttpOpts, node.name);
+        if (extraRes.fatal) {
+          return { fatal: true, lossy: true, emitted: false,
+            skipReason: extraRes.skipReason || 'XHTTP extra 无法安全解析',
+            warnings: [{ level: 'fatal', field: 'xhttp-opts.extra', message: extraRes.skipReason || 'XHTTP extra 无法安全解析' }],
+            unsupportedParams: ['xhttp-opts.extra'] };
+        }
+        // P0: 未知/未映射 extra 字段不允许静默丢弃，记录 warning + unsupportedParams (lossy=true)
+        if (extraRes.unmapped && extraRes.unmapped.length > 0) {
+          for (const item of extraRes.unmapped) {
+            unsupportedParams.push(item);
+            warnings.push({
+              level: 'warn',
+              field: item,
+              message: `XHTTP extra 中包含未映射字段 [${item}]，可能影响连接行为`
+            });
           }
         }
       }
