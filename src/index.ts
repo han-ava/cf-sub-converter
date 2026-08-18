@@ -3,6 +3,7 @@ import packageJson from '../package.json';
 import { Env, ProxyNode } from './types';
 import { parseContent } from './parser';
 import { toClashMeta, toSingBox, toBase64, toRawLinks, toSurge, toShadowrocketConf } from './generator';
+import { adaptNodeToMihomo } from './adapters/mihomo';
 import { processNodes, createUserinfoNodes, parseUserinfo, getRegionByNodeName, parseRenameRules, formatContentDisposition } from './utils';
 import { isAuthorized, checkAuthStatus, fetchSubscriptionWithTimeout, extractRequestToken, sanitizeUrlForLog } from './security';
 import { renderHtmlPage } from './ui';
@@ -236,6 +237,31 @@ export default {
           enableUdp: body.udp !== false
         });
 
+        // 统计转换损失与警告 (区分 fatal 致命不可转与 lossy 次要损失)
+        let withWarnings = 0;
+        let unsupportedCount = 0;
+        let fatalCount = 0;
+        let lossyCount = 0;
+
+        const nodeItems = processedNodes.slice(0, 1000).map(n => {
+          const adaptRes = adaptNodeToMihomo(n);
+          if (adaptRes.fatal) fatalCount++;
+          if (adaptRes.lossy) lossyCount++;
+          if (adaptRes.warnings.length > 0) withWarnings++;
+          if (adaptRes.unsupportedParams.length > 0) unsupportedCount++;
+
+          return {
+            name: n.name,
+            type: n.protocol,
+            server: n.server,
+            port: n.port,
+            lossy: adaptRes.lossy,
+            fatal: adaptRes.fatal,
+            warnings: adaptRes.warnings.map(w => `[${w.level.toUpperCase()}] ${w.message}`),
+            unsupportedParams: adaptRes.unsupportedParams
+          };
+        });
+
         // 地区统计
         const regionStats: Record<string, number> = {};
         for (const n of processedNodes) {
@@ -251,14 +277,13 @@ export default {
             ok: true,
             totalRaw: rawNodes.length,
             totalMatched: processedNodes.length,
+            withWarnings,
+            unsupportedCount,
+            fatalCount,
+            lossyCount,
             userinfo: userinfoObj,
             regions: regionStats,
-            nodes: processedNodes.slice(0, 1000).map(n => ({
-              name: n.name,
-              type: n.type,
-              server: n.server,
-              port: n.port
-            }))
+            nodes: nodeItems
           }),
           {
             headers: {

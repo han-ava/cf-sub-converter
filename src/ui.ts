@@ -359,6 +359,22 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       border-radius: 4px;
       font-size: 0.7rem;
     }
+    .node-tag-warn {
+      background: rgba(245, 158, 11, 0.15);
+      color: var(--warning);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 0.7rem;
+      cursor: help;
+    }
+    .node-tag-fatal {
+      background: rgba(239, 68, 68, 0.15);
+      color: var(--danger);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 0.7rem;
+      cursor: help;
+    }
     
     .toast {
       position: fixed;
@@ -477,7 +493,7 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
         <label for="subUrl">
           <span>订阅链接 / 节点链接 (支持多个链接换行或 | 分隔)</span>
         </label>
-        <textarea id="subUrl" placeholder="https://airport.com/api/v1/client/subscribe?token=...&#10;或直接输入 vless://, vmess://, trojan://, ss://, hysteria2://, tuic:// 节点链接"></textarea>
+        <textarea id="subUrl" placeholder="https://airport.com/api/v1/client/subscribe?token=...&#10;或直接输入 vless://, vmess://, trojan://, ss://, hysteria2://, anytls://, tuic:// 节点链接"></textarea>
       </div>
 
       <div class="grid-2 form-group">
@@ -785,8 +801,17 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
         const inspectPanel = document.getElementById('inspectPanel');
         inspectPanel.classList.add('show');
 
-        // 更新数量
-        document.getElementById('inspectCount').textContent = \`匹配 \${data.totalMatched} / 原始 \${data.totalRaw} 节点\`;
+        // 更新数量 (含转换损失与告警统计)
+        const fatalCount = data.fatalCount || 0;
+        const warnCount = data.withWarnings || 0;
+        const lossyCount = data.lossyCount || 0;
+        const perfectCount = Math.max(0, (data.totalMatched || 0) - lossyCount - fatalCount);
+        let countText = \`匹配 \${data.totalMatched} / 原始 \${data.totalRaw} (完美 \${perfectCount} / 告警 \${warnCount}\`;
+        if (fatalCount > 0) {
+          countText += \` / 拦截不可转 \${fatalCount}\`;
+        }
+        countText += ')';
+        document.getElementById('inspectCount').textContent = countText;
 
         // 流量信息
         const trafficCard = document.getElementById('trafficCard');
@@ -844,12 +869,26 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
 
         // 节点列表
         const nodeList = document.getElementById('nodeList');
-        nodeList.innerHTML = (data.nodes || []).map(n => \`
-          <div class="node-item">
-            <span>\${n.name}</span>
-            <span class="node-tag">\${n.type.toUpperCase()}</span>
-          </div>
-        \`).join('');
+        nodeList.innerHTML = (data.nodes || []).map(n => {
+          const isFatal = n.fatal;
+          const hasWarn = n.warnings && n.warnings.length > 0;
+          const warnTip = hasWarn ? n.warnings.map(w => w.replace(/"/g, '&quot;')).join('&#10;') : '';
+          let badge = '';
+          if (isFatal) {
+            badge = \`<span class="node-tag-fatal" title="\${warnTip}">❌ 致命不可转</span>\`;
+          } else if (hasWarn) {
+            badge = \`<span class="node-tag-warn" title="\${warnTip}">⚠️ \${n.warnings.length} 告警</span>\`;
+          }
+          return \`
+            <div class="node-item">
+              <span>\${n.name}</span>
+              <div style="display: flex; gap: 6px; align-items: center;">
+                \${badge}
+                <span class="node-tag">\${(n.type || '').toUpperCase()}</span>
+              </div>
+            </div>
+          \`;
+        }).join('');
 
         inspectPanel.scrollIntoView({ behavior: 'smooth' });
       } catch (err) {

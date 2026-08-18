@@ -1,377 +1,19 @@
 // src/generator.ts
 import yaml from 'js-yaml';
-import { ProxyNode } from './types';
+import { NodeEnvelope } from './types';
 import { DEFAULT_CLASH_TEMPLATE, DEFAULT_SINGBOX_TEMPLATE } from './templates';
-import { safeBase64Encode, getRegionByNodeName, REGIONS, tryDecodeURIComponent } from './utils';
+import { safeBase64Encode, getRegionByNodeName, REGIONS } from './utils';
+import { nodeToClashProxy } from './adapters/mihomo';
+import { nodeToSingBoxOutbound } from './adapters/singbox';
+import { toRawLinks } from './adapters/raw';
 
-/**
- * 转换 ProxyNode 为 Clash Meta / Mihomo 节点对象
- */
-export function nodeToClashProxy(node: ProxyNode): Record<string, any> {
-  if (node.clashObj) {
-    const res: Record<string, any> = { ...node.clashObj, name: node.name };
-    if (res.password && typeof res.password === 'string') {
-      res.password = tryDecodeURIComponent(res.password);
-    }
-    return res;
-  }
-
-  const base: Record<string, any> = {
-    name: node.name,
-    type: node.type,
-    server: node.server,
-    port: node.port,
-    udp: node.udp !== false
-  };
-
-  switch (node.type) {
-    case 'ss':
-    case 'shadowsocks': {
-      return {
-        ...base,
-        type: 'ss',
-        cipher: node.cipher || 'aes-128-gcm',
-        password: node.password ? tryDecodeURIComponent(node.password) : ''
-      };
-    }
-    case 'ssr':
-    case 'shadowsocksr': {
-      return {
-        ...base,
-        type: 'ssr',
-        cipher: node.cipher || 'aes-128-cfb',
-        password: node.password || '',
-        protocol: node.protocol || 'origin',
-        obfs: node.obfs || 'plain',
-        'protocol-param': node.protoParam || '',
-        'obfs-param': node.obfsParam || ''
-      };
-    }
-    case 'vmess': {
-      const vmess: Record<string, any> = {
-        ...base,
-        type: 'vmess',
-        uuid: node.uuid,
-        alterId: 0,
-        cipher: node.cipher || 'auto',
-        tls: !!node.tls,
-        servername: node.sni || node.server,
-        network: node.network || 'tcp'
-      };
-      if (node.skipCertVerify) vmess['skip-cert-verify'] = true;
-      if (node.fingerprint) vmess['client-fingerprint'] = node.fingerprint;
-      if (node.alpn) vmess.alpn = node.alpn;
-      if (node.network === 'ws') {
-        vmess['ws-opts'] = {
-          path: node.wsPath || '/',
-          headers: node.wsHeaders || {}
-        };
-      } else if (node.network === 'grpc') {
-        vmess['grpc-opts'] = {
-          'grpc-service-name': node.grpcServiceName || ''
-        };
-      }
-      return vmess;
-    }
-    case 'vless': {
-      const vless: Record<string, any> = {
-        ...base,
-        type: 'vless',
-        uuid: node.uuid,
-        tls: !!node.tls,
-        servername: node.sni || node.server,
-        network: node.network || 'tcp'
-      };
-      if (node.skipCertVerify) vless['skip-cert-verify'] = true;
-      if (node.packetEncoding) {
-        vless['packet-encoding'] = node.packetEncoding;
-      }
-      if (node.encryption) {
-        vless.encryption = node.encryption;
-      }
-      if (node.flow) vless.flow = node.flow;
-      if (node.fingerprint) vless['client-fingerprint'] = node.fingerprint;
-      if (node.alpn) vless.alpn = node.alpn;
-      if (node.reality) {
-        vless['reality-opts'] = {
-          'public-key': node.reality.publicKey,
-          'short-id': node.reality.shortId || '',
-          'spider-x': node.reality.spiderX || ''
-        };
-      }
-      if (node.network === 'ws') {
-        vless['ws-opts'] = {
-          path: node.wsPath || '/',
-          headers: node.wsHeaders || {}
-        };
-      } else if (node.network === 'grpc') {
-        vless['grpc-opts'] = {
-          'grpc-service-name': node.grpcServiceName || ''
-        };
-      }
-      return vless;
-    }
-    case 'trojan': {
-      const trojan: Record<string, any> = {
-        ...base,
-        type: 'trojan',
-        password: node.password,
-        sni: node.sni || node.server,
-        alpn: node.alpn || ['h2', 'http/1.1'],
-        'skip-cert-verify': !!node.skipCertVerify,
-        network: node.network || 'tcp'
-      };
-      if (node.fingerprint) trojan['client-fingerprint'] = node.fingerprint;
-      if (node.network === 'ws') {
-        trojan['ws-opts'] = {
-          path: node.wsPath || '/',
-          headers: node.wsHeaders || {}
-        };
-      } else if (node.network === 'grpc') {
-        trojan['grpc-opts'] = {
-          'grpc-service-name': node.grpcServiceName || ''
-        };
-      }
-      return trojan;
-    }
-    case 'hysteria2':
-    case 'hy2': {
-      const hy2: Record<string, any> = {
-        ...base,
-        type: 'hysteria2',
-        password: node.password,
-        sni: node.sni || node.server,
-        'skip-cert-verify': !!node.skipCertVerify
-      };
-      if (node.obfs) {
-        hy2.obfs = node.obfs;
-        if (node.obfsPassword) hy2['obfs-password'] = node.obfsPassword;
-      }
-      return hy2;
-    }
-    case 'tuic': {
-      return {
-        ...base,
-        type: 'tuic',
-        uuid: node.uuid,
-        password: node.password,
-        sni: node.sni || node.server,
-        'congestion-controller': node.congestionControl || 'bbr',
-        'udp-relay-mode': node.udpRelayMode || 'native',
-        alpn: node.alpn || ['h3'],
-        'skip-cert-verify': !!node.skipCertVerify
-      };
-    }
-    case 'hysteria': {
-      return {
-        ...base,
-        type: 'hysteria',
-        auth_str: node.password || node.uuid || '',
-        sni: node.sni || node.server,
-        'skip-cert-verify': !!node.skipCertVerify,
-        alpn: node.alpn || ['h3']
-      };
-    }
-    case 'socks5':
-    case 'socks': {
-      return {
-        ...base,
-        type: 'socks5',
-        username: node.uuid || '',
-        password: node.password || '',
-        tls: !!node.tls,
-        'skip-cert-verify': !!node.skipCertVerify
-      };
-    }
-    case 'http':
-    case 'https': {
-      return {
-        ...base,
-        type: 'http',
-        username: node.uuid || '',
-        password: node.password || '',
-        tls: node.type === 'https' || !!node.tls,
-        'skip-cert-verify': !!node.skipCertVerify
-      };
-    }
-    case 'wireguard':
-    case 'wg': {
-      return { ...base, type: 'wireguard' };
-    }
-    default:
-      return base;
-  }
-}
-
-/**
- * 转换 ProxyNode 为 Sing-Box Outbound 对象
- */
-export function nodeToSingBoxOutbound(node: ProxyNode): Record<string, any> {
-  if (node.singboxObj) {
-    return { ...node.singboxObj, tag: node.name };
-  }
-
-  const base: Record<string, any> = {
-    tag: node.name,
-    server: node.server,
-    server_port: node.port
-  };
-
-  switch (node.type) {
-    case 'ss':
-    case 'shadowsocks': {
-      return {
-        ...base,
-        type: 'shadowsocks',
-        method: node.cipher || 'aes-128-gcm',
-        password: node.password || ''
-      };
-    }
-    case 'vmess': {
-      const ob: Record<string, any> = {
-        ...base,
-        type: 'vmess',
-        uuid: node.uuid,
-        security: node.cipher || 'auto',
-        alter_id: 0
-      };
-      if (node.tls) {
-        ob.tls = {
-          enabled: true,
-          server_name: node.sni || node.server,
-          alpn: node.alpn
-        };
-      }
-      if (node.network === 'ws') {
-        ob.transport = {
-          type: 'ws',
-          path: node.wsPath || '/',
-          headers: node.wsHeaders || {}
-        };
-      } else if (node.network === 'grpc') {
-        ob.transport = {
-          type: 'grpc',
-          service_name: node.grpcServiceName || ''
-        };
-      }
-      return ob;
-    }
-    case 'vless': {
-      const ob: Record<string, any> = {
-        ...base,
-        type: 'vless',
-        uuid: node.uuid,
-        flow: node.flow || undefined
-      };
-      if (node.packetEncoding) {
-        ob.packet_encoding = node.packetEncoding;
-      }
-      if (node.tls) {
-        ob.tls = {
-          enabled: true,
-          server_name: node.sni || node.server,
-          alpn: node.alpn
-        };
-        if (node.fingerprint) {
-          ob.tls.utls = { enabled: true, fingerprint: node.fingerprint };
-        }
-        if (node.reality) {
-          ob.tls.reality = {
-            enabled: true,
-            public_key: node.reality.publicKey,
-            short_id: node.reality.shortId || ''
-          };
-        }
-      }
-      if (node.network === 'ws') {
-        ob.transport = {
-          type: 'ws',
-          path: node.wsPath || '/',
-          headers: node.wsHeaders || {}
-        };
-      } else if (node.network === 'grpc') {
-        ob.transport = {
-          type: 'grpc',
-          service_name: node.grpcServiceName || ''
-        };
-      }
-      return ob;
-    }
-    case 'trojan': {
-      const ob: Record<string, any> = {
-        ...base,
-        type: 'trojan',
-        password: node.password,
-        tls: {
-          enabled: true,
-          server_name: node.sni || node.server,
-          alpn: node.alpn || ['h2', 'http/1.1'],
-          insecure: !!node.skipCertVerify
-        }
-      };
-      if (node.network === 'ws') {
-        ob.transport = {
-          type: 'ws',
-          path: node.wsPath || '/',
-          headers: node.wsHeaders || {}
-        };
-      } else if (node.network === 'grpc') {
-        ob.transport = {
-          type: 'grpc',
-          service_name: node.grpcServiceName || ''
-        };
-      }
-      return ob;
-    }
-    case 'hysteria2':
-    case 'hy2': {
-      const ob: Record<string, any> = {
-        ...base,
-        type: 'hysteria2',
-        password: node.password,
-        tls: {
-          enabled: true,
-          server_name: node.sni || node.server,
-          insecure: !!node.skipCertVerify
-        }
-      };
-      if (node.obfs) {
-        ob.obfs = {
-          type: node.obfs,
-          password: node.obfsPassword || ''
-        };
-      }
-      return ob;
-    }
-    case 'tuic': {
-      return {
-        ...base,
-        type: 'tuic',
-        uuid: node.uuid,
-        password: node.password,
-        congestion_control: node.congestionControl || 'bbr',
-        udp_relay_mode: node.udpRelayMode || 'native',
-        tls: {
-          enabled: true,
-          server_name: node.sni || node.server,
-          alpn: node.alpn || ['h3'],
-          insecure: !!node.skipCertVerify
-        }
-      };
-    }
-    default:
-      return {
-        ...base,
-        type: node.type
-      };
-  }
-}
+export { nodeToClashProxy, nodeToSingBoxOutbound, toRawLinks };
 
 /**
  * 转换为 Clash Meta / Mihomo 配置文件 (YAML)
  */
 export function toClashMeta(
-  nodes: ProxyNode[],
+  nodes: NodeEnvelope[],
   customTemplateYaml?: string,
   preset: string = 'standard',
   testUrl: string = 'http://www.gstatic.com/generate_204'
@@ -388,8 +30,8 @@ export function toClashMeta(
     config = JSON.parse(JSON.stringify(DEFAULT_CLASH_TEMPLATE));
   }
 
-  const proxies = nodes.map(n => nodeToClashProxy(n));
-  const proxyNames = nodes.map(n => n.name);
+  const proxies = nodes.map(n => nodeToClashProxy(n)).filter((p): p is Record<string, any> => p !== undefined);
+  const proxyNames = proxies.map(p => p.name);
 
   const isMinimal = preset === 'minimal';
 
@@ -524,7 +166,7 @@ export function toClashMeta(
 /**
  * 转换为 Sing-Box 配置文件 (JSON)
  */
-export function toSingBox(nodes: ProxyNode[], customTemplateJson?: string): string {
+export function toSingBox(nodes: NodeEnvelope[], customTemplateJson?: string): string {
   let config: any = null;
 
   if (customTemplateJson && customTemplateJson.trim()) {
@@ -575,98 +217,9 @@ export function toSingBox(nodes: ProxyNode[], customTemplateJson?: string): stri
 }
 
 /**
- * 转换为明文链接列表（一列一条节点）
- */
-export function toRawLinks(nodes: ProxyNode[]): string {
-  const links: string[] = [];
-
-  const formatHost = (server: string) => {
-    return server.includes(':') && !server.startsWith('[') ? `[${server}]` : server;
-  };
-
-  for (const node of nodes) {
-    try {
-      const host = formatHost(node.server);
-      if (node.type === 'vless') {
-        const params = new URLSearchParams();
-        params.set('security', node.reality ? 'reality' : (node.tls ? 'tls' : 'none'));
-        params.set('type', node.network || 'tcp');
-        if (node.packetEncoding) params.set('packetEncoding', node.packetEncoding);
-        if (node.encryption) params.set('encryption', node.encryption);
-        if (node.flow) params.set('flow', node.flow);
-        if (node.sni) params.set('sni', node.sni);
-        if (node.fingerprint) params.set('fp', node.fingerprint);
-        if (node.reality) {
-          params.set('pbk', node.reality.publicKey);
-          if (node.reality.shortId) params.set('sid', node.reality.shortId);
-          if (node.reality.spiderX) params.set('spx', node.reality.spiderX);
-        }
-        if (node.network === 'ws') {
-          if (node.wsPath) params.set('path', node.wsPath);
-          if (node.wsHeaders?.Host) params.set('host', node.wsHeaders.Host);
-        } else if (node.network === 'grpc' && node.grpcServiceName) {
-          params.set('serviceName', node.grpcServiceName);
-        }
-        links.push(`vless://${node.uuid}@${host}:${node.port}?${params.toString()}#${encodeURIComponent(node.name)}`);
-      } else if (node.type === 'hysteria2' || node.type === 'hy2') {
-        const params = new URLSearchParams();
-        if (node.sni) params.set('sni', node.sni);
-        if (node.obfs) {
-          params.set('obfs', node.obfs);
-          if (node.obfsPassword) params.set('obfs-password', node.obfsPassword);
-        }
-        if (node.skipCertVerify) params.set('insecure', '1');
-        links.push(`hysteria2://${node.password}@${host}:${node.port}?${params.toString()}#${encodeURIComponent(node.name)}`);
-      } else if (node.type === 'vmess') {
-        const vmessObj = {
-          v: '2',
-          ps: node.name,
-          add: node.server,
-          port: node.port,
-          id: node.uuid,
-          aid: 0,
-          scy: node.cipher || 'auto',
-          net: node.network || 'tcp',
-          type: 'none',
-          host: node.wsHeaders?.Host || '',
-          path: node.wsPath || '',
-          tls: node.tls ? 'tls' : '',
-          sni: node.sni || '',
-          fp: node.fingerprint || ''
-        };
-        links.push(`vmess://${safeBase64Encode(JSON.stringify(vmessObj))}`);
-      } else if (node.type === 'trojan') {
-        const params = new URLSearchParams();
-        if (node.sni) params.set('sni', node.sni);
-        params.set('type', node.network || 'tcp');
-        if (node.network === 'ws') {
-          if (node.wsPath) params.set('path', node.wsPath);
-          if (node.wsHeaders?.Host) params.set('host', node.wsHeaders.Host);
-        }
-        if (node.skipCertVerify) params.set('allowInsecure', '1');
-        links.push(`trojan://${node.password}@${host}:${node.port}?${params.toString()}#${encodeURIComponent(node.name)}`);
-      } else if (node.type === 'ss' || node.type === 'shadowsocks') {
-        const userPass = safeBase64Encode(`${node.cipher}:${node.password}`);
-        links.push(`ss://${userPass}@${host}:${node.port}#${encodeURIComponent(node.name)}`);
-      } else if (node.type === 'tuic') {
-        const params = new URLSearchParams();
-        if (node.sni) params.set('sni', node.sni);
-        if (node.congestionControl) params.set('congestion_control', node.congestionControl);
-        if (node.udpRelayMode) params.set('udp_relay_mode', node.udpRelayMode);
-        links.push(`tuic://${node.uuid}:${node.password}@${host}:${node.port}?${params.toString()}#${encodeURIComponent(node.name)}`);
-      } else if (node.raw) {
-        links.push(node.raw);
-      }
-    } catch {}
-  }
-
-  return links.join('\n');
-}
-
-/**
  * 转换为 Base64 订阅
  */
-export function toBase64(nodes: ProxyNode[]): string {
+export function toBase64(nodes: NodeEnvelope[]): string {
   const rawLinks = toRawLinks(nodes);
   return safeBase64Encode(rawLinks);
 }
@@ -674,16 +227,19 @@ export function toBase64(nodes: ProxyNode[]): string {
 /**
  * 转换为 Surge 代理配置
  */
-export function toSurge(nodes: ProxyNode[]): string {
+export function toSurge(nodes: NodeEnvelope[]): string {
   const lines: string[] = ['[Proxy]'];
 
   for (const node of nodes) {
-    if (node.type === 'ss' || node.type === 'shadowsocks') {
-      lines.push(`${node.name} = ss, ${node.server}, ${node.port}, encrypt-method=${node.cipher}, password=${node.password}, udp-relay=true`);
-    } else if (node.type === 'trojan') {
-      lines.push(`${node.name} = trojan, ${node.server}, ${node.port}, password=${node.password}, sni=${node.sni || node.server}, skip-cert-verify=${node.skipCertVerify ? 'true' : 'false'}`);
-    } else if (node.type === 'vmess') {
-      lines.push(`${node.name} = vmess, ${node.server}, ${node.port}, username=${node.uuid}, ws=${node.network === 'ws'}, ws-path=${node.wsPath || '/'}, tls=${node.tls ? 'true' : 'false'}, sni=${node.sni || node.server}`);
+    const proto = (node.protocol || '').toLowerCase();
+    const p: any = node.protocolData || {};
+    if (proto === 'ss' || proto === 'shadowsocks') {
+      lines.push(`${node.name} = ss, ${node.server}, ${node.port}, encrypt-method=${p.cipher || 'chacha20-ietf-poly1305'}, password=${p.password || ''}, udp-relay=true`);
+    } else if (proto === 'trojan') {
+      lines.push(`${node.name} = trojan, ${node.server}, ${node.port}, password=${p.password || ''}, sni=${p.sni || node.server}, skip-cert-verify=${p.skipCertVerify ? 'true' : 'false'}`);
+    } else if (proto === 'vmess') {
+      const isWs = (p.network || p.net) === 'ws';
+      lines.push(`${node.name} = vmess, ${node.server}, ${node.port}, username=${p.uuid || p.id}, ws=${isWs}, ws-path=${p.wsPath || p.path || '/'}, tls=${p.tls ? 'true' : 'false'}, sni=${p.sni || node.server}`);
     }
   }
 
@@ -693,7 +249,7 @@ export function toSurge(nodes: ProxyNode[]): string {
 /**
  * 转换为 Shadowrocket 配置文件 (.conf)
  */
-export function toShadowrocketConf(nodes: ProxyNode[]): string {
+export function toShadowrocketConf(nodes: NodeEnvelope[]): string {
   const lines: string[] = [
     '# Shadowrocket Configuration Profile',
     '# Generated by SubConverter Pro',
@@ -709,23 +265,26 @@ export function toShadowrocketConf(nodes: ProxyNode[]): string {
     '[Proxy]'
   ];
 
-  // 将节点写入 [Proxy] 段
   for (const node of nodes) {
-    if (node.type === 'ss' || node.type === 'shadowsocks') {
-      lines.push(`${node.name} = ss, ${node.server}, ${node.port}, encrypt-method=${node.cipher}, password=${node.password}`);
-    } else if (node.type === 'trojan') {
-      lines.push(`${node.name} = trojan, ${node.server}, ${node.port}, password=${node.password}, over-tls=true, tls-name=${node.sni || node.server}`);
-    } else if (node.type === 'vmess') {
-      const wsParam = node.network === 'ws' ? `, obfs=websocket, obfs-uri=${node.wsPath || '/'}` : '';
-      const tlsParam = node.tls ? `, tls=true, tls-name=${node.sni || node.server}` : '';
-      lines.push(`${node.name} = vmess, ${node.server}, ${node.port}, method=${node.cipher || 'auto'}, password=${node.uuid}${wsParam}${tlsParam}`);
-    } else if (node.type === 'vless') {
-      // Shadowrocket 支持 VLESS 通过 URI 导入，.conf 中使用简化写法
-      lines.push(`${node.name} = vless, ${node.server}, ${node.port}, password=${node.uuid}, over-tls=${node.tls ? 'true' : 'false'}, tls-name=${node.sni || node.server}`);
-    } else if (node.type === 'hysteria2' || node.type === 'hy2') {
-      lines.push(`${node.name} = hysteria2, ${node.server}, ${node.port}, password=${node.password}, over-tls=true, tls-name=${node.sni || node.server}`);
-    } else if (node.type === 'tuic') {
-      lines.push(`${node.name} = tuic, ${node.server}, ${node.port}, password=${node.password}, uuid=${node.uuid || ''}, tls-name=${node.sni || node.server}`);
+    const proto = (node.protocol || '').toLowerCase();
+    const p: any = node.protocolData || {};
+    if (proto === 'ss' || proto === 'shadowsocks') {
+      lines.push(`${node.name} = ss, ${node.server}, ${node.port}, encrypt-method=${p.cipher || 'chacha20-ietf-poly1305'}, password=${p.password || ''}`);
+    } else if (proto === 'trojan') {
+      lines.push(`${node.name} = trojan, ${node.server}, ${node.port}, password=${p.password || ''}, over-tls=true, tls-name=${p.sni || node.server}`);
+    } else if (proto === 'vmess') {
+      const isWs = (p.network || p.net) === 'ws';
+      const wsParam = isWs ? `, obfs=websocket, obfs-uri=${p.wsPath || p.path || '/'}` : '';
+      const tlsParam = p.tls ? `, tls=true, tls-name=${p.sni || node.server}` : '';
+      lines.push(`${node.name} = vmess, ${node.server}, ${node.port}, method=${p.cipher || p.scy || 'auto'}, password=${p.uuid || p.id}${wsParam}${tlsParam}`);
+    } else if (proto === 'vless') {
+      lines.push(`${node.name} = vless, ${node.server}, ${node.port}, password=${p.uuid || p.id}, over-tls=${p.tls ? 'true' : 'false'}, tls-name=${p.sni || node.server}`);
+    } else if (proto === 'hysteria2' || proto === 'hy2') {
+      lines.push(`${node.name} = hysteria2, ${node.server}, ${node.port}, password=${p.password || ''}, over-tls=true, tls-name=${p.sni || node.server}`);
+    } else if (proto === 'anytls') {
+      lines.push(`${node.name} = anytls, ${node.server}, ${node.port}, password=${p.password || ''}, tls-name=${p.sni || node.server}`);
+    } else if (proto === 'tuic') {
+      lines.push(`${node.name} = tuic, ${node.server}, ${node.port}, password=${p.password || ''}, uuid=${p.uuid || ''}, tls-name=${p.sni || node.server}`);
     }
   }
 
@@ -757,4 +316,3 @@ export function toShadowrocketConf(nodes: ProxyNode[]): string {
 
   return lines.join('\n');
 }
-

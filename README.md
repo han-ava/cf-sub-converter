@@ -18,7 +18,9 @@
 | **SSRF 防护与逐跳检查** | 🟡 无内网 IP 过滤，容易被滥用为公网扫描代理 | 🟢 覆盖 RFC1918 私有 IP、本地回环与端口白名单，**手动拦截每一跳 302 重定向** 安全校验 |
 | **资源限额与防爆内存** | 🟡 无体积与并发限制 | 🟢 提前检查 `Content-Length`，限制 10MB 响应上限，并发池限制最大并发 6 |
 | **精准边缘缓存** | 🟡 无缓存或容易串号 | 🟢 结合 **URL + User-Agent** 计算 SHA-256 缓存键，防止不同客户端拉取到混淆格式 |
-| **协议支持完整度** | 支持部分协议 | 完美支持 **VLESS (Reality/Vision)**, **VMess**, **Trojan**, **SS**, **SSR**, **Hysteria 2**, **TUIC (v5)**, **Clash YAML** |
+| **无损转换架构** | 🔴 扁平化数据结构，解析即丢参数 | 🟢 **NodeEnvelope 无损架构**：Parser 100% 保全原始参数与未知 Query，Adapter 负责目标映射，杜绝静默丢参 |
+| **零猜测编解码** | 🔴 全局 `tryDecodeURIComponent` 破坏密码字符 | 🟢 **严格按协议规范编解码**：Clash/Sing-box 密码原样透传，URI / Base64 按 RFC 规范处理 |
+| **协议支持完整度** | 支持部分协议 | 完整支持 **VLESS (Reality/Vision/XHTTP)**, **VMess (多传输/自定义aid)**, **Shadowsocks (SIP002/SS2022/插件)**, **Hysteria 2 (全参数)**, **AnyTLS**, **Trojan**, **TUIC (v5)**, **SSR**, **Clash YAML** |
 
 ---
 
@@ -155,14 +157,15 @@ https://your-worker.workers.dev/sub?url=https://airport.com/sub?token=xxx&target
 
 ## 🧩 支持的代理协议
 
-- **VLESS** (支持 TLS、Reality、XTLS-rprx-vision、WebSocket、gRPC)
-- **VMess** (支持 WebSocket、gRPC、TLS)
-- **Trojan** (支持 TLS、WebSocket、gRPC)
-- **Shadowsocks** (支持标准 SIP002 以及常见加密算法)
+- **VLESS** (支持 TLS、Reality、XTLS-rprx-vision、XHTTP、WebSocket、gRPC)
+- **VMess** (支持 WebSocket、gRPC、HTTP/H2、自定义 alterId、PacketEncoding、GlobalPadding)
+- **Shadowsocks** (支持标准 SIP002、SS2022 以及 v2ray-plugin / obfs / shadow-tls 等多种插件)
+- **Hysteria 2** (hy2，支持多端口 ports、hop-interval、obfs 混淆、带宽与跳过证书校验)
+- **AnyTLS** (支持标准 AnyTLS 规范映射至 Mihomo / Sing-box)
+- **Trojan** (支持 TLS、WebSocket、gRPC、ALPN)
+- **TUIC** (v5，支持拥塞控制、UDP 中继模式与 0-RTT 握手)
 - **ShadowsocksR** (SSR)
-- **Hysteria 2** (hy2，支持 obfs 混淆与跳过证书校验)
-- **TUIC** (v5，支持拥塞控制与 UDP 中继模式)
-- **Clash YAML 订阅** (支持作为输入源解析并重构)
+- **Clash YAML 订阅** (100% 原始透传解析与重构)
 
 ---
 

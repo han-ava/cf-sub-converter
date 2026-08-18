@@ -1,5 +1,5 @@
 // src/utils.ts
-import { ProxyNode } from './types';
+import { NodeEnvelope, RawQuery, RawQueryEntry, ShadowsocksNode } from './types';
 
 /**
  * 带有完整 UTF-8 支持的安全 Base64 解码
@@ -7,7 +7,6 @@ import { ProxyNode } from './types';
 export function safeBase64Decode(str: string): string {
   if (!str) return '';
   try {
-    // 替换 base64url 字符并补齐 padding
     let clean = str.trim().replace(/-/g, '+').replace(/_/g, '/');
     while (clean.length % 4) {
       clean += '=';
@@ -46,7 +45,7 @@ export function safeBase64Encode(str: string): string {
 }
 
 /**
- * 安全的 decodeURIComponent
+ * 安全的 decodeURIComponent（仅用于 URI 语法组件解析）
  */
 export function tryDecodeURIComponent(str: string): string {
   try {
@@ -57,8 +56,68 @@ export function tryDecodeURIComponent(str: string): string {
 }
 
 /**
+ * 真正无损解析 Query：保留原始顺序、重复键、原始未转义形式
+ */
+export function parseRawQuery(rawQueryStr: string): RawQuery {
+  const clean = rawQueryStr.startsWith('?') ? rawQueryStr.slice(1) : rawQueryStr;
+  if (!clean) {
+    return { raw: '', entries: [] };
+  }
+
+  const pairs = clean.split('&');
+  const entries: RawQueryEntry[] = [];
+
+  for (const pair of pairs) {
+    if (!pair) continue;
+    const eqIdx = pair.indexOf('=');
+    let rawKey = '';
+    let rawValue = '';
+
+    if (eqIdx !== -1) {
+      rawKey = pair.substring(0, eqIdx);
+      rawValue = pair.substring(eqIdx + 1);
+    } else {
+      rawKey = pair;
+      rawValue = '';
+    }
+
+    entries.push({
+      rawKey,
+      rawValue,
+      key: tryDecodeURIComponent(rawKey.replace(/\+/g, ' ')),
+      value: tryDecodeURIComponent(rawValue.replace(/\+/g, ' '))
+    });
+  }
+
+  return {
+    raw: clean,
+    entries
+  };
+}
+
+/**
+ * 将 RawQuery 转为 Record 供快速字典查找（重复键以最后一个为准）
+ */
+export function queryEntriesToRecord(entries?: RawQueryEntry[]): Record<string, string> {
+  const map: Record<string, string> = {};
+  if (!entries) return map;
+  for (const e of entries) {
+    map[e.key] = e.value;
+  }
+  return map;
+}
+
+/**
+ * 无损重命名原始 URI：仅替换最后的 #节点名称，100% 保持所有原始协议参数
+ */
+export function renameRawUri(raw: string, name: string): string {
+  const i = raw.indexOf('#');
+  const base = i >= 0 ? raw.slice(0, i) : raw;
+  return `${base}#${encodeURIComponent(name)}`;
+}
+
+/**
  * 构造符合 RFC 6266 / RFC 5987 标准的 Content-Disposition 响应头
- * 避免部分客户端解析带双引号文件名时产生 \" 转义残留问题
  */
 export function formatContentDisposition(filename: string, ext: string): string {
   const cleanName = filename.replace(/[^\w\u4e00-\u9fa5\-_.]/g, '').trim() || 'SubConverter';
@@ -123,7 +182,6 @@ export function getRegionByNodeName(name: string): RegionInfo | null {
  * 智能为节点名称添加国旗 Emoji 前缀
  */
 export function addFlagToNodeName(name: string): string {
-  // 检查是否已有 Emoji 国旗
   const flagRegex = /[\uD83C][\uDDE6-\uDDFF][\uD83C][\uDDE6-\uDDFF]/;
   if (flagRegex.test(name)) {
     return name;
@@ -138,33 +196,35 @@ export function addFlagToNodeName(name: string): string {
 }
 
 /**
- * 节点深层唯一特征指纹（精确区分同 IP/端口下的不同传输协议、路径、公钥与流控配置）
+ * 节点深层唯一特征指纹
  */
-export function getNodeFingerprint(node: ProxyNode): string {
+export function getNodeFingerprint(node: NodeEnvelope): string {
+  const p: any = node.protocolData || {};
   return [
     node.name || '',
-    node.type || '',
+    node.protocol || '',
     node.server || '',
     node.port || '',
-    node.uuid || node.password || '',
-    node.cipher || '',
-    node.network || '',
-    node.wsPath || '',
-    node.grpcServiceName || '',
-    node.sni || '',
-    node.reality?.publicKey || '',
-    node.flow || '',
-    node.packetEncoding || '',
-    node.encryption || ''
+    p.uuid || p.id || p.password || p.secret || '',
+    p.cipher || p.method || p.scy || '',
+    p.network || p.net || p.type || p.transport?.type || '',
+    p.path || p.wsPath || p.transport?.path || '',
+    p.serviceName || p.grpcServiceName || p.transport?.serviceName || '',
+    p.sni || p.servername || p.host || '',
+    p.realityOpts?.publicKey || p.pbk || '',
+    p.flow || '',
+    p.packetEncoding || '',
+    p.encryption || '',
+    node.source?.raw || ''
   ].join('|');
 }
 
 /**
- * 基于深层特征指纹去重（防止不同订阅源包含完全相同节点时重复添加）
+ * 基于深层特征指纹去重
  */
-export function deduplicateNodesByFingerprint(nodes: ProxyNode[]): ProxyNode[] {
+export function deduplicateNodesByFingerprint(nodes: NodeEnvelope[]): NodeEnvelope[] {
   const seen = new Set<string>();
-  const unique: ProxyNode[] = [];
+  const unique: NodeEnvelope[] = [];
 
   for (const node of nodes) {
     const fp = getNodeFingerprint(node);
@@ -180,7 +240,7 @@ export function deduplicateNodesByFingerprint(nodes: ProxyNode[]): ProxyNode[] {
 /**
  * 节点名称去重
  */
-export function deduplicateNodeNames(nodes: ProxyNode[]): ProxyNode[] {
+export function deduplicateNodeNames(nodes: NodeEnvelope[]): NodeEnvelope[] {
   const nameCount: Record<string, number> = {};
 
   return nodes.map(node => {
@@ -199,12 +259,6 @@ export function deduplicateNodeNames(nodes: ProxyNode[]): ProxyNode[] {
 
 /**
  * 解析各种格式的节点重命名规则
- * 支持:
- * 1. 分隔符: 换行, 逗号, 分号, 竖线 |
- * 2. 语法:
- *    - 赋值语法: "香港=HK", "香港@HK"
- *    - 删除语法: "DEL-[69云]", "RM-广告" -> 搜索 [69云] 并替换为空
- *    - 连字符语法: "移动优化-專線" -> 搜索 移动优化 并替换为 專線
  */
 export function parseRenameRules(rulesStr?: string): Array<{ search: string; replace: string }> {
   if (!rulesStr || !rulesStr.trim()) return [];
@@ -216,7 +270,6 @@ export function parseRenameRules(rulesStr?: string): Array<{ search: string; rep
     const trimmed = raw.trim();
     if (!trimmed) continue;
 
-    // 1. 删除前缀: DEL-xxx 或 RM-xxx
     if (/^(?:DEL|RM)[-_@=]/i.test(trimmed)) {
       const search = trimmed.replace(/^(?:DEL|RM)[-_@=]/i, '').trim();
       if (search) {
@@ -225,7 +278,6 @@ export function parseRenameRules(rulesStr?: string): Array<{ search: string; rep
       }
     }
 
-    // 2. 等号与 @ 符号分隔: search=replace, search@replace
     if (trimmed.includes('=')) {
       const [search, ...rest] = trimmed.split('=');
       if (search) {
@@ -242,7 +294,6 @@ export function parseRenameRules(rulesStr?: string): Array<{ search: string; rep
       }
     }
 
-    // 3. 连字符分隔: search-replace (例如 移动优化-專線)
     if (trimmed.includes('-')) {
       const [search, ...rest] = trimmed.split('-');
       if (search) {
@@ -259,7 +310,7 @@ export function parseRenameRules(rulesStr?: string): Array<{ search: string; rep
  * 节点过滤、重命名与特征去重综合处理
  */
 export function processNodes(
-  rawNodes: ProxyNode[],
+  rawNodes: NodeEnvelope[],
   options: {
     includeRegex?: string;
     excludeRegex?: string;
@@ -267,11 +318,9 @@ export function processNodes(
     addEmoji?: boolean;
     enableUdp?: boolean;
   }
-): ProxyNode[] {
-  // 0. 特征指纹去重
+): NodeEnvelope[] {
   let nodes = deduplicateNodesByFingerprint(rawNodes);
 
-  // 1. 节点名称安全清洗（过滤控制字符与换行，限制最大 128 字符）
   nodes = nodes.map(node => {
     let cleanName = (node.name || '')
       .replace(/[\x00-\x1f\x7f]/g, ' ')
@@ -283,7 +332,6 @@ export function processNodes(
     return { ...node, name: cleanName || 'Node' };
   });
 
-  // 2. 包含过滤 (Include Regex，限制最大 500 字符)
   if (options.includeRegex && options.includeRegex.trim()) {
     try {
       const safePattern = options.includeRegex.trim().substring(0, 500);
@@ -292,7 +340,6 @@ export function processNodes(
     } catch {}
   }
 
-  // 3. 排除过滤 (Exclude Regex，限制最大 500 字符)
   if (options.excludeRegex && options.excludeRegex.trim()) {
     try {
       const safePattern = options.excludeRegex.trim().substring(0, 500);
@@ -301,7 +348,6 @@ export function processNodes(
     } catch {}
   }
 
-  // 4. 重命名规则 (Rename Rules，限制最多 30 条，每条最多 200 字符)
   if (options.renameRules && options.renameRules.length > 0) {
     const safeRules = options.renameRules.slice(0, 30).map(r => ({
       search: (r.search || '').substring(0, 200),
@@ -323,7 +369,6 @@ export function processNodes(
     });
   }
 
-  // 5. 国旗添加 (Emoji Flag)
   if (options.addEmoji) {
     nodes = nodes.map(node => ({
       ...node,
@@ -331,7 +376,6 @@ export function processNodes(
     }));
   }
 
-  // 6. UDP 强制开启/关闭
   if (options.enableUdp !== undefined) {
     nodes = nodes.map(node => ({
       ...node,
@@ -339,7 +383,6 @@ export function processNodes(
     }));
   }
 
-  // 7. 名称去重
   return deduplicateNodeNames(nodes);
 }
 
@@ -391,9 +434,9 @@ export function parseUserinfo(userinfoStr?: string): { upload: number; download:
 }
 
 /**
- * 根据机场流量信息生成置顶展示节点 (适用于 Shadowrocket, V2RayN, Clash)
+ * 根据机场流量信息生成置顶展示节点
  */
-export function createUserinfoNodes(userinfoStr?: string): ProxyNode[] {
+export function createUserinfoNodes(userinfoStr?: string): ShadowsocksNode[] {
   const info = parseUserinfo(userinfoStr);
   if (!info) return [];
 
@@ -404,26 +447,40 @@ export function createUserinfoNodes(userinfoStr?: string): ProxyNode[] {
 
   const dummyCipherPass = safeBase64Encode('none:info');
 
-  const trafficNode: ProxyNode = {
+  const trafficNode: ShadowsocksNode = {
     name: trafficText,
-    type: 'shadowsocks',
+    protocol: 'shadowsocks',
     server: '127.0.0.1',
     port: 0,
-    cipher: 'none',
-    password: 'info',
-    udp: false,
-    raw: `ss://${dummyCipherPass}@127.0.0.1:0#${encodeURIComponent(trafficText)}`
+    source: {
+      format: 'uri',
+      raw: `ss://${dummyCipherPass}@127.0.0.1:0#${encodeURIComponent(trafficText)}`
+    },
+    protocolData: {
+      cipher: 'none',
+      password: 'info',
+      isSS2022: false,
+      extras: {}
+    },
+    udp: false
   };
 
-  const expireNode: ProxyNode = {
+  const expireNode: ShadowsocksNode = {
     name: expireText,
-    type: 'shadowsocks',
+    protocol: 'shadowsocks',
     server: '127.0.0.1',
     port: 0,
-    cipher: 'none',
-    password: 'info',
-    udp: false,
-    raw: `ss://${dummyCipherPass}@127.0.0.1:0#${encodeURIComponent(expireText)}`
+    source: {
+      format: 'uri',
+      raw: `ss://${dummyCipherPass}@127.0.0.1:0#${encodeURIComponent(expireText)}`
+    },
+    protocolData: {
+      cipher: 'none',
+      password: 'info',
+      isSS2022: false,
+      extras: {}
+    },
+    udp: false
   };
 
   return [trafficNode, expireNode];

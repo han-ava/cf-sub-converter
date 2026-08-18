@@ -4,61 +4,242 @@ export interface Env {
   AUTH_TOKEN?: string;
 }
 
-export type ProxyType =
+export type KnownProtocol =
+  | 'vless'
+  | 'vmess'
+  | 'trojan'
   | 'ss'
   | 'shadowsocks'
   | 'ssr'
   | 'shadowsocksr'
-  | 'vmess'
-  | 'vless'
-  | 'trojan'
   | 'hysteria'
   | 'hysteria2'
+  | 'hy2'
+  | 'anytls'
   | 'tuic'
   | 'wireguard'
   | 'socks5'
-  | 'http';
+  | 'http'
+  | string;
 
-export interface ProxyNode {
+export interface NodeSource {
+  format: 'uri' | 'vmess-json' | 'clash' | 'singbox';
+  raw: string;
+}
+
+export interface RawQueryEntry {
+  rawKey: string;
+  rawValue: string;
+  key: string;
+  value: string;
+}
+
+export interface RawQuery {
+  raw: string;
+  entries: RawQueryEntry[];
+}
+
+export interface BaseNode {
   name: string;
-  type: string;
   server: string;
   port: number;
-  uuid?: string;
-  password?: string;
-  cipher?: string;
+  source: NodeSource;
+  rawQuery?: RawQuery;
   udp?: boolean;
-  tls?: boolean;
-  sni?: string;
-  alpn?: string[];
-  fingerprint?: string;
-  skipCertVerify?: boolean;
-  network?: string;
-  wsPath?: string;
-  wsHeaders?: Record<string, string>;
-  grpcServiceName?: string;
-  flow?: string;
-  packetEncoding?: string;
-  encryption?: string;
-  reality?: {
-    publicKey: string;
-    shortId?: string;
-    spiderX?: string;
+}
+
+export interface VlessNode extends BaseNode {
+  protocol: 'vless';
+  protocolData: {
+    uuid: string;
+    flow?: string;
+    encryption?: string;
+    packetEncoding?: string;
+    security?: 'none' | 'tls' | 'reality' | string;
+    sni?: string;
+    alpn?: string[];
+    fingerprint?: string;
+    skipCertVerify?: boolean;
+    realityOpts?: {
+      publicKey: string;
+      shortId?: string;
+      spiderX?: string;
+    };
+    transport?: {
+      type: 'tcp' | 'ws' | 'grpc' | 'http' | 'h2' | 'xhttp' | 'splithttp' | string;
+      path?: string;
+      headers?: Record<string, string>;
+      serviceName?: string;
+      mode?: string;
+      extra?: string;
+    };
+    extras: Record<string, unknown>;
   };
-  obfs?: string;
-  obfsPassword?: string;
-  obfsParam?: string;
-  protoParam?: string;
-  protocol?: string;
-  // Hysteria / TUIC specific
-  upMbps?: number;
-  downMbps?: number;
-  congestionControl?: string;
-  udpRelayMode?: string;
-  // Clash & Sing-box specific cached representations
-  clashObj?: Record<string, any>;
-  singboxObj?: Record<string, any>;
-  raw?: string;
+}
+
+export interface VmessNode extends BaseNode {
+  protocol: 'vmess';
+  protocolData: {
+    uuid: string;
+    alterId: number;
+    cipher: string;
+    security?: string;
+    tls?: boolean;
+    sni?: string;
+    alpn?: string[];
+    fingerprint?: string;
+    skipCertVerify?: boolean;
+    packetEncoding?: string;
+    globalPadding?: boolean;
+    authenticatedLength?: boolean;
+    transport?: {
+      type: string;
+      path?: string;
+      headers?: Record<string, string>;
+      serviceName?: string;
+      httpHost?: string[];
+      httpPath?: string[];
+    };
+    rawJson: Record<string, unknown>;
+    extras: Record<string, unknown>;
+  };
+}
+
+export interface ShadowsocksNode extends BaseNode {
+  protocol: 'ss' | 'shadowsocks';
+  protocolData: {
+    cipher: string;
+    password: string;
+    isSS2022: boolean;
+    plugin?: string;
+    pluginOpts?: Record<string, any>;
+    udpOverTcp?: boolean;
+    udpOverTcpVersion?: number;
+    clientFingerprint?: string;
+    smux?: Record<string, any>;
+    extras: Record<string, unknown>;
+  };
+}
+
+export interface Hysteria2Node extends BaseNode {
+  protocol: 'hysteria2' | 'hy2';
+  protocolData: {
+    password: string;
+    sni?: string;
+    skipCertVerify?: boolean;
+    ports?: string;
+    hopInterval?: number;
+    up?: string | number;
+    down?: string | number;
+    obfs?: string;
+    obfsPassword?: string;
+    obfsMinPacketSize?: number;
+    obfsMaxPacketSize?: number;
+    alpn?: string[];
+    fingerprint?: string;
+    nameCertVerify?: string;
+    handshakeTimeout?: string;
+    extras: Record<string, unknown>;
+  };
+}
+
+export interface AnyTLSNode extends BaseNode {
+  protocol: 'anytls';
+  protocolData: {
+    password: string;
+    sni?: string;
+    insecure?: boolean;
+    alpn?: string[];
+    fingerprint?: string;
+    nameCertVerify?: string;
+    clientMetadata?: string;
+    idleSessionCheckInterval?: string;
+    idleSessionTimeout?: string;
+    minIdleSession?: string;
+    shadowTlsOpts?: Record<string, any>;
+    restlsOpts?: Record<string, any>;
+    jlsOpts?: Record<string, any>;
+    extras: Record<string, unknown>;
+  };
+}
+
+export interface TrojanNode extends BaseNode {
+  protocol: 'trojan';
+  protocolData: {
+    password: string;
+    sni?: string;
+    alpn?: string[];
+    fingerprint?: string;
+    skipCertVerify?: boolean;
+    transport?: {
+      type: string;
+      path?: string;
+      headers?: Record<string, string>;
+      serviceName?: string;
+    };
+    extras: Record<string, unknown>;
+  };
+}
+
+export interface TuicNode extends BaseNode {
+  protocol: 'tuic';
+  protocolData: {
+    uuid?: string;
+    password?: string;
+    sni?: string;
+    alpn?: string[];
+    congestionControl?: string;
+    udpRelayMode?: string;
+    skipCertVerify?: boolean;
+    zeroRttHandshake?: boolean;
+    heartbeat?: string;
+    extras: Record<string, unknown>;
+  };
+}
+
+export interface ShadowsocksRNode extends BaseNode {
+  protocol: 'ssr' | 'shadowsocksr';
+  protocolData: {
+    cipher: string;
+    password: string;
+    protocol: string;
+    obfs: string;
+    obfsParam?: string;
+    protoParam?: string;
+    extras: Record<string, unknown>;
+  };
+}
+
+export interface GenericProxyNode extends BaseNode {
+  protocol: string;
+  protocolData: Record<string, any>;
+}
+
+export type NodeEnvelope =
+  | VlessNode
+  | VmessNode
+  | ShadowsocksNode
+  | Hysteria2Node
+  | AnyTLSNode
+  | TrojanNode
+  | TuicNode
+  | ShadowsocksRNode
+  | GenericProxyNode;
+
+export type ProxyNode = NodeEnvelope;
+
+export interface ConversionWarning {
+  level: 'info' | 'warn' | 'fatal';
+  field?: string;
+  message: string;
+}
+
+export interface AdapterResult {
+  config?: Record<string, any>;
+  warnings: ConversionWarning[];
+  unsupportedParams: string[];
+  lossy: boolean;
+  fatal: boolean;
 }
 
 export interface ConvertOptions {
