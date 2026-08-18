@@ -25,7 +25,7 @@ import { adaptOthersToMihomo } from './others';
 
 export function nodeToClashProxy(node: NodeEnvelope): Record<string, any> | undefined {
   const res = adaptNodeToMihomo(node);
-  return res.fatal ? undefined : res.config;
+  return res.emitted ? res.config : undefined;
 }
 
 export function adaptNodeToMihomo(node: NodeEnvelope): AdapterResult {
@@ -40,10 +40,11 @@ export function adaptNodeToMihomo(node: NodeEnvelope): AdapterResult {
     }
     return {
       config,
-      warnings: [],
-      unsupportedParams: [],
+      fatal: false,
       lossy: false,
-      fatal: false
+      emitted: true,
+      warnings: [],
+      unsupportedParams: []
     };
   }
 

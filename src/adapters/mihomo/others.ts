@@ -23,10 +23,11 @@ export function adaptOthersToMihomo(node: GenericProxyNode): AdapterResult {
         tls: !!p.tls,
         'skip-cert-verify': !!p.skipCertVerify
       },
-      warnings: [],
-      unsupportedParams: [],
+      fatal: false,
       lossy: false,
-      fatal: false
+      emitted: true,
+      warnings: [],
+      unsupportedParams: []
     };
   }
 
@@ -40,10 +41,11 @@ export function adaptOthersToMihomo(node: GenericProxyNode): AdapterResult {
         tls: proto === 'https' || !!p.tls,
         'skip-cert-verify': !!p.skipCertVerify
       },
-      warnings: [],
-      unsupportedParams: [],
+      fatal: false,
       lossy: false,
-      fatal: false
+      emitted: true,
+      warnings: [],
+      unsupportedParams: []
     };
   }
 
@@ -54,10 +56,11 @@ export function adaptOthersToMihomo(node: GenericProxyNode): AdapterResult {
         type: 'wireguard',
         ...p
       },
-      warnings: [],
-      unsupportedParams: [],
+      fatal: false,
       lossy: false,
-      fatal: false
+      emitted: true,
+      warnings: [],
+      unsupportedParams: []
     };
   }
 
@@ -66,9 +69,10 @@ export function adaptOthersToMihomo(node: GenericProxyNode): AdapterResult {
       ...base,
       ...p
     },
-    warnings: [],
-    unsupportedParams: [],
+    fatal: false,
     lossy: false,
-    fatal: false
+    emitted: true,
+    warnings: [],
+    unsupportedParams: []
   };
 }

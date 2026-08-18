@@ -237,30 +237,43 @@ export default {
           enableUdp: body.udp !== false
         });
 
-        // 统计转换损失与警告 (区分 fatal 致命不可转与 lossy 次要损失)
-        let withWarnings = 0;
-        let unsupportedCount = 0;
+        // Compatibility Gate: 统计转换质量等级 (perfect, warning, fatal) 与最终输出
+        let perfectCount = 0;
+        let warningCount = 0;
         let fatalCount = 0;
-        let lossyCount = 0;
 
         const nodeItems = processedNodes.slice(0, 1000).map(n => {
           const adaptRes = adaptNodeToMihomo(n);
-          if (adaptRes.fatal) fatalCount++;
-          if (adaptRes.lossy) lossyCount++;
-          if (adaptRes.warnings.length > 0) withWarnings++;
-          if (adaptRes.unsupportedParams.length > 0) unsupportedCount++;
+          let status: 'perfect' | 'warning' | 'fatal' = 'perfect';
+
+          if (adaptRes.fatal) {
+            status = 'fatal';
+            fatalCount++;
+          } else if (adaptRes.lossy || adaptRes.warnings.length > 0) {
+            status = 'warning';
+            warningCount++;
+          } else {
+            perfectCount++;
+          }
 
           return {
             name: n.name,
             type: n.protocol,
             server: n.server,
             port: n.port,
-            lossy: adaptRes.lossy,
-            fatal: adaptRes.fatal,
-            warnings: adaptRes.warnings.map(w => `[${w.level.toUpperCase()}] ${w.message}`),
-            unsupportedParams: adaptRes.unsupportedParams
+            conversion: {
+              status,
+              emitted: adaptRes.emitted,
+              target: 'mihomo',
+              lossy: adaptRes.lossy,
+              warnings: adaptRes.warnings.map(w => `[${w.level.toUpperCase()}] ${w.message}`),
+              unsupportedParams: adaptRes.unsupportedParams,
+              skipReason: adaptRes.skipReason
+            }
           };
         });
+
+        const finalCount = perfectCount + warningCount;
 
         // 地区统计
         const regionStats: Record<string, number> = {};
@@ -277,10 +290,10 @@ export default {
             ok: true,
             totalRaw: rawNodes.length,
             totalMatched: processedNodes.length,
-            withWarnings,
-            unsupportedCount,
+            perfectCount,
+            warningCount,
             fatalCount,
-            lossyCount,
+            finalCount,
             userinfo: userinfoObj,
             regions: regionStats,
             nodes: nodeItems

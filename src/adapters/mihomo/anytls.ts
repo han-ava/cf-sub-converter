@@ -1,17 +1,33 @@
 // src/adapters/mihomo/anytls.ts
 import { AdapterResult, AnyTLSNode, ConversionWarning } from '../../types';
+import { parseALPN } from '../../utils';
 
 export function adaptAnyTLSToMihomo(node: AnyTLSNode): AdapterResult {
   const warnings: ConversionWarning[] = [];
   const unsupportedParams: string[] = [];
   const p = node.protocolData;
 
-  if (!p.password) {
+  // Compatibility Gate: 必需凭据校验
+  if (!p.password || !p.password.trim()) {
     return {
-      warnings: [{ level: 'fatal', field: 'password', message: `节点 [${node.name}] 缺少必需的 AnyTLS 密码` }],
-      unsupportedParams: ['password'],
+      fatal: true,
       lossy: true,
-      fatal: true
+      emitted: false,
+      skipReason: `节点 [${node.name}] 缺少必需的 AnyTLS 密码`,
+      warnings: [{ level: 'fatal', field: 'password', message: `节点 [${node.name}] 缺少必需的 AnyTLS 密码` }],
+      unsupportedParams: ['password']
+    };
+  }
+
+  // Compatibility Gate: AnyTLS + Reality 互斥检查（Mihomo 官方明确不支持 AnyTLS + Reality）
+  if (p.extras?.reality || p.extras?.pbk || p.extras?.['public-key']) {
+    return {
+      fatal: true,
+      lossy: true,
+      emitted: false,
+      skipReason: `Mihomo 官方明确不支持 AnyTLS 与 Reality 组合配置`,
+      warnings: [{ level: 'fatal', field: 'reality', message: `Mihomo 官方明确不支持 AnyTLS 搭配 Reality` }],
+      unsupportedParams: ['reality', 'pbk']
     };
   }
 
@@ -20,13 +36,17 @@ export function adaptAnyTLSToMihomo(node: AnyTLSNode): AdapterResult {
     type: 'anytls',
     server: node.server,
     port: node.port,
-    password: p.password,
+    password: p.password.trim(),
     sni: p.sni || node.server,
     'skip-cert-verify': !!p.insecure,
     udp: node.udp !== false
   };
 
-  if (p.alpn) config.alpn = p.alpn;
+  const alpn = parseALPN(p.alpn);
+  if (alpn && alpn.length > 0) {
+    config.alpn = alpn;
+  }
+
   if (p.fingerprint) config['client-fingerprint'] = p.fingerprint;
   if (p.nameCertVerify) config['name-cert-verify'] = p.nameCertVerify;
   if (p.clientMetadata) config['client-metadata'] = p.clientMetadata;
@@ -38,33 +58,23 @@ export function adaptAnyTLSToMihomo(node: AnyTLSNode): AdapterResult {
   if (p.restlsOpts) config['restls-opts'] = p.restlsOpts;
   if (p.jlsOpts) config['jls-opts'] = p.jlsOpts;
 
-  // Mihomo 明确不支持 AnyTLS + Reality
-  if (p.extras?.reality || p.extras?.pbk || p.extras?.['public-key']) {
-    warnings.push({
-      level: 'warn',
-      field: 'reality',
-      message: `Mihomo 官方明确不支持 AnyTLS 搭配 Reality，已自动忽略 Reality 伪装参数`
-    });
-  }
-
   if (p.extras && Object.keys(p.extras).length > 0) {
     for (const [k, v] of Object.entries(p.extras)) {
-      if (k !== 'reality' && k !== 'pbk' && k !== 'public-key') {
-        unsupportedParams.push(k);
-        warnings.push({
-          level: 'warn',
-          field: k,
-          message: `AnyTLS 扩展参数 [${k}=${v}] 已保留在原始节点中，但 Mihomo 官方无对应字段映射`
-        });
-      }
+      unsupportedParams.push(k);
+      warnings.push({
+        level: 'warn',
+        field: k,
+        message: `AnyTLS 扩展参数 [${k}=${v}] 已保留在原始节点中，但 Mihomo 官方无对应字段映射`
+      });
     }
   }
 
   return {
     config,
-    warnings,
-    unsupportedParams,
+    fatal: false,
     lossy: unsupportedParams.length > 0,
-    fatal: false
+    emitted: true,
+    warnings,
+    unsupportedParams
   };
 }

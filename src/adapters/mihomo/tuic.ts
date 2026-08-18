@@ -1,19 +1,25 @@
 // src/adapters/mihomo/tuic.ts
 import { AdapterResult, ConversionWarning, TuicNode } from '../../types';
+import { parseALPN } from '../../utils';
 
 export function adaptTuicToMihomo(node: TuicNode): AdapterResult {
   const warnings: ConversionWarning[] = [];
   const unsupportedParams: string[] = [];
   const p = node.protocolData;
 
+  // Compatibility Gate: 必需凭据校验
   if (!p.uuid && !p.password) {
     return {
-      warnings: [{ level: 'fatal', field: 'uuid', message: `节点 [${node.name}] 缺少必需的 TUIC UUID 或密码` }],
-      unsupportedParams: ['uuid'],
+      fatal: true,
       lossy: true,
-      fatal: true
+      emitted: false,
+      skipReason: `节点 [${node.name}] 缺少必需的 TUIC UUID 或密码`,
+      warnings: [{ level: 'fatal', field: 'uuid', message: `节点 [${node.name}] 缺少必需的 TUIC UUID 或密码` }],
+      unsupportedParams: ['uuid']
     };
   }
+
+  const alpn = parseALPN(p.alpn);
 
   const config: Record<string, any> = {
     name: node.name,
@@ -25,7 +31,7 @@ export function adaptTuicToMihomo(node: TuicNode): AdapterResult {
     sni: p.sni || node.server,
     'congestion-controller': p.congestionControl || 'bbr',
     'udp-relay-mode': p.udpRelayMode || 'native',
-    alpn: p.alpn || ['h3'],
+    alpn: alpn && alpn.length > 0 ? alpn : ['h3'],
     'skip-cert-verify': !!p.skipCertVerify,
     udp: node.udp !== false
   };
@@ -51,9 +57,10 @@ export function adaptTuicToMihomo(node: TuicNode): AdapterResult {
 
   return {
     config,
-    warnings,
-    unsupportedParams,
+    fatal: false,
     lossy: unsupportedParams.length > 0,
-    fatal: false
+    emitted: true,
+    warnings,
+    unsupportedParams
   };
 }

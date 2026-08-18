@@ -228,6 +228,8 @@ export type NodeEnvelope =
 
 export type ProxyNode = NodeEnvelope;
 
+export type ConversionStatus = 'perfect' | 'warning' | 'fatal';
+
 export interface ConversionWarning {
   level: 'info' | 'warn' | 'fatal';
   field?: string;
@@ -236,10 +238,22 @@ export interface ConversionWarning {
 
 export interface AdapterResult {
   config?: Record<string, any>;
+  fatal: boolean;
+  lossy: boolean;
+  emitted: boolean;
   warnings: ConversionWarning[];
   unsupportedParams: string[];
+  skipReason?: string;
+}
+
+export interface NodeConversionInfo {
+  status: ConversionStatus;
+  emitted: boolean;
+  target: string;
   lossy: boolean;
-  fatal: boolean;
+  warnings: string[];
+  unsupportedParams: string[];
+  skipReason?: string;
 }
 
 export interface ConvertOptions {

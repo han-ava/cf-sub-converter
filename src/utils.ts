@@ -45,6 +45,60 @@ export function safeBase64Encode(str: string): string {
 }
 
 /**
+ * 严格 Base64 解码检查（严禁宽松容错，杜绝畸形或长度不符的 Base64 凭据）
+ */
+export function strictBase64Decode(value: string): Uint8Array | null {
+  if (!value || typeof value !== 'string') return null;
+  // 必须仅包含合法 Base64 字符且长度为 4 的整数倍
+  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(value) || value.length % 4 !== 0) {
+    return null;
+  }
+  try {
+    const binaryString = atob(value);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+    // 严格回显校验（确保无多余脏字节或畸形 padding）
+    let reEncoded = '';
+    for (let i = 0; i < bytes.length; i++) {
+      reEncoded += String.fromCharCode(bytes[i]!);
+    }
+    if (btoa(reEncoded) !== value) {
+      return null;
+    }
+    return bytes;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 遵循规范解析 ALPN：支持标准 JSON 数组与逗号分隔字符串，不做猜测式清洗
+ */
+export function parseALPN(raw?: string | string[]): string[] | undefined {
+  if (!raw) return undefined;
+  if (Array.isArray(raw)) {
+    return raw.map(s => String(s).trim()).filter(Boolean);
+  }
+  const trimmed = raw.trim();
+  if (!trimmed) return undefined;
+
+  // 1. 如果是标准 JSON 数组格式 (如 '["h2", "http/1.1"]')
+  if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (Array.isArray(parsed)) {
+        return parsed.map(s => String(s).trim()).filter(Boolean);
+      }
+    } catch {}
+  }
+
+  // 2. 逗号分隔格式 (如 'h2,http/1.1')
+  return trimmed.split(',').map(s => s.trim()).filter(Boolean);
+}
+
+/**
  * 安全的 decodeURIComponent（仅用于 URI 语法组件解析）
  */
 export function tryDecodeURIComponent(str: string): string {

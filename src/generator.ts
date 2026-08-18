@@ -41,11 +41,11 @@ export function toClashMeta(
   const regionalGroupNames: string[] = [];
 
   if (!isMinimal) {
-    for (const node of nodes) {
-      const region = getRegionByNodeName(node.name);
+    for (const proxy of proxies) {
+      const region = getRegionByNodeName(proxy.name);
       if (region) {
         if (!regionNodeMap[region.code]) regionNodeMap[region.code] = [];
-        regionNodeMap[region.code]!.push(node.name);
+        regionNodeMap[region.code]!.push(proxy.name);
       }
     }
 

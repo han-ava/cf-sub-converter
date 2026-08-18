@@ -359,6 +359,13 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       border-radius: 4px;
       font-size: 0.7rem;
     }
+    .node-tag-perfect {
+      background: rgba(16, 185, 129, 0.15);
+      color: var(--success);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 0.7rem;
+    }
     .node-tag-warn {
       background: rgba(245, 158, 11, 0.15);
       color: var(--warning);
@@ -375,6 +382,37 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       font-size: 0.7rem;
       cursor: help;
     }
+
+    .gate-summary-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(95px, 1fr));
+      gap: 0.5rem;
+      margin-bottom: 0.85rem;
+    }
+    .gate-card {
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 0.5rem 0.6rem;
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .gate-card-title {
+      font-size: 0.7rem;
+      color: var(--text-dim);
+      font-weight: 500;
+    }
+    .gate-card-val {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: var(--text-main);
+    }
+    .gate-card-perfect .gate-card-val { color: var(--success); }
+    .gate-card-warn .gate-card-val { color: var(--warning); }
+    .gate-card-fatal .gate-card-val { color: var(--danger); }
+    .gate-card-final .gate-card-val { color: var(--primary); }
     
     .toast {
       position: fixed;
@@ -577,6 +615,34 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
           <span>📊 节点与流量实时看板</span>
         </div>
         <span id="inspectCount" class="badge">0 节点</span>
+      </div>
+
+      <!-- Compatibility Gate 状态统计看板 -->
+      <div id="gateSummaryGrid" class="gate-summary-grid" style="display: none;">
+        <div class="gate-card">
+          <span class="gate-card-title">原始节点</span>
+          <span id="gateTotalRaw" class="gate-card-val">0</span>
+        </div>
+        <div class="gate-card">
+          <span class="gate-card-title">筛选后</span>
+          <span id="gateTotalMatched" class="gate-card-val">0</span>
+        </div>
+        <div class="gate-card gate-card-perfect">
+          <span class="gate-card-title">完整转换</span>
+          <span id="gatePerfectCount" class="gate-card-val">0</span>
+        </div>
+        <div class="gate-card gate-card-warn">
+          <span class="gate-card-title">有警告</span>
+          <span id="gateWarnCount" class="gate-card-val">0</span>
+        </div>
+        <div class="gate-card gate-card-fatal">
+          <span class="gate-card-title">无法转换</span>
+          <span id="gateFatalCount" class="gate-card-val">0</span>
+        </div>
+        <div class="gate-card gate-card-final">
+          <span class="gate-card-title">最终输出</span>
+          <span id="gateFinalCount" class="gate-card-val">0</span>
+        </div>
       </div>
 
       <div id="trafficCard" class="traffic-bar-container" style="display: none;">
@@ -801,17 +867,16 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
         const inspectPanel = document.getElementById('inspectPanel');
         inspectPanel.classList.add('show');
 
-        // 更新数量 (含转换损失与告警统计)
-        const fatalCount = data.fatalCount || 0;
-        const warnCount = data.withWarnings || 0;
-        const lossyCount = data.lossyCount || 0;
-        const perfectCount = Math.max(0, (data.totalMatched || 0) - lossyCount - fatalCount);
-        let countText = \`匹配 \${data.totalMatched} / 原始 \${data.totalRaw} (完美 \${perfectCount} / 告警 \${warnCount}\`;
-        if (fatalCount > 0) {
-          countText += \` / 拦截不可转 \${fatalCount}\`;
-        }
-        countText += ')';
-        document.getElementById('inspectCount').textContent = countText;
+        // 统计数据填充
+        document.getElementById('gateTotalRaw').textContent = data.totalRaw || 0;
+        document.getElementById('gateTotalMatched').textContent = data.totalMatched || 0;
+        document.getElementById('gatePerfectCount').textContent = data.perfectCount || 0;
+        document.getElementById('gateWarnCount').textContent = data.warningCount || 0;
+        document.getElementById('gateFatalCount').textContent = data.fatalCount || 0;
+        document.getElementById('gateFinalCount').textContent = data.finalCount || 0;
+        document.getElementById('gateSummaryGrid').style.display = 'grid';
+
+        document.getElementById('inspectCount').textContent = \`输出 \${data.finalCount} / 原始 \${data.totalRaw}\`;
 
         // 流量信息
         const trafficCard = document.getElementById('trafficCard');
@@ -867,22 +932,32 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
           chips.appendChild(chip);
         }
 
-        // 节点列表
+        // 节点列表渲染 (Compatibility Gate 两段式透明呈现: 原始解析 -> 目标转换)
         const nodeList = document.getElementById('nodeList');
         nodeList.innerHTML = (data.nodes || []).map(n => {
-          const isFatal = n.fatal;
-          const hasWarn = n.warnings && n.warnings.length > 0;
-          const warnTip = hasWarn ? n.warnings.map(w => w.replace(/"/g, '&quot;')).join('&#10;') : '';
+          const conv = n.conversion || {};
+          const status = conv.status || 'perfect';
           let badge = '';
-          if (isFatal) {
-            badge = \`<span class="node-tag-fatal" title="\${warnTip}">❌ 致命不可转</span>\`;
-          } else if (hasWarn) {
-            badge = \`<span class="node-tag-warn" title="\${warnTip}">⚠️ \${n.warnings.length} 告警</span>\`;
+
+          if (status === 'fatal') {
+            const skipTip = (conv.skipReason || '关键连接参数无法映射') + '&#10;[处理] 该节点已从最终配置中排除';
+            badge = \`<span class="node-tag-fatal" title="\${skipTip.replace(/"/g, '&quot;')}">❌ 无法转换 (已排除)</span>\`;
+          } else if (status === 'warning') {
+            const warnDetails = (conv.warnings || []).concat((conv.unsupportedParams || []).map(p => '未映射: ' + p)).join('&#10;');
+            badge = \`<span class="node-tag-warn" title="\${warnDetails.replace(/"/g, '&quot;')}">⚠️ 有转换警告 (\${conv.warnings?.length || 1})</span>\`;
+          } else {
+            badge = \`<span class="node-tag-perfect">✅ 完整转换</span>\`;
           }
+
           return \`
-            <div class="node-item">
-              <span>\${n.name}</span>
-              <div style="display: flex; gap: 6px; align-items: center;">
+            <div class="node-item" style="\${status === 'fatal' ? 'opacity: 0.7; border-color: rgba(239, 68, 68, 0.25);' : ''}">
+              <div>
+                <div style="font-weight: 500;">\${n.name}</div>
+                <div style="font-size: 0.75rem; color: var(--text-dim); margin-top: 2px;">
+                  \${n.server}:\${n.port} \${status === 'fatal' && conv.skipReason ? \`<span style="color: var(--danger); margin-left: 6px;">[原因] \${conv.skipReason}</span>\` : ''}
+                </div>
+              </div>
+              <div style="display: flex; gap: 6px; align-items: center; flex-shrink: 0;">
                 \${badge}
                 <span class="node-tag">\${(n.type || '').toUpperCase()}</span>
               </div>

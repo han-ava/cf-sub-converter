@@ -1,17 +1,35 @@
 // src/adapters/mihomo/hysteria2.ts
 import { AdapterResult, ConversionWarning, Hysteria2Node } from '../../types';
+import { parseALPN } from '../../utils';
+
+const SUPPORTED_HY2_OBFS = new Set(['salamander']);
 
 export function adaptHysteria2ToMihomo(node: Hysteria2Node): AdapterResult {
   const warnings: ConversionWarning[] = [];
   const unsupportedParams: string[] = [];
   const p = node.protocolData;
 
-  if (!p.password) {
+  // Compatibility Gate: 必需密码校验
+  if (!p.password || !p.password.trim()) {
     return {
-      warnings: [{ level: 'fatal', field: 'password', message: `节点 [${node.name}] 缺少必需的 Hysteria 2 密码` }],
-      unsupportedParams: ['password'],
+      fatal: true,
       lossy: true,
-      fatal: true
+      emitted: false,
+      skipReason: `节点 [${node.name}] 缺少必需的 Hysteria 2 密码`,
+      warnings: [{ level: 'fatal', field: 'password', message: `节点 [${node.name}] 缺少必需的 Hysteria 2 密码` }],
+      unsupportedParams: ['password']
+    };
+  }
+
+  // Compatibility Gate: Obfs 混淆算法兼容性校验
+  if (p.obfs && !SUPPORTED_HY2_OBFS.has(p.obfs.toLowerCase())) {
+    return {
+      fatal: true,
+      lossy: true,
+      emitted: false,
+      skipReason: `Mihomo 客户端不支持该 Hysteria 2 混淆类型: [${p.obfs}]`,
+      warnings: [{ level: 'fatal', field: 'obfs', message: `不支持的 HY2 混淆类型: [${p.obfs}]` }],
+      unsupportedParams: ['obfs']
     };
   }
 
@@ -20,7 +38,7 @@ export function adaptHysteria2ToMihomo(node: Hysteria2Node): AdapterResult {
     type: 'hysteria2',
     server: node.server,
     port: node.port,
-    password: p.password,
+    password: p.password.trim(),
     sni: p.sni || node.server,
     'skip-cert-verify': !!p.skipCertVerify,
     udp: node.udp !== false
@@ -38,7 +56,11 @@ export function adaptHysteria2ToMihomo(node: Hysteria2Node): AdapterResult {
     if (p.obfsMaxPacketSize) config['obfs-max-packet-size'] = p.obfsMaxPacketSize;
   }
 
-  if (p.alpn) config.alpn = p.alpn;
+  const alpn = parseALPN(p.alpn);
+  if (alpn && alpn.length > 0) {
+    config.alpn = alpn;
+  }
+
   if (p.fingerprint) config['client-fingerprint'] = p.fingerprint;
   if (p.nameCertVerify) config['name-cert-verify'] = p.nameCertVerify;
   if (p.handshakeTimeout) config['handshake-timeout'] = p.handshakeTimeout;
@@ -56,9 +78,10 @@ export function adaptHysteria2ToMihomo(node: Hysteria2Node): AdapterResult {
 
   return {
     config,
-    warnings,
-    unsupportedParams,
+    fatal: false,
     lossy: unsupportedParams.length > 0,
-    fatal: false
+    emitted: true,
+    warnings,
+    unsupportedParams
   };
 }

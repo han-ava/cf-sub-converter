@@ -1,17 +1,21 @@
 // src/adapters/mihomo/trojan.ts
 import { AdapterResult, ConversionWarning, TrojanNode } from '../../types';
+import { parseALPN } from '../../utils';
 
 export function adaptTrojanToMihomo(node: TrojanNode): AdapterResult {
   const warnings: ConversionWarning[] = [];
   const unsupportedParams: string[] = [];
   const p = node.protocolData;
 
-  if (!p.password) {
+  // Compatibility Gate: 必需密码校验
+  if (!p.password || !p.password.trim()) {
     return {
-      warnings: [{ level: 'fatal', field: 'password', message: `节点 [${node.name}] 缺少必需的 Trojan 密码` }],
-      unsupportedParams: ['password'],
+      fatal: true,
       lossy: true,
-      fatal: true
+      emitted: false,
+      skipReason: `节点 [${node.name}] 缺少必需的 Trojan 密码`,
+      warnings: [{ level: 'fatal', field: 'password', message: `节点 [${node.name}] 缺少必需的 Trojan 密码` }],
+      unsupportedParams: ['password']
     };
   }
 
@@ -20,13 +24,15 @@ export function adaptTrojanToMihomo(node: TrojanNode): AdapterResult {
     type: 'trojan',
     server: node.server,
     port: node.port,
-    password: p.password,
+    password: p.password.trim(),
     sni: p.sni || node.server,
-    alpn: p.alpn || ['h2', 'http/1.1'],
     'skip-cert-verify': !!p.skipCertVerify,
     network: p.transport?.type || 'tcp',
     udp: node.udp !== false
   };
+
+  const alpn = parseALPN(p.alpn);
+  config.alpn = alpn && alpn.length > 0 ? alpn : ['h2', 'http/1.1'];
 
   if (p.fingerprint) {
     config['client-fingerprint'] = p.fingerprint;
@@ -60,9 +66,10 @@ export function adaptTrojanToMihomo(node: TrojanNode): AdapterResult {
 
   return {
     config,
-    warnings,
-    unsupportedParams,
+    fatal: false,
     lossy: unsupportedParams.length > 0,
-    fatal: false
+    emitted: true,
+    warnings,
+    unsupportedParams
   };
 }
