@@ -7,82 +7,100 @@ const SUPPORTED_VLESS_TRANSPORTS = new Set([
 ]);
 
 /**
- * Mihomo xhttp-opts 白名单字段（来自官方文档 metacubex.one/en/config/proxies/transport）
- * 只列出 Mihomo 明确支持且不影响连接语义的非关键 extra 字段
+ * XHTTP extra 字段：camelCase → 官方 kebab-case 完整映射表
+ * 来源：https://wiki.metacubex.one/en/config/proxies/transport/
+ * extra JSON 中的 key → 直接展平到 xhttp-opts 的 kebab-case key
  */
-const XHTTP_ALLOWED_FIELDS = new Set([
-  'no-grpc-header',
-  'x-padding-bytes',
-  'noGRPCHeader',
-  'xPaddingBytes'
-]);
+const EXTRA_FIELD_MAP: Record<string, string> = {
+  // 明确官方支持字段（camelCase 与 kebab-case 均接受）
+  'no-grpc-header':          'no-grpc-header',
+  'noGRPCHeader':            'no-grpc-header',
+  'nogrpcheader':            'no-grpc-header',
+  'x-padding-bytes':         'x-padding-bytes',
+  'xPaddingBytes':           'x-padding-bytes',
+  'x-padding-obfs-mode':     'x-padding-obfs-mode',
+  'xPaddingObfsMode':        'x-padding-obfs-mode',
+  'x-padding-key':           'x-padding-key',
+  'xPaddingKey':             'x-padding-key',
+  'x-padding-header':        'x-padding-header',
+  'xPaddingHeader':          'x-padding-header',
+  'x-padding-placement':     'x-padding-placement',
+  'xPaddingPlacement':       'x-padding-placement',
+  'x-padding-method':        'x-padding-method',
+  'xPaddingMethod':          'x-padding-method',
+  'uplink-http-method':      'uplink-http-method',
+  'uplinkHttpMethod':        'uplink-http-method',
+  'session-placement':       'session-placement',
+  'sessionPlacement':        'session-placement',
+  'session-key':             'session-key',
+  'sessionKey':              'session-key',
+  'session-table':           'session-table',
+  'sessionTable':            'session-table',
+  'session-length':          'session-length',
+  'sessionLength':           'session-length',
+  'seq-placement':           'seq-placement',
+  'seqPlacement':            'seq-placement',
+  'seq-key':                 'seq-key',
+  'seqKey':                  'seq-key',
+  'uplink-data-placement':   'uplink-data-placement',
+  'uplinkDataPlacement':     'uplink-data-placement',
+  'uplink-data-key':         'uplink-data-key',
+  'uplinkDataKey':           'uplink-data-key',
+  'uplink-chunk-size':       'uplink-chunk-size',
+  'uplinkChunkSize':         'uplink-chunk-size',
+  'sc-max-each-post-bytes':  'sc-max-each-post-bytes',
+  'scMaxEachPostBytes':      'sc-max-each-post-bytes',
+  'sc-min-posts-interval-ms':'sc-min-posts-interval-ms',
+  'scMinPostsIntervalMs':    'sc-min-posts-interval-ms',
+  'reuse-settings':          'reuse-settings',
+  'reuseSettings':           'reuse-settings',
+  'download-settings':       'download-settings',
+  'downloadSettings':        'download-settings',
+};
 
-// extra 中一旦出现这些关键连接语义字段，Mihomo 无法忠实表达 → fatal
-const XHTTP_CRITICAL_EXTRA_FIELDS = new Set([
-  'downloadSettings', 'download-settings',
-  'reuseSettings', 'reuse-settings',
-  'sessionPlacement', 'session-placement'
-]);
-
-function mapXhttpOpts(
-  t: NonNullable<NonNullable<VlessNode['protocolData']>['transport']>,
+/**
+ * XHTTP extra 解析：把 extra JSON 展平到 xhttp-opts 顶层，无 extra 子层。
+ * 不认识的 key → unknown（静默丢弃，仅警告）
+ * 解析失败 → fatal
+ */
+function applyXhttpExtra(
+  rawExtra: string | object,
+  opts: Record<string, unknown>,
   nodeName: string
-): { opts: Record<string, unknown> } | { fatal: true; skipReason: string } {
-  const opts: Record<string, unknown> = {};
-  if (t.path) opts.path = t.path;
-  if (t.headers?.Host) opts.host = t.headers.Host;
-  if (t.mode) opts.mode = t.mode;
+): { fatal: true; skipReason: string } | null {
 
-  const rawExtra = t.extra;
-  if (rawExtra) {
-    let extraObj: Record<string, unknown> | null = null;
+  let extraObj: Record<string, unknown> | null = null;
 
-    if (typeof rawExtra === 'string') {
-      if (rawExtra.trim().startsWith('{')) {
-        try {
-          extraObj = JSON.parse(rawExtra);
-        } catch {
-          return {
-            fatal: true,
-            skipReason: `节点 [${nodeName}] XHTTP extra 字段 JSON 解析失败，无法安全映射到 Mihomo`
-          };
-        }
-      } else {
-        // 非 JSON 字符串无法分析是否含关键字段，但本身不影响连接 → 作为原始值透传并标记 warning
-        opts['extra'] = rawExtra;
-        return { opts };
-      }
-    } else if (typeof rawExtra === 'object' && rawExtra !== null) {
-      extraObj = rawExtra as Record<string, unknown>;
+  if (typeof rawExtra === 'string') {
+    const trimmed = rawExtra.trim();
+    if (!trimmed.startsWith('{')) {
+      // 非 JSON 不可分析，原样保存（不影响连接语义，仅丢 warning）
+      // 不 fatal，由调用方添加 warning
+      return null;
     }
-
-    if (extraObj) {
-      const unknownCritical: string[] = [];
-      const mappedExtra: Record<string, unknown> = {};
-
-      for (const [k, v] of Object.entries(extraObj)) {
-        if (XHTTP_ALLOWED_FIELDS.has(k)) {
-          mappedExtra[k] = v;
-        } else if (XHTTP_CRITICAL_EXTRA_FIELDS.has(k)) {
-          unknownCritical.push(k);
-        }
-        // 非关键未知字段静默丢弃（无损失影响可接受）
-      }
-
-      if (unknownCritical.length > 0) {
-        return {
-          fatal: true,
-          skipReason: `节点 [${nodeName}] XHTTP extra 中存在 Mihomo 未映射的关键连接参数: [${unknownCritical.join(', ')}]`
-        };
-      }
-
-      if (Object.keys(mappedExtra).length > 0) {
-        opts.extra = mappedExtra;
-      }
+    try {
+      extraObj = JSON.parse(trimmed);
+    } catch {
+      return {
+        fatal: true,
+        skipReason: `节点 [${nodeName}] XHTTP extra 字段 JSON 解析失败，无法安全转换`
+      };
     }
+  } else if (typeof rawExtra === 'object' && rawExtra !== null) {
+    extraObj = rawExtra as Record<string, unknown>;
   }
 
-  return { opts };
+  if (!extraObj) return null;
+
+  // 展平到 opts 顶层
+  for (const [k, v] of Object.entries(extraObj)) {
+    const mapped = EXTRA_FIELD_MAP[k];
+    if (mapped) {
+      opts[mapped] = v;
+    }
+    // 未识别字段静默丢弃（不影响连接语义）
+  }
+  return null;
 }
 
 export function adaptVlessToMihomo(node: VlessNode): AdapterResult {
@@ -90,39 +108,37 @@ export function adaptVlessToMihomo(node: VlessNode): AdapterResult {
   const unsupportedParams: string[] = [];
   const p = node.protocolData;
 
-  // Compatibility Gate: 必需凭据
+  // Gate: 必需凭据
   if (!p.uuid || !p.uuid.trim()) {
-    return {
-      fatal: true, lossy: true, emitted: false,
+    return { fatal: true, lossy: true, emitted: false,
       skipReason: `节点 [${node.name}] 缺少必需的 VLESS UUID`,
-      warnings: [{ level: 'fatal', field: 'uuid', message: `缺少必需的 VLESS UUID` }],
-      unsupportedParams: ['uuid']
-    };
+      warnings: [{ level: 'fatal', field: 'uuid', message: '缺少必需的 VLESS UUID' }],
+      unsupportedParams: ['uuid'] };
   }
 
   const isReality = p.security === 'reality' || !!p.realityOpts;
   const isTls = p.security === 'tls' || isReality;
 
-  // Compatibility Gate: Reality 必须携带 pbk
+  // Gate: Reality 必须携带 pbk
   if (isReality && (!p.realityOpts?.publicKey || !p.realityOpts.publicKey.trim())) {
-    return {
-      fatal: true, lossy: true, emitted: false,
-      skipReason: `节点 [${node.name}] 声明了 Reality 伪装但缺少必需的 pbk (Public Key)`,
-      warnings: [{ level: 'fatal', field: 'reality-opts.public-key', message: `缺少必需的 Reality pbk` }],
-      unsupportedParams: ['reality-opts.public-key']
-    };
+    return { fatal: true, lossy: true, emitted: false,
+      skipReason: `节点 [${node.name}] 声明了 Reality 但缺少必需的 pbk (Public Key)`,
+      warnings: [{ level: 'fatal', field: 'reality-opts.public-key', message: '缺少必需的 Reality pbk' }],
+      unsupportedParams: ['reality-opts.public-key'] };
   }
 
-  // Compatibility Gate: 不支持的传输层
-  const transportType = (p.transport?.type || 'tcp').toLowerCase();
-  if (!SUPPORTED_VLESS_TRANSPORTS.has(transportType)) {
-    return {
-      fatal: true, lossy: true, emitted: false,
-      skipReason: `Mihomo 客户端不支持的 VLESS 传输层协议: [${transportType}]`,
-      warnings: [{ level: 'fatal', field: 'transport.type', message: `不支持的传输协议: [${transportType}]` }],
-      unsupportedParams: ['transport.type']
-    };
+  const rawTransportType = (p.transport?.type || 'tcp').toLowerCase();
+
+  // Gate: 不支持的传输层
+  if (!SUPPORTED_VLESS_TRANSPORTS.has(rawTransportType)) {
+    return { fatal: true, lossy: true, emitted: false,
+      skipReason: `Mihomo 不支持的 VLESS 传输协议: [${rawTransportType}]`,
+      warnings: [{ level: 'fatal', field: 'transport.type', message: `不支持的传输协议: [${rawTransportType}]` }],
+      unsupportedParams: ['transport.type'] };
   }
+
+  // P0-3: splithttp 是 xhttp 的旧名/来源别名，统一 normalize
+  const transportType = rawTransportType === 'splithttp' ? 'xhttp' : rawTransportType;
 
   const config: Record<string, any> = {
     name: node.name,
@@ -160,20 +176,32 @@ export function adaptVlessToMihomo(node: VlessNode): AdapterResult {
       config['ws-opts'] = { path: t.path || '/', headers: t.headers || {} };
     } else if (net === 'grpc') {
       config['grpc-opts'] = { 'grpc-service-name': t.serviceName || '' };
-    } else if (net === 'xhttp' || net === 'splithttp') {
-      // P0-1: XHTTP extra → 白名单映射；关键字段无法表达则 fatal
-      const xhttpResult = mapXhttpOpts(t, node.name);
-      if ('fatal' in xhttpResult) {
-        return {
-          fatal: true, lossy: true, emitted: false,
-          skipReason: xhttpResult.skipReason,
-          warnings: [{ level: 'fatal', field: 'xhttp-opts.extra', message: xhttpResult.skipReason }],
-          unsupportedParams: ['xhttp-opts.extra']
-        };
+    } else if (net === 'xhttp') {
+      // P0-1: 直接展平到 xhttp-opts 顶层，禁止生成 .extra 子层
+      const xhttpOpts: Record<string, unknown> = {};
+      if (t.path) xhttpOpts.path = t.path;
+      if (t.headers?.Host) xhttpOpts.host = t.headers.Host;
+      if (t.mode) xhttpOpts.mode = t.mode;
+
+      if (t.extra) {
+        if (typeof t.extra === 'string' && !t.extra.trim().startsWith('{')) {
+          // 非 JSON 字符串（无法解析），降级 warning
+          warnings.push({ level: 'warn', field: 'xhttp-opts.extra',
+            message: `XHTTP extra 非 JSON 格式（"${t.extra.slice(0, 40)}"），已跳过` });
+          unsupportedParams.push('xhttp-opts.extra');
+        } else {
+          const err = applyXhttpExtra(t.extra, xhttpOpts, node.name);
+          if (err) {
+            return { fatal: true, lossy: true, emitted: false,
+              skipReason: err.skipReason,
+              warnings: [{ level: 'fatal', field: 'xhttp-opts.extra', message: err.skipReason }],
+              unsupportedParams: ['xhttp-opts.extra'] };
+          }
+        }
       }
-      config['xhttp-opts'] = xhttpResult.opts;
+
+      if (Object.keys(xhttpOpts).length > 0) config['xhttp-opts'] = xhttpOpts;
     } else if (net === 'http') {
-      // P0-2: HTTP 与 H2 严格分离
       config['http-opts'] = {
         path: [t.path || '/'],
         headers: t.headers?.Host ? { Host: [t.headers.Host] } : undefined
@@ -189,7 +217,8 @@ export function adaptVlessToMihomo(node: VlessNode): AdapterResult {
   if (p.extras && Object.keys(p.extras).length > 0) {
     for (const [k, v] of Object.entries(p.extras)) {
       unsupportedParams.push(k);
-      warnings.push({ level: 'warn', field: k, message: `参数 [${k}=${v}] 已保留在原始节点中，但 Mihomo 官方无对应字段映射` });
+      warnings.push({ level: 'warn', field: k,
+        message: `参数 [${k}=${v}] 已保留在原始节点中，但 Mihomo 官方无对应字段映射` });
     }
   }
 

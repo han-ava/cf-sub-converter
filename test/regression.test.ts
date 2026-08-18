@@ -61,7 +61,7 @@ describe('Regression Fixtures Golden Tests', () => {
     expect(res.config!['packet-encoding']).toBe('xudp');
   });
 
-  test('4. VLESS XHTTP maps to xhttp-opts in Mihomo', () => {
+  test('4. VLESS XHTTP maps to xhttp-opts in Mihomo (extra non-JSON string dropped with warning)', () => {
     const node = parseSingleNode(REGRESSION_FIXTURES.vless_xhttp);
     expect(node).not.toBeNull();
     expect(node!.protocolData.transport?.type).toBe('xhttp');
@@ -69,12 +69,17 @@ describe('Regression Fixtures Golden Tests', () => {
 
     const res = adaptNodeToMihomo(node!);
     expect(res.fatal).toBe(false);
+    expect(res.emitted).toBe(true);
+    // non-JSON extra string ("xhttp-extra") → warning + dropped, NOT placed in xhttp-opts
     expect(res.config!['xhttp-opts']).toEqual({
       path: '/xhttp-path',
       host: 'xhttp.example.com',
-      mode: 'stream-up',
-      extra: 'xhttp-extra'
+      mode: 'stream-up'
+      // no extra sub-layer
     });
+    // lossy=true because non-JSON extra was dropped
+    expect(res.lossy).toBe(true);
+    expect(res.warnings.length).toBeGreaterThan(0);
   });
 
   test('5. VMess retains original custom aid (aid=64) and packetEncoding', () => {
