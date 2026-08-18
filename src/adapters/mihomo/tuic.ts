@@ -1,6 +1,6 @@
 // src/adapters/mihomo/tuic.ts
 import { AdapterResult, ConversionWarning, TuicNode } from '../../types';
-import { parseALPN } from '../../utils';
+import { parseALPN, detectUnmappedFields } from '../../utils';
 
 export function adaptTuicToMihomo(node: TuicNode): AdapterResult {
   const warnings: ConversionWarning[] = [];
@@ -42,6 +42,21 @@ export function adaptTuicToMihomo(node: TuicNode): AdapterResult {
 
   if (p.heartbeat !== undefined) {
     config.heartbeat = p.heartbeat;
+  }
+
+  // 自动检测 known-but-unmapped：对比已解析字段集与适配器建模字段集
+  const HANDLED_TUIC_PROTOCOL_KEYS = new Set([
+    'uuid', 'password', 'sni', 'alpn', 'skipCertVerify', 'congestionControl',
+    'udpRelayMode', 'zeroRttHandshake', 'heartbeat', 'extras'
+  ]);
+  const unmapped = detectUnmappedFields(p as Record<string, unknown>, HANDLED_TUIC_PROTOCOL_KEYS);
+  for (const item of unmapped) {
+    unsupportedParams.push(item);
+    warnings.push({
+      level: 'warn',
+      field: item,
+      message: `参数 [${item}] 已被 Parser 解析，但当前适配器未对其建模映射 (known-but-unmapped)`
+    });
   }
 
   if (p.extras && Object.keys(p.extras).length > 0) {

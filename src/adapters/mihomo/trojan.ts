@@ -1,6 +1,6 @@
 // src/adapters/mihomo/trojan.ts
 import { AdapterResult, ConversionWarning, TrojanNode } from '../../types';
-import { parseALPN } from '../../utils';
+import { parseALPN, detectUnmappedFields } from '../../utils';
 
 export function adaptTrojanToMihomo(node: TrojanNode): AdapterResult {
   const warnings: ConversionWarning[] = [];
@@ -51,6 +51,24 @@ export function adaptTrojanToMihomo(node: TrojanNode): AdapterResult {
         'grpc-service-name': t.serviceName || ''
       };
     }
+  }
+
+  // 自动检测 known-but-unmapped：对比已解析字段集与适配器建模字段集
+  const HANDLED_TROJAN_PROTOCOL_KEYS = new Set([
+    'password', 'sni', 'alpn', 'skipCertVerify', 'fingerprint', 'transport', 'extras'
+  ]);
+  const HANDLED_TROJAN_TRANSPORT_KEYS = new Set([
+    'type', 'path', 'headers', 'serviceName'
+  ]);
+  const unmappedProto = detectUnmappedFields(p as Record<string, unknown>, HANDLED_TROJAN_PROTOCOL_KEYS);
+  const unmappedTrans = p.transport ? detectUnmappedFields(p.transport as Record<string, unknown>, HANDLED_TROJAN_TRANSPORT_KEYS, 'transport') : [];
+  for (const item of [...unmappedProto, ...unmappedTrans]) {
+    unsupportedParams.push(item);
+    warnings.push({
+      level: 'warn',
+      field: item,
+      message: `参数 [${item}] 已被 Parser 解析，但当前适配器未对其建模映射 (known-but-unmapped)`
+    });
   }
 
   if (p.extras && Object.keys(p.extras).length > 0) {

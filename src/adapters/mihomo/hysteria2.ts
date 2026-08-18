@@ -1,6 +1,6 @@
 // src/adapters/mihomo/hysteria2.ts
 import { AdapterResult, ConversionWarning, Hysteria2Node } from '../../types';
-import { parseALPN } from '../../utils';
+import { parseALPN, detectUnmappedFields } from '../../utils';
 
 const SUPPORTED_HY2_OBFS = new Set(['salamander']);
 
@@ -64,6 +64,22 @@ export function adaptHysteria2ToMihomo(node: Hysteria2Node): AdapterResult {
   if (p.fingerprint) config['client-fingerprint'] = p.fingerprint;
   if (p.nameCertVerify) config['name-cert-verify'] = p.nameCertVerify;
   if (p.handshakeTimeout) config['handshake-timeout'] = p.handshakeTimeout;
+
+  // 自动检测 known-but-unmapped：对比已解析字段集与适配器建模字段集
+  const HANDLED_HY2_PROTOCOL_KEYS = new Set([
+    'password', 'ports', 'sni', 'alpn', 'skipCertVerify', 'fingerprint',
+    'obfs', 'obfsPassword', 'obfsMinPacketSize', 'obfsMaxPacketSize',
+    'up', 'down', 'hopInterval', 'nameCertVerify', 'handshakeTimeout', 'extras'
+  ]);
+  const unmapped = detectUnmappedFields(p as Record<string, unknown>, HANDLED_HY2_PROTOCOL_KEYS);
+  for (const item of unmapped) {
+    unsupportedParams.push(item);
+    warnings.push({
+      level: 'warn',
+      field: item,
+      message: `参数 [${item}] 已被 Parser 解析，但当前适配器未对其建模映射 (known-but-unmapped)`
+    });
+  }
 
   if (p.extras && Object.keys(p.extras).length > 0) {
     for (const [k, v] of Object.entries(p.extras)) {

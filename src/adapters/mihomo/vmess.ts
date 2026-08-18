@@ -1,6 +1,6 @@
 // src/adapters/mihomo/vmess.ts
 import { AdapterResult, ConversionWarning, VmessNode } from '../../types';
-import { parseALPN } from '../../utils';
+import { parseALPN, detectUnmappedFields } from '../../utils';
 
 // Mihomo 官方支持的 VMess 传输协议（metacubex.one/en/config/proxies/vmess）
 const SUPPORTED_VMESS_TRANSPORTS = new Set([
@@ -122,6 +122,30 @@ export function adaptVmessToMihomo(node: VmessNode): AdapterResult {
 
       if (Object.keys(mekyaOpts).length > 0) config['mekya-opts'] = mekyaOpts;
     }
+  }
+
+  // 自动检测 known-but-unmapped：对比已解析字段集与适配器建模字段集
+  const HANDLED_VMESS_PROTOCOL_KEYS = new Set([
+    'uuid', 'alterId', 'cipher', 'security', 'tls', 'sni', 'alpn',
+    'fingerprint', 'skipCertVerify', 'packetEncoding', 'globalPadding',
+    'authenticatedLength', 'transport', 'rawJson', 'extras'
+  ]);
+  const HANDLED_VMESS_TRANSPORT_KEYS = new Set([
+    'type', 'path', 'headers', 'serviceName', 'httpHost', 'httpPath',
+    'seed', 'headerType', 'congestion', 'uplinkCapacity', 'downlinkCapacity',
+    'mtu', 'tti', 'writeBuffer', 'readBuffer',
+    'url', 'maxWriteDelay', 'maxRequestSize', 'pollingIntervalInitial', 'h2PoolSize'
+  ]);
+
+  const unmappedProto = detectUnmappedFields(p as Record<string, unknown>, HANDLED_VMESS_PROTOCOL_KEYS);
+  const unmappedTrans = p.transport ? detectUnmappedFields(p.transport as Record<string, unknown>, HANDLED_VMESS_TRANSPORT_KEYS, 'transport') : [];
+  for (const item of [...unmappedProto, ...unmappedTrans]) {
+    unsupportedParams.push(item);
+    warnings.push({
+      level: 'warn',
+      field: item,
+      message: `参数 [${item}] 已被 Parser 解析，但当前适配器未对其建模映射 (known-but-unmapped)`
+    });
   }
 
   if (p.extras && Object.keys(p.extras).length > 0) {

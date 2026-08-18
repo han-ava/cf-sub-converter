@@ -1,6 +1,6 @@
 // src/adapters/mihomo/vless.ts
 import { AdapterResult, ConversionWarning, VlessNode } from '../../types';
-import { parseALPN } from '../../utils';
+import { parseALPN, detectUnmappedFields } from '../../utils';
 
 const SUPPORTED_VLESS_TRANSPORTS = new Set([
   'tcp', 'ws', 'grpc', 'http', 'h2', 'xhttp', 'splithttp'
@@ -138,10 +138,15 @@ function mapXrayDownloadSettingsToMihomo(
     // 3. security -> tls: true
     else if (k === 'security') {
       const sec = String(v).toLowerCase();
-      if (sec === 'tls' || sec === 'reality') {
+      if (sec === 'tls') {
+        mapped.tls = true;
+        // 显式清除继承的 reality-opts (Reality 上行 -> TLS 下行)
+        delete mapped['reality-opts'];
+      } else if (sec === 'reality') {
         mapped.tls = true;
       } else if (sec === 'none') {
-        // no tls
+        delete mapped.tls;
+        delete mapped['reality-opts'];
       } else {
         unmapped.push(`download-settings.security.${v}`);
       }
@@ -149,11 +154,18 @@ function mapXrayDownloadSettingsToMihomo(
     else if (k === 'tls') {
       if (v) mapped.tls = true;
     }
-    // 4. network -> 忽略 xhttp/splithttp，其他非空则记录
+    // 4. network -> 校验下行传输协议：如果是非 xhttp/splithttp/tcp 等 Mihomo 无法表达的独立传输，严格 fatal
     else if (k === 'network') {
       const net = String(v).toLowerCase();
-      if (net !== 'xhttp' && net !== 'splithttp' && net !== 'tcp') {
-        mapped.network = v;
+      if (net === 'xhttp' || net === 'splithttp' || net === 'tcp' || net === '') {
+        // 允许的下行传输类型
+      } else {
+        return {
+          mapped: {},
+          fatal: true,
+          skipReason: `节点 [${nodeName}] downloadSettings 声明了 Mihomo 无法支持的独立下行传输协议: [${v}]`,
+          unmapped: []
+        };
       }
     }
     // 5. Xray tlsSettings 展开到顶层字段
@@ -236,11 +248,41 @@ function mapXrayDownloadSettingsToMihomo(
           else if (xk === 'extra') {
             if (typeof xv === 'object' && xv !== null) {
               const extraSub = xv as Record<string, unknown>;
-              if (extraSub.xmux || extraSub.reuseSettings || extraSub['reuse-settings']) {
-                const rRaw = extraSub.xmux || extraSub.reuseSettings || extraSub['reuse-settings'];
-                const { mapped: subReuse, unmapped: subU } = mapReuseSettings(rRaw);
-                if (Object.keys(subReuse).length > 0) mapped['reuse-settings'] = subReuse;
-                unmapped.push(...subU.map(u => `download-settings.xhttpSettings.extra.${u}`));
+              for (const [esk, esv] of Object.entries(extraSub)) {
+                if (esk === 'xmux' || esk === 'reuseSettings' || esk === 'reuse-settings') {
+                  const { mapped: subReuse, unmapped: subU } = mapReuseSettings(esv);
+                  if (Object.keys(subReuse).length > 0) mapped['reuse-settings'] = subReuse;
+                  unmapped.push(...subU.map(u => `download-settings.xhttpSettings.extra.${u}`));
+                } else {
+                  const mappedKey = EXTRA_SCALAR_FIELD_MAP[esk];
+                  if (mappedKey) {
+                    mapped[mappedKey] = esv;
+                  } else {
+                    unmapped.push(`download-settings.xhttpSettings.extra.${esk}`);
+                  }
+                }
+              }
+            } else if (typeof xv === 'string') {
+              try {
+                const parsedExtra = JSON.parse(xv);
+                if (typeof parsedExtra === 'object' && parsedExtra !== null) {
+                  for (const [esk, esv] of Object.entries(parsedExtra)) {
+                    if (esk === 'xmux' || esk === 'reuseSettings' || esk === 'reuse-settings') {
+                      const { mapped: subReuse, unmapped: subU } = mapReuseSettings(esv);
+                      if (Object.keys(subReuse).length > 0) mapped['reuse-settings'] = subReuse;
+                      unmapped.push(...subU.map(u => `download-settings.xhttpSettings.extra.${u}`));
+                    } else {
+                      const mappedKey = EXTRA_SCALAR_FIELD_MAP[esk];
+                      if (mappedKey) {
+                        mapped[mappedKey] = esv;
+                      } else {
+                        unmapped.push(`download-settings.xhttpSettings.extra.${esk}`);
+                      }
+                    }
+                  }
+                }
+              } catch {
+                unmapped.push(`download-settings.xhttpSettings.extra (非 JSON 字符串: "${xv}")`);
               }
             }
           } else {
@@ -255,7 +297,26 @@ function mapXrayDownloadSettingsToMihomo(
       if (Object.keys(subReuse).length > 0) mapped['reuse-settings'] = subReuse;
       unmapped.push(...subU.map(u => `download-settings.${u}`));
     }
-    // 9. Mihomo 原生已规范字段直接透传
+    // 9. downloadSettings.extra 直接嵌套
+    else if (k === 'extra') {
+      if (typeof v === 'object' && v !== null) {
+        for (const [desk, desv] of Object.entries(v as Record<string, unknown>)) {
+          if (desk === 'xmux' || desk === 'reuseSettings' || desk === 'reuse-settings') {
+            const { mapped: subReuse, unmapped: subU } = mapReuseSettings(desv);
+            if (Object.keys(subReuse).length > 0) mapped['reuse-settings'] = subReuse;
+            unmapped.push(...subU.map(u => `download-settings.extra.${u}`));
+          } else {
+            const mappedKey = EXTRA_SCALAR_FIELD_MAP[desk];
+            if (mappedKey) {
+              mapped[mappedKey] = desv;
+            } else {
+              unmapped.push(`download-settings.extra.${desk}`);
+            }
+          }
+        }
+      }
+    }
+    // 10. Mihomo 原生已规范字段直接透传
     else if (k === 'servername' || k === 'serverName' || k === 'sni') {
       mapped.servername = String(v);
     } else if (k === 'client-fingerprint' || k === 'clientFingerprint' || k === 'fingerprint' || k === 'fp') {
@@ -344,6 +405,17 @@ function applyXhttpExtra(
 
   return { unmapped };
 }
+
+const HANDLED_VLESS_PROTOCOL_KEYS = new Set([
+  'uuid', 'flow', 'encryption', 'packetEncoding', 'security', 'sni', 'alpn',
+  'fingerprint', 'skipCertVerify', 'realityOpts', 'transport', 'extras'
+]);
+const HANDLED_VLESS_TRANSPORT_KEYS = new Set([
+  'type', 'path', 'headers', 'serviceName', 'mode', 'extra'
+]);
+const HANDLED_VLESS_REALITY_KEYS = new Set([
+  'publicKey', 'shortId', 'spiderX'
+]);
 
 export function adaptVlessToMihomo(node: VlessNode): AdapterResult {
   const warnings: ConversionWarning[] = [];
@@ -460,6 +532,19 @@ export function adaptVlessToMihomo(node: VlessNode): AdapterResult {
         path: t.path || '/'
       };
     }
+  }
+
+  // 自动检测 known-but-unmapped：对比已解析字段集与适配器建模字段集
+  const unmappedProto = detectUnmappedFields(p as Record<string, unknown>, HANDLED_VLESS_PROTOCOL_KEYS);
+  const unmappedTrans = p.transport ? detectUnmappedFields(p.transport as Record<string, unknown>, HANDLED_VLESS_TRANSPORT_KEYS, 'transport') : [];
+  const unmappedReality = p.realityOpts ? detectUnmappedFields(p.realityOpts as Record<string, unknown>, HANDLED_VLESS_REALITY_KEYS, 'realityOpts') : [];
+  for (const item of [...unmappedProto, ...unmappedTrans, ...unmappedReality]) {
+    unsupportedParams.push(item);
+    warnings.push({
+      level: 'warn',
+      field: item,
+      message: `参数 [${item}] 已被 Parser 解析，但当前适配器未对其建模映射 (known-but-unmapped)`
+    });
   }
 
   if (p.extras && Object.keys(p.extras).length > 0) {

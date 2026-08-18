@@ -1,6 +1,6 @@
 // src/adapters/mihomo/shadowsocks.ts
 import { AdapterResult, ConversionWarning, ShadowsocksNode } from '../../types';
-import { strictBase64Decode } from '../../utils';
+import { strictBase64Decode, detectUnmappedFields } from '../../utils';
 
 const SUPPORTED_SS_PLUGINS = new Set([
   'v2ray-plugin',
@@ -112,6 +112,21 @@ export function adaptShadowsocksToMihomo(node: ShadowsocksNode): AdapterResult {
 
   if (p.smux) {
     config.smux = p.smux;
+  }
+
+  // 自动检测 known-but-unmapped：对比已解析字段集与适配器建模字段集
+  const HANDLED_SS_PROTOCOL_KEYS = new Set([
+    'cipher', 'password', 'isSS2022', 'plugin', 'pluginOpts',
+    'udpOverTcp', 'udpOverTcpVersion', 'clientFingerprint', 'smux', 'extras'
+  ]);
+  const unmapped = detectUnmappedFields(p as Record<string, unknown>, HANDLED_SS_PROTOCOL_KEYS);
+  for (const item of unmapped) {
+    unsupportedParams.push(item);
+    warnings.push({
+      level: 'warn',
+      field: item,
+      message: `参数 [${item}] 已被 Parser 解析，但当前适配器未对其建模映射 (known-but-unmapped)`
+    });
   }
 
   if (p.extras && Object.keys(p.extras).length > 0) {

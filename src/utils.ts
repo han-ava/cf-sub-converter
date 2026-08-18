@@ -99,6 +99,25 @@ export function parseALPN(raw?: string | string[]): string[] | undefined {
 }
 
 /**
+ * 自动检测 known-but-unmapped：对比已解析字段集与适配器建模字段集
+ * 凡是 Parser 读取并存在但 Adapter 未建模的字段，自动捕捉并返回
+ */
+export function detectUnmappedFields(
+  obj: Record<string, unknown> | undefined | null,
+  handledKeys: Set<string>,
+  prefix: string = ''
+): string[] {
+  if (!obj || typeof obj !== 'object') return [];
+  const unmapped: string[] = [];
+  for (const [key, value] of Object.entries(obj)) {
+    if (value !== undefined && !handledKeys.has(key)) {
+      unmapped.push(prefix ? `${prefix}.${key}` : key);
+    }
+  }
+  return unmapped;
+}
+
+/**
  * 安全的 decodeURIComponent（仅用于 URI 语法组件解析）
  */
 export function tryDecodeURIComponent(str: string): string {

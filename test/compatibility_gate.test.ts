@@ -253,6 +253,56 @@ describe('Tower-Inspired Compatibility Gate Suite', () => {
     });
   });
 
+  test('9c. VLESS XHTTP: Reality uplink -> TLS/none downlink isolates reality-opts (P0-1A)', () => {
+    // 节点主连接是 Reality，但 downloadSettings 声明 security: tls
+    const realityToTlsNode = parseSingleNode(
+      'vless://b831381d-6324-4d53-ad4f-8cda48b30811@1.2.3.4:443' +
+      '?type=xhttp&security=reality&pbk=abcdefghijklmnopqrstuvwxyz012345&sni=cdn.example.com' +
+      '&extra=' + encodeURIComponent(JSON.stringify({
+        downloadSettings: {
+          address: 'dl.example.com',
+          port: 443,
+          security: 'tls',
+          tlsSettings: {
+            serverName: 'dl.example.com'
+          }
+        }
+      })) +
+      '#Reality%20to%20TLS'
+    );
+    expect(realityToTlsNode).not.toBeNull();
+    const res = adaptNodeToMihomo(realityToTlsNode!);
+    expect(res.fatal).toBe(false);
+    expect(res.emitted).toBe(true);
+    // 主连接有 reality-opts
+    expect(res.config!['reality-opts']).toBeDefined();
+    // download-settings 必须显式没有 reality-opts
+    const dlSettings = res.config!['xhttp-opts']['download-settings'];
+    expect(dlSettings).toBeDefined();
+    expect(dlSettings.tls).toBe(true);
+    expect(dlSettings['reality-opts']).toBeUndefined();
+  });
+
+  test('9d. VLESS XHTTP: downloadSettings with unsupported transport (e.g. grpc) triggers fatal (P0-1C)', () => {
+    const badTransportDlNode = parseSingleNode(
+      'vless://b831381d-6324-4d53-ad4f-8cda48b30811@1.2.3.4:443' +
+      '?type=xhttp&security=tls&sni=cdn.example.com' +
+      '&extra=' + encodeURIComponent(JSON.stringify({
+        downloadSettings: {
+          address: 'dl.example.com',
+          port: 443,
+          network: 'grpc'
+        }
+      })) +
+      '#Bad%20Transport%20Download'
+    );
+    expect(badTransportDlNode).not.toBeNull();
+    const res = adaptNodeToMihomo(badTransportDlNode!);
+    expect(res.fatal).toBe(true);
+    expect(res.emitted).toBe(false);
+    expect(res.skipReason).toContain('独立下行传输协议');
+  });
+
   test('10. VLESS XHTTP: x-padding-bytes mapped flat to xhttp-opts, no extra sub-layer (P0-1)', () => {
     const xhttpSafe = parseSingleNode(
       'vless://b831381d-6324-4d53-ad4f-8cda48b30811@1.2.3.4:443' +
@@ -312,6 +362,32 @@ describe('Tower-Inspired Compatibility Gate Suite', () => {
     expect(res.lossy).toBe(true);
     expect(res.unsupportedParams).toContain('xhttp-opts.extra.someUnknownField');
     expect(res.warnings.some(w => w.field === 'xhttp-opts.extra.someUnknownField')).toBe(true);
+  });
+
+  test('10e. VLESS XHTTP: unknown field in downloadSettings.xhttpSettings.extra is NOT silently dropped (P0-1B)', () => {
+    const xhttpDlExtraUnknown = parseSingleNode(
+      'vless://b831381d-6324-4d53-ad4f-8cda48b30811@1.2.3.4:443' +
+      '?type=xhttp&security=tls&sni=cdn.example.com' +
+      '&extra=' + encodeURIComponent(JSON.stringify({
+        downloadSettings: {
+          address: 'dl.example.com',
+          port: 443,
+          xhttpSettings: {
+            path: '/dl',
+            extra: {
+              unknownDlSettingKey: 'val'
+            }
+          }
+        }
+      })) +
+      '#XHTTP%20DL%20Extra%20Unknown'
+    );
+    expect(xhttpDlExtraUnknown).not.toBeNull();
+    const res = adaptNodeToMihomo(xhttpDlExtraUnknown!);
+    expect(res.fatal).toBe(false);
+    expect(res.emitted).toBe(true);
+    expect(res.lossy).toBe(true);
+    expect(res.unsupportedParams).toContain('xhttp-opts.download-settings.xhttpSettings.extra.unknownDlSettingKey');
   });
 
   // ── P0-3: splithttp → normalize to xhttp ─────────────────────────────────
@@ -484,10 +560,34 @@ describe('Tower-Inspired Compatibility Gate Suite', () => {
     const nodeVmess = parseSingleNode(plainVmess);
     expect(nodeVmess).not.toBeNull();
     const resVmess = adaptNodeToMihomo(nodeVmess!);
-    expect(resVmess.emitted).toBe(true);
     expect(resVmess.config!.tls).toBeUndefined();
     expect(resVmess.config!.servername).toBeUndefined();
     expect(resVmess.config!['client-fingerprint']).toBeUndefined();
     expect(resVmess.config!['skip-cert-verify']).toBeUndefined();
+  });
+
+  // ── 自动检测 known-but-unmapped ──────────────────────────────────────────
+
+  test('16. Automated detection flags known-but-unmapped parsed fields without silent drop', () => {
+    // 构造一个在 protocolData 中存在未建模字段的节点
+    const customVlessNode: any = {
+      name: 'Custom VLESS',
+      protocol: 'vless',
+      server: '1.2.3.4',
+      port: 443,
+      source: { format: 'vless-uri', raw: 'vless://...' },
+      protocolData: {
+        uuid: 'b831381d-6324-4d53-ad4f-8cda48b30811',
+        security: 'tls',
+        unmodeledFieldFoo: 'bar', // 未在 HANDLED_VLESS_PROTOCOL_KEYS 建模
+        extras: {}
+      },
+      udp: true
+    };
+    const res = adaptNodeToMihomo(customVlessNode);
+    expect(res.emitted).toBe(true);
+    expect(res.lossy).toBe(true);
+    expect(res.unsupportedParams).toContain('unmodeledFieldFoo');
+    expect(res.warnings.some(w => w.field === 'unmodeledFieldFoo' && w.message.includes('known-but-unmapped'))).toBe(true);
   });
 });
