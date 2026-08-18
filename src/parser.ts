@@ -75,6 +75,7 @@ export function parseVless(urlStr: string): ProxyNode | null {
 
     const isTls = security === 'tls' || security === 'reality';
     const isReality = security === 'reality' || !!pbk;
+    const allowInsecure = getUrlParam(urlStr, 'allowInsecure') === '1' || getUrlParam(urlStr, 'insecure') === '1' || getUrlParam(urlStr, 'allow_insecure') === '1';
 
     const node: ProxyNode = {
       type: 'vless',
@@ -90,6 +91,7 @@ export function parseVless(urlStr: string): ProxyNode | null {
       flow,
       packetEncoding,
       encryption,
+      skipCertVerify: allowInsecure,
       udp: true,
       raw: urlStr
     };
@@ -138,6 +140,7 @@ export function parseVmess(urlStr: string): ProxyNode | null {
     const fp = vmess.fp || 'chrome';
     const alpnStr = vmess.alpn;
     const alpn = alpnStr ? (Array.isArray(alpnStr) ? alpnStr : alpnStr.split(',')) : undefined;
+    const allowInsecure = tls && (vmess.insecure === '1' || vmess.insecure === 1 || vmess.allowInsecure === true || vmess.skipCertVerify === true);
 
     const node: ProxyNode = {
       type: 'vmess',
@@ -151,6 +154,7 @@ export function parseVmess(urlStr: string): ProxyNode | null {
       sni: tls ? sni : undefined,
       fingerprint: tls ? fp : undefined,
       alpn,
+      skipCertVerify: allowInsecure,
       udp: true,
       raw: urlStr
     };

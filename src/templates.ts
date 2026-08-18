@@ -17,8 +17,10 @@ export const DEFAULT_CLASH_TEMPLATE = {
     ipv6: false,
     'enhanced-mode': 'fake-ip',
     'fake-ip-range': '198.18.0.1/16',
-    'default-nameserver': ['223.5.5.5', '119.29.29.29'],
+    'default-nameserver': ['223.5.5.5', '119.29.29.29', '1.1.1.1'],
     nameserver: [
+      '223.5.5.5',
+      '119.29.29.29',
       'https://doh.pub/dns-query',
       'https://dns.alidns.com/dns-query'
     ],

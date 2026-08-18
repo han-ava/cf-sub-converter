@@ -58,6 +58,7 @@ export function nodeToClashProxy(node: ProxyNode): Record<string, any> {
         servername: node.sni || node.server,
         network: node.network || 'tcp'
       };
+      if (node.skipCertVerify) vmess['skip-cert-verify'] = true;
       if (node.fingerprint) vmess['client-fingerprint'] = node.fingerprint;
       if (node.alpn) vmess.alpn = node.alpn;
       if (node.network === 'ws') {
@@ -81,6 +82,7 @@ export function nodeToClashProxy(node: ProxyNode): Record<string, any> {
         servername: node.sni || node.server,
         network: node.network || 'tcp'
       };
+      if (node.skipCertVerify) vless['skip-cert-verify'] = true;
       if (node.packetEncoding) {
         vless['packet-encoding'] = node.packetEncoding;
       }
