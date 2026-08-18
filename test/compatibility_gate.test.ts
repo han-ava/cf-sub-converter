@@ -131,4 +131,94 @@ describe('Tower-Inspired Compatibility Gate Suite', () => {
       } catch {}
     }
   });
+
+  // ── P0-1: XHTTP extra whitelist gate ──────────────────────────────────────
+
+  test('9. VLESS XHTTP with critical unmappable extra field triggers fatal (P0-1)', () => {
+    const xhttpCritical = parseSingleNode(
+      'vless://b831381d-6324-4d53-ad4f-8cda48b30811@1.2.3.4:443' +
+      '?type=xhttp&security=tls&sni=cdn.example.com' +
+      '&extra=%7B%22downloadSettings%22%3A%7B%22type%22%3A%22splithttp%22%7D%7D' +
+      '#XHTTP%20Critical%20Extra'
+    );
+    expect(xhttpCritical).not.toBeNull();
+    const res = adaptNodeToMihomo(xhttpCritical!);
+    expect(res.fatal).toBe(true);
+    expect(res.emitted).toBe(false);
+    expect(res.skipReason).toContain('downloadSettings');
+  });
+
+  test('10. VLESS XHTTP with only whitelisted extra fields emits successfully (P0-1)', () => {
+    const xhttpSafe = parseSingleNode(
+      'vless://b831381d-6324-4d53-ad4f-8cda48b30811@1.2.3.4:443' +
+      '?type=xhttp&security=reality' +
+      '&pbk=abcdefghijklmnopqrstuvwxyz012345&sni=cdn.example.com' +
+      '&extra=%7B%22x-padding-bytes%22%3A%22100-1000%22%7D' +
+      '#XHTTP%20Safe%20Extra'
+    );
+    expect(xhttpSafe).not.toBeNull();
+    const res = adaptNodeToMihomo(xhttpSafe!);
+    expect(res.fatal).toBe(false);
+    expect(res.emitted).toBe(true);
+    expect(res.config!['xhttp-opts']).toBeDefined();
+  });
+
+  // ── P0-2: HTTP vs H2 strict split ─────────────────────────────────────────
+
+  test('11. VLESS H2 maps to h2-opts (not http-opts) (P0-2)', () => {
+    const h2Node = parseSingleNode(
+      'vless://b831381d-6324-4d53-ad4f-8cda48b30811@cdn.example.com:443' +
+      '?type=h2&security=tls&sni=cdn.example.com&path=%2Fh2path' +
+      '#H2%20Node'
+    );
+    expect(h2Node).not.toBeNull();
+    const res = adaptNodeToMihomo(h2Node!);
+    expect(res.emitted).toBe(true);
+    expect(res.config!['h2-opts']).toBeDefined();
+    expect(res.config!['http-opts']).toBeUndefined();
+    expect(res.config!['h2-opts'].path).toBe('/h2path');
+  });
+
+  test('12. VLESS HTTP maps to http-opts (not h2-opts) (P0-2)', () => {
+    const httpNode = parseSingleNode(
+      'vless://b831381d-6324-4d53-ad4f-8cda48b30811@cdn.example.com:443' +
+      '?type=http&security=tls&sni=cdn.example.com&path=%2Fapi' +
+      '#HTTP%20Node'
+    );
+    expect(httpNode).not.toBeNull();
+    const res = adaptNodeToMihomo(httpNode!);
+    expect(res.emitted).toBe(true);
+    expect(res.config!['http-opts']).toBeDefined();
+    expect(res.config!['h2-opts']).toBeUndefined();
+  });
+
+  // ── P0-3: mKCP / MeKya pass-through ──────────────────────────────────────
+
+  test('13. VMess mKCP passes Compatibility Gate and emits network: mkcp (P0-3)', () => {
+    const mkcpVmess = 'vmess://' + Buffer.from(JSON.stringify({
+      v: '2', ps: 'Japan mKCP', add: '1.2.3.4', port: 12345,
+      id: 'a3d9059f-7db9-4674-8be0-b530263f848a', aid: 0,
+      net: 'mkcp', type: 'none', tls: ''
+    })).toString('base64');
+    const node = parseSingleNode(mkcpVmess);
+    expect(node).not.toBeNull();
+    const res = adaptNodeToMihomo(node!);
+    expect(res.fatal).toBe(false);
+    expect(res.emitted).toBe(true);
+    expect(res.config!.network).toBe('mkcp');
+  });
+
+  test('14. VMess MeKya passes Compatibility Gate (P0-3)', () => {
+    const mekyaVmess = 'vmess://' + Buffer.from(JSON.stringify({
+      v: '2', ps: 'Singapore MeKya', add: '1.2.3.4', port: 9999,
+      id: 'a3d9059f-7db9-4674-8be0-b530263f848a', aid: 0,
+      net: 'mekya', type: 'none', tls: ''
+    })).toString('base64');
+    const node = parseSingleNode(mekyaVmess);
+    expect(node).not.toBeNull();
+    const res = adaptNodeToMihomo(node!);
+    expect(res.fatal).toBe(false);
+    expect(res.emitted).toBe(true);
+    expect(res.config!.network).toBe('mekya');
+  });
 });

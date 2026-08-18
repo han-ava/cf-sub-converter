@@ -237,43 +237,38 @@ export default {
           enableUdp: body.udp !== false
         });
 
-        // Compatibility Gate: 统计转换质量等级 (perfect, warning, fatal) 与最终输出
+        // 统计计算全量 processedNodes（不受 UI 1000 条截断影响）
         let perfectCount = 0;
         let warningCount = 0;
         let fatalCount = 0;
 
-        const nodeItems = processedNodes.slice(0, 1000).map(n => {
+        const allConvResults = processedNodes.map(n => {
           const adaptRes = adaptNodeToMihomo(n);
           let status: 'perfect' | 'warning' | 'fatal' = 'perfect';
-
-          if (adaptRes.fatal) {
-            status = 'fatal';
-            fatalCount++;
-          } else if (adaptRes.lossy || adaptRes.warnings.length > 0) {
-            status = 'warning';
-            warningCount++;
-          } else {
-            perfectCount++;
-          }
-
-          return {
-            name: n.name,
-            type: n.protocol,
-            server: n.server,
-            port: n.port,
-            conversion: {
-              status,
-              emitted: adaptRes.emitted,
-              target: 'mihomo',
-              lossy: adaptRes.lossy,
-              warnings: adaptRes.warnings.map(w => `[${w.level.toUpperCase()}] ${w.message}`),
-              unsupportedParams: adaptRes.unsupportedParams,
-              skipReason: adaptRes.skipReason
-            }
-          };
+          if (adaptRes.fatal) { status = 'fatal'; fatalCount++; }
+          else if (adaptRes.lossy || adaptRes.warnings.length > 0) { status = 'warning'; warningCount++; }
+          else { perfectCount++; }
+          return { n, adaptRes, status };
         });
 
         const finalCount = perfectCount + warningCount;
+
+        // UI 展示截取前 1000 条（统计已在全量计算完毕）
+        const nodeItems = allConvResults.slice(0, 1000).map(({ n, adaptRes, status }) => ({
+          name: n.name,
+          type: n.protocol,
+          server: n.server,
+          port: n.port,
+          conversion: {
+            status,
+            emitted: adaptRes.emitted,
+            target: 'mihomo',
+            lossy: adaptRes.lossy,
+            warnings: adaptRes.warnings.map(w => `[${w.level.toUpperCase()}] ${w.message}`),
+            unsupportedParams: adaptRes.unsupportedParams,
+            skipReason: adaptRes.skipReason
+          }
+        }));
 
         // 地区统计
         const regionStats: Record<string, number> = {};
