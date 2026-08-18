@@ -132,78 +132,125 @@ describe('Tower-Inspired Compatibility Gate Suite', () => {
     }
   });
 
-  // ── P0-1: XHTTP extra 展平到 xhttp-opts 顶层与递归映射 ───────────────────
+  // ── P0-1: XHTTP extra Xray 真实结构转换与 downloadSettings 语义转换 ─────────
 
-  test('9. VLESS XHTTP: downloadSettings and reuseSettings recursive mapping (P0-1)', () => {
-    const xhttpComplexExtra = parseSingleNode(
+  test('9. VLESS XHTTP: Xray real downloadSettings & xmux streamSettings conversion (P0-1/2)', () => {
+    const xrayGoldenNode = parseSingleNode(
       'vless://b831381d-6324-4d53-ad4f-8cda48b30811@1.2.3.4:443' +
       '?type=xhttp&security=tls&sni=cdn.example.com' +
       '&extra=' + encodeURIComponent(JSON.stringify({
-        reuseSettings: {
-          maxConcurrency: 16,
-          maxConnections: 4,
-          cMaxReuseTimes: 100,
-          hMaxRequestTimes: 50,
-          hMaxReusableSecs: 30,
-          hKeepAlivePeriod: 15
+        xmux: {
+          maxConcurrency: '16-32'
         },
         downloadSettings: {
-          address: 'download.example.com',
-          port: 8443,
-          noGRPCHeader: true,
-          xPaddingBytes: '10-20',
+          address: '1.2.3.4',
+          port: 443,
+          network: 'xhttp',
+          security: 'tls',
           tlsSettings: {
-            serverName: 'dl.example.com',
-            alpn: ['h2'],
-            insecure: true,
-            realitySettings: {
-              publicKey: 'pubkey123',
-              shortId: 'sid123'
-            }
+            serverName: 'example.com',
+            fingerprint: 'chrome'
           },
-          reuseSettings: {
-            maxConcurrency: 8
+          xhttpSettings: {
+            path: '/down',
+            host: 'example.com'
           }
         }
       })) +
-      '#XHTTP%20Complex%20Settings'
+      '#XHTTP%20Xray%20Golden'
     );
-    expect(xhttpComplexExtra).not.toBeNull();
-    const res = adaptNodeToMihomo(xhttpComplexExtra!);
+    expect(xrayGoldenNode).not.toBeNull();
+    const res = adaptNodeToMihomo(xrayGoldenNode!);
     expect(res.fatal).toBe(false);
     expect(res.emitted).toBe(true);
     const xhttpOpts = res.config!['xhttp-opts'] as Record<string, any>;
     expect(xhttpOpts).toBeDefined();
 
-    // 验证 reuse-settings 递归映射
+    // 关键断言：xmux 映射为 reuse-settings
     expect(xhttpOpts['reuse-settings']).toEqual({
-      'max-concurrency': 16,
-      'max-connections': 4,
-      'c-max-reuse-times': 100,
-      'h-max-request-times': 50,
-      'h-max-reusable-secs': 30,
-      'h-keep-alive-period': 15
+      'max-concurrency': '16-32'
     });
 
-    // 验证 download-settings 递归映射
-    expect(xhttpOpts['download-settings']).toBeDefined();
-    expect(xhttpOpts['download-settings'].address).toBe('download.example.com');
-    expect(xhttpOpts['download-settings'].port).toBe(8443);
-    expect(xhttpOpts['download-settings']['no-grpc-header']).toBe(true);
-    expect(xhttpOpts['download-settings']['x-padding-bytes']).toBe('10-20');
-    expect(xhttpOpts['download-settings']['tls-settings']).toEqual({
-      'server-name': 'dl.example.com',
-      'alpn': ['h2'],
-      'insecure': true,
-      'reality-settings': {
+    // 关键断言：downloadSettings 语义转换为 Mihomo 官方扁平结构
+    expect(xhttpOpts['download-settings']).toEqual({
+      server: '1.2.3.4',
+      port: 443,
+      tls: true,
+      servername: 'example.com',
+      'client-fingerprint': 'chrome',
+      path: '/down',
+      host: 'example.com'
+    });
+
+    // 禁止出现 Xray 原始嵌套键
+    expect(xhttpOpts['download-settings'].address).toBeUndefined();
+    expect(xhttpOpts['download-settings'].network).toBeUndefined();
+    expect(xhttpOpts['download-settings']['tls-settings']).toBeUndefined();
+    expect(xhttpOpts['download-settings'].tlsSettings).toBeUndefined();
+    expect(xhttpOpts['download-settings']['xhttp-settings']).toBeUndefined();
+    expect(xhttpOpts['download-settings'].xhttpSettings).toBeUndefined();
+    expect(xhttpOpts['extra']).toBeUndefined();
+  });
+
+  test('9b. VLESS XHTTP: downloadSettings with Reality and nested xmux (P0-1/2)', () => {
+    const xhttpRealityDownload = parseSingleNode(
+      'vless://b831381d-6324-4d53-ad4f-8cda48b30811@1.2.3.4:443' +
+      '?type=xhttp&security=tls&sni=cdn.example.com' +
+      '&extra=' + encodeURIComponent(JSON.stringify({
+        downloadSettings: {
+          address: 'download.example.com',
+          port: 8443,
+          security: 'reality',
+          tlsSettings: {
+            serverName: 'dl.example.com',
+            alpn: ['h2'],
+            allowInsecure: true,
+            realitySettings: {
+              publicKey: 'pubkey123',
+              shortId: 'sid123',
+              spiderX: '/spx'
+            }
+          },
+          xhttpSettings: {
+            path: '/dl-stream',
+            noGRPCHeader: true,
+            xPaddingBytes: '10-20',
+            extra: {
+              xmux: {
+                maxConcurrency: 8
+              }
+            }
+          }
+        }
+      })) +
+      '#XHTTP%20Reality%20Download'
+    );
+    expect(xhttpRealityDownload).not.toBeNull();
+    const res = adaptNodeToMihomo(xhttpRealityDownload!);
+    expect(res.fatal).toBe(false);
+    expect(res.emitted).toBe(true);
+    const xhttpOpts = res.config!['xhttp-opts'] as Record<string, any>;
+    expect(xhttpOpts).toBeDefined();
+
+    expect(xhttpOpts['download-settings']).toEqual({
+      server: 'download.example.com',
+      port: 8443,
+      tls: true,
+      servername: 'dl.example.com',
+      alpn: ['h2'],
+      'skip-cert-verify': true,
+      'reality-opts': {
         'public-key': 'pubkey123',
-        'short-id': 'sid123'
+        'short-id': 'sid123',
+        'spider-x': '/spx'
+      },
+      path: '/dl-stream',
+      'no-grpc-header': true,
+      'x-padding-bytes': '10-20',
+      'reuse-settings': {
+        'max-concurrency': 8
       }
     });
-    expect(xhttpOpts['download-settings']['reuse-settings']).toEqual({
-      'max-concurrency': 8
-    });
-    expect(xhttpOpts['extra']).toBeUndefined();
   });
 
   test('10. VLESS XHTTP: x-padding-bytes mapped flat to xhttp-opts, no extra sub-layer (P0-1)', () => {
@@ -225,19 +272,29 @@ describe('Tower-Inspired Compatibility Gate Suite', () => {
     expect(xhttpOpts['extra']).toBeUndefined();
   });
 
-  test('10b. VLESS XHTTP: session-placement (camelCase) mapped to session-placement (P0-1)', () => {
-    const xhttpSession = parseSingleNode(
+  test('10b. VLESS XHTTP: Xray sessionID* and uplinkHTTPMethod mapped correctly (P0-1)', () => {
+    const xhttpXrayFields = parseSingleNode(
       'vless://b831381d-6324-4d53-ad4f-8cda48b30811@1.2.3.4:443' +
       '?type=xhttp&security=tls&sni=cdn.example.com' +
-      '&extra=%7B%22sessionPlacement%22%3A%22path%22%7D' +
-      '#XHTTP%20Session%20Placement'
+      '&extra=' + encodeURIComponent(JSON.stringify({
+        sessionIDPlacement: 'path',
+        sessionIDKey: 'skey',
+        sessionIDTable: 'stable',
+        sessionIDLength: 16,
+        uplinkHTTPMethod: 'POST'
+      })) +
+      '#XHTTP%20Xray%20Fields'
     );
-    expect(xhttpSession).not.toBeNull();
-    const res = adaptNodeToMihomo(xhttpSession!);
+    expect(xhttpXrayFields).not.toBeNull();
+    const res = adaptNodeToMihomo(xhttpXrayFields!);
     expect(res.fatal).toBe(false);
     expect(res.emitted).toBe(true);
     const xhttpOpts = res.config!['xhttp-opts'] as Record<string, any>;
     expect(xhttpOpts['session-placement']).toBe('path');
+    expect(xhttpOpts['session-key']).toBe('skey');
+    expect(xhttpOpts['session-table']).toBe('stable');
+    expect(xhttpOpts['session-length']).toBe(16);
+    expect(xhttpOpts['uplink-http-method']).toBe('POST');
     expect(xhttpOpts['extra']).toBeUndefined();
   });
 
@@ -363,6 +420,13 @@ describe('Tower-Inspired Compatibility Gate Suite', () => {
       id: 'a3d9059f-7db9-4674-8be0-b530263f848a', aid: 0,
       net: 'mekya', type: 'wechat-video', tls: '',
       seed: 'mekya-seed',
+      mtu: 1400,
+      tti: 20,
+      'uplink-capacity': 50,
+      'downlink-capacity': 100,
+      congestion: true,
+      'write-buffer': 4,
+      'read-buffer': 4,
       url: 'https://mekya.example.com/stream',
       'max-write-delay': 500,
       'max-request-size': 65536,
@@ -386,6 +450,13 @@ describe('Tower-Inspired Compatibility Gate Suite', () => {
     expect(mekyaOpts.kcp).toBeDefined();
     expect(mekyaOpts.kcp.seed).toBe('mekya-seed');
     expect(mekyaOpts.kcp.header?.type).toBe('wechat-video');
+    expect(mekyaOpts.kcp.mtu).toBe(1400);
+    expect(mekyaOpts.kcp.tti).toBe(20);
+    expect(mekyaOpts.kcp['uplink-capacity']).toBe(50);
+    expect(mekyaOpts.kcp['downlink-capacity']).toBe(100);
+    expect(mekyaOpts.kcp.congestion).toBe(true);
+    expect(mekyaOpts.kcp['write-buffer']).toBe(4);
+    expect(mekyaOpts.kcp['read-buffer']).toBe(4);
     expect(mekyaOpts.seed).toBeUndefined();
     expect(mekyaOpts.header).toBeUndefined();
   });

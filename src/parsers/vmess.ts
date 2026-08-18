@@ -32,9 +32,11 @@ export function parseVmess(urlStr: string): VmessNode | null {
     const alpn = alpnStr ? (Array.isArray(alpnStr) ? alpnStr : String(alpnStr).split(',').map((s: string) => s.trim())) : undefined;
     const allowInsecure = tls && (vmess.insecure === '1' || vmess.insecure === 1 || vmess.insecure === true || vmess.allowInsecure === true || vmess.skipCertVerify === true);
 
+    const isKcpOrMekya = net === 'mkcp' || net === 'kcp' || net === 'mekya';
+
     // VMess JSON "type" field is the header type for mKCP/MeKya; for other transports it means obfs type
-    // For mKCP: "type" → headerType (e.g. "wechat-video", "dtls", "utp", "srtp", "wireguard", "none")
-    const headerType = (net === 'mkcp' || net === 'kcp' || net === 'mekya')
+    // For mKCP/MeKya: "type" → headerType (e.g. "wechat-video", "dtls", "utp", "srtp", "wireguard", "none")
+    const headerType = isKcpOrMekya
       ? (vmess.type && vmess.type !== 'none' ? String(vmess.type) : undefined)
       : undefined;
 
@@ -47,16 +49,16 @@ export function parseVmess(urlStr: string): VmessNode | null {
         ? (typeof vmess.host === 'string' ? vmess.host.split(',').map((s: string) => s.trim()) : vmess.host)
         : undefined,
       httpPath: (net === 'http' || net === 'h2') && vmess.path ? [vmess.path] : undefined,
-      // mKCP specific fields
+      // mKCP / MeKya specific fields
       headerType,
-      seed: (net === 'mkcp' || net === 'kcp' || net === 'mekya') ? (vmess.seed || undefined) : undefined,
-      congestion: (net === 'mkcp' || net === 'kcp') ? (vmess.congestion ?? undefined) : undefined,
-      uplinkCapacity: (net === 'mkcp' || net === 'kcp') ? (typeof vmess['uplink-capacity'] === 'number' ? vmess['uplink-capacity'] : (typeof vmess.uplinkCapacity === 'number' ? vmess.uplinkCapacity : (vmess['uplink-capacity'] || vmess.uplinkCapacity ? parseInt(String(vmess['uplink-capacity'] || vmess.uplinkCapacity), 10) : undefined))) : undefined,
-      downlinkCapacity: (net === 'mkcp' || net === 'kcp') ? (typeof vmess['downlink-capacity'] === 'number' ? vmess['downlink-capacity'] : (typeof vmess.downlinkCapacity === 'number' ? vmess.downlinkCapacity : (vmess['downlink-capacity'] || vmess.downlinkCapacity ? parseInt(String(vmess['downlink-capacity'] || vmess.downlinkCapacity), 10) : undefined))) : undefined,
-      mtu: (net === 'mkcp' || net === 'kcp') ? (typeof vmess.mtu === 'number' ? vmess.mtu : (vmess.mtu ? parseInt(String(vmess.mtu), 10) : undefined)) : undefined,
-      tti: (net === 'mkcp' || net === 'kcp') ? (typeof vmess.tti === 'number' ? vmess.tti : (vmess.tti ? parseInt(String(vmess.tti), 10) : undefined)) : undefined,
-      writeBuffer: (net === 'mkcp' || net === 'kcp') ? (typeof vmess['write-buffer'] === 'number' ? vmess['write-buffer'] : (typeof vmess.writeBuffer === 'number' ? vmess.writeBuffer : (vmess['write-buffer'] || vmess.writeBuffer ? parseInt(String(vmess['write-buffer'] || vmess.writeBuffer), 10) : undefined))) : undefined,
-      readBuffer: (net === 'mkcp' || net === 'kcp') ? (typeof vmess['read-buffer'] === 'number' ? vmess['read-buffer'] : (typeof vmess['read-buff'] === 'number' ? vmess['read-buff'] : (typeof vmess.readBuffer === 'number' ? vmess.readBuffer : (vmess['read-buffer'] || vmess['read-buff'] || vmess.readBuffer ? parseInt(String(vmess['read-buffer'] || vmess['read-buff'] || vmess.readBuffer), 10) : undefined)))) : undefined,
+      seed: isKcpOrMekya ? (vmess.seed || undefined) : undefined,
+      congestion: isKcpOrMekya ? (vmess.congestion ?? undefined) : undefined,
+      uplinkCapacity: isKcpOrMekya ? (typeof vmess['uplink-capacity'] === 'number' ? vmess['uplink-capacity'] : (typeof vmess.uplinkCapacity === 'number' ? vmess.uplinkCapacity : (vmess['uplink-capacity'] || vmess.uplinkCapacity ? parseInt(String(vmess['uplink-capacity'] || vmess.uplinkCapacity), 10) : undefined))) : undefined,
+      downlinkCapacity: isKcpOrMekya ? (typeof vmess['downlink-capacity'] === 'number' ? vmess['downlink-capacity'] : (typeof vmess.downlinkCapacity === 'number' ? vmess.downlinkCapacity : (vmess['downlink-capacity'] || vmess.downlinkCapacity ? parseInt(String(vmess['downlink-capacity'] || vmess.downlinkCapacity), 10) : undefined))) : undefined,
+      mtu: isKcpOrMekya ? (typeof vmess.mtu === 'number' ? vmess.mtu : (vmess.mtu ? parseInt(String(vmess.mtu), 10) : undefined)) : undefined,
+      tti: isKcpOrMekya ? (typeof vmess.tti === 'number' ? vmess.tti : (vmess.tti ? parseInt(String(vmess.tti), 10) : undefined)) : undefined,
+      writeBuffer: isKcpOrMekya ? (typeof vmess['write-buffer'] === 'number' ? vmess['write-buffer'] : (typeof vmess.writeBuffer === 'number' ? vmess.writeBuffer : (vmess['write-buffer'] || vmess.writeBuffer ? parseInt(String(vmess['write-buffer'] || vmess.writeBuffer), 10) : undefined))) : undefined,
+      readBuffer: isKcpOrMekya ? (typeof vmess['read-buffer'] === 'number' ? vmess['read-buffer'] : (typeof vmess['read-buff'] === 'number' ? vmess['read-buff'] : (typeof vmess.readBuffer === 'number' ? vmess.readBuffer : (vmess['read-buffer'] || vmess['read-buff'] || vmess.readBuffer ? parseInt(String(vmess['read-buffer'] || vmess['read-buff'] || vmess.readBuffer), 10) : undefined)))) : undefined,
       // MeKya specific fields
       url: net === 'mekya' ? (vmess.url ? String(vmess.url) : undefined) : undefined,
       maxWriteDelay: net === 'mekya' ? (typeof vmess['max-write-delay'] === 'number' ? vmess['max-write-delay'] : (typeof vmess.maxWriteDelay === 'number' ? vmess.maxWriteDelay : (vmess['max-write-delay'] || vmess.maxWriteDelay ? parseInt(String(vmess['max-write-delay'] || vmess.maxWriteDelay), 10) : undefined))) : undefined,
@@ -72,7 +74,7 @@ export function parseVmess(urlStr: string): VmessNode | null {
       'tls', 'sni', 'alpn', 'fp', 'insecure', 'allowInsecure', 'skipCertVerify',
       'packetEncoding', 'globalPadding', 'authenticatedLength',
       'packet-encoding', 'global-padding', 'authenticated-length',
-      // mKCP
+      // mKCP / MeKya
       'seed', 'congestion', 'uplink-capacity', 'uplinkCapacity', 'downlink-capacity', 'downlinkCapacity',
       'mtu', 'tti', 'write-buffer', 'writeBuffer', 'read-buff', 'read-buffer', 'readBuffer',
       // MeKya

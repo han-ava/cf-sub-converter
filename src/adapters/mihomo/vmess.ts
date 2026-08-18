@@ -109,6 +109,13 @@ export function adaptVmessToMihomo(node: VmessNode): AdapterResult {
       if (t.h2PoolSize !== undefined && !isNaN(t.h2PoolSize)) mekyaOpts['h2-pool-size'] = t.h2PoolSize;
 
       const kcpSub: Record<string, any> = {};
+      if (t.mtu !== undefined && !isNaN(t.mtu)) kcpSub.mtu = t.mtu;
+      if (t.tti !== undefined && !isNaN(t.tti)) kcpSub.tti = t.tti;
+      if (t.uplinkCapacity !== undefined && !isNaN(t.uplinkCapacity)) kcpSub['uplink-capacity'] = t.uplinkCapacity;
+      if (t.downlinkCapacity !== undefined && !isNaN(t.downlinkCapacity)) kcpSub['downlink-capacity'] = t.downlinkCapacity;
+      if (t.congestion !== undefined) kcpSub.congestion = t.congestion;
+      if (t.writeBuffer !== undefined && !isNaN(t.writeBuffer)) kcpSub['write-buffer'] = t.writeBuffer;
+      if (t.readBuffer !== undefined && !isNaN(t.readBuffer)) kcpSub['read-buffer'] = t.readBuffer;
       if (t.seed) kcpSub.seed = t.seed;
       if (t.headerType) kcpSub.header = { type: t.headerType };
       if (Object.keys(kcpSub).length > 0) mekyaOpts.kcp = kcpSub;
