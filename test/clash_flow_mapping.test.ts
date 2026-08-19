@@ -1,5 +1,5 @@
 // test/clash_flow_mapping.test.ts
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test } from 'bun:test';
 import { parseContent, parseSingleNode } from '../src/parser';
 import { adaptNodeToMihomo } from '../src/adapters/mihomo';
 import { nodeToSingBoxOutbound } from '../src/adapters/singbox';

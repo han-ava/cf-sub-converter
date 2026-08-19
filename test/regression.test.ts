@@ -1,5 +1,5 @@
 // test/regression.test.ts
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test } from 'bun:test';
 import { parseContent, parseSingleNode } from '../src/parser';
 import { adaptNodeToMihomo } from '../src/adapters/mihomo';
 import { toClashMeta } from '../src/generator';

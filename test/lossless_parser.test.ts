@@ -1,5 +1,5 @@
 // test/lossless_parser.test.ts
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test } from 'bun:test';
 import { parseContent, parseSingleNode } from '../src/parser';
 import { FIXTURES } from './fixtures/nodes';
 import { VlessNode, VmessNode, ShadowsocksNode, Hysteria2Node, AnyTLSNode, TrojanNode, TuicNode } from '../src/types';

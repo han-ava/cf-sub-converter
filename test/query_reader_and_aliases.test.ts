@@ -1,5 +1,5 @@
 // test/query_reader_and_aliases.test.ts
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test } from 'bun:test';
 import { QueryParamReader, parseRawQuery, getQueryBool, getQueryParam, parsePositiveIntOrRange, JsonFieldReader } from '../src/utils';
 import { parseSingleNode } from '../src/parser';
 import { adaptNodeToMihomo } from '../src/adapters/mihomo';

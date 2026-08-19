@@ -1,5 +1,5 @@
 // test/base64_ingestion.test.ts
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test } from 'bun:test';
 import { parseContent, parseSingleNode } from '../src/parser';
 import { safeBase64Decode, safeBase64Encode } from '../src/utils';
 import worker from '../src/index';
