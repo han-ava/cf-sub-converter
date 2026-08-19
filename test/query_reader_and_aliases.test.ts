@@ -622,7 +622,7 @@ describe('QueryParamReader & Universal Alias Suite', () => {
     expect(dl.host).toBe('dl-host.example.com');
     expect(dl.mode).toBe('stream-up');
 
-    // Invalid port in downloadSettings
+    // Invalid port in downloadSettings (Critical field -> Escalates to Fatal)
     const badExtra = {
       downloadSettings: {
         server: 'dl.example.com',
@@ -637,11 +637,9 @@ describe('QueryParamReader & Universal Alias Suite', () => {
     expect(badNode).not.toBeNull();
 
     const badRes = adaptNodeToMihomo(badNode!);
-    expect(badRes.fatal).toBe(false);
-    expect(badRes.lossy).toBe(true);
-    const badDl = badRes.config!['xhttp-opts']['download-settings'];
-    expect(badDl.port).toBeUndefined(); // 443abc not coerced to 443
-    expect(badDl['skip-cert-verify']).toBeUndefined(); // allowInsecure="false" not coerced to true
+    expect(badRes.fatal).toBe(true);
+    expect(badRes.emitted).toBe(false);
+    expect(badRes.skipReason).toContain('port');
   });
 
   test('25. AnyTLS: Non-standard URI without auth@host is rejected by parser', () => {
@@ -720,5 +718,22 @@ describe('QueryParamReader & Universal Alias Suite', () => {
     expect(qr.getIntOrRange('concurrency')).toBe('5-10');
     expect(qr.getIntOrRange('bad')).toBeUndefined();
     expect(qr.getInvalidParams().length).toBe(1);
+  });
+
+  test('28. XHTTP enum normalization: queryInHeader, mode client restriction', () => {
+    // 1. query-in-header matches queryInHeader in JsonFieldReader
+    const jr = new JsonFieldReader({
+      xPaddingPlacement: 'query-in-header',
+      mode: 'stream-one'
+    });
+    expect(jr.getEnum(['queryInHeader', 'cookie', 'header', 'query'], 'xPaddingPlacement')).toBe('queryInHeader');
+    expect(jr.getEnum(['auto', 'stream-one', 'stream-up', 'packet-up'], 'mode')).toBe('stream-one');
+
+    // 2. stream-down is rejected
+    const jrBadMode = new JsonFieldReader({
+      mode: 'stream-down'
+    });
+    expect(jrBadMode.getEnum(['auto', 'stream-one', 'stream-up', 'packet-up'], 'mode')).toBeUndefined();
+    expect(jrBadMode.getInvalidFields().length).toBe(1);
   });
 });

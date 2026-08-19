@@ -305,8 +305,13 @@ export class QueryParamReader {
   getEnum(allowedValues: string[], ...aliases: string[]): string | undefined {
     const val = this.get(...aliases);
     if (val === undefined) return undefined;
-    const clean = val.trim().toLowerCase();
-    const matched = allowedValues.find(a => a.toLowerCase() === clean);
+    const clean = val.trim();
+    const cleanLower = clean.toLowerCase();
+    const cleanNoDash = cleanLower.replace(/-/g, '');
+    const matched = allowedValues.find(a => {
+      const aLower = a.toLowerCase();
+      return aLower === cleanLower || aLower.replace(/-/g, '') === cleanNoDash;
+    });
     if (matched !== undefined) {
       return matched;
     }
@@ -579,8 +584,13 @@ export class JsonFieldReader {
       if (aliasSet.has(k.toLowerCase())) {
         this.usedKeys.add(k.toLowerCase());
         if (v === undefined || v === null || v === '') return undefined;
-        const str = String(v).trim().toLowerCase();
-        const matched = allowedValues.find(a => a.toLowerCase() === str);
+        const str = String(v).trim();
+        const strLower = str.toLowerCase();
+        const strNoDash = strLower.replace(/-/g, '');
+        const matched = allowedValues.find(a => {
+          const aLower = a.toLowerCase();
+          return aLower === strLower || aLower.replace(/-/g, '') === strNoDash;
+        });
         if (matched !== undefined) {
           return matched;
         }

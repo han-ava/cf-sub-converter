@@ -130,11 +130,27 @@ function mapReuseSettings(raw: unknown): { mapped: Record<string, unknown>; unma
   return { mapped, unmapped };
 }
 
-const XHTTP_VALID_MODES = ['auto', 'stream-up', 'stream-down', 'packet-up', 'packet-down', 'stream-one'];
+const XHTTP_VALID_MODES = ['auto', 'stream-one', 'stream-up', 'packet-up'];
 const XHTTP_VALID_UPLINK_METHODS = ['POST', 'PUT', 'GET', 'HEAD', 'OPTIONS', 'PATCH', 'DELETE'];
-const XHTTP_VALID_PLACEMENTS = ['header', 'query', 'path', 'cookie'];
-const XHTTP_VALID_DATA_PLACEMENTS = ['body', 'header', 'query', 'cookie', 'path'];
-const XHTTP_VALID_PADDING_PLACEMENTS = ['header', 'query', 'cookie', 'path', 'body'];
+const XHTTP_VALID_PLACEMENTS = ['header', 'cookie', 'query'];
+const XHTTP_VALID_DATA_PLACEMENTS = ['body', 'header', 'cookie', 'query'];
+const XHTTP_VALID_PADDING_PLACEMENTS = ['queryInHeader', 'cookie', 'header', 'query'];
+
+/**
+ * XHTTP 连接关键字段门禁表 (Critical Field Gate)
+ * 当用户明确提供了这些关键字段，但值无法合法映射时，必须升级为 Fatal 拦截，禁止静默丢弃或删除后回退默认/继承值
+ */
+function isXhttpCriticalField(fieldKey: string): boolean {
+  const norm = fieldKey.toLowerCase().replace(/[-_]/g, '');
+  return (
+    norm === 'mode' ||
+    norm === 'sessionplacement' ||
+    norm === 'sessionidplacement' ||
+    norm === 'seqplacement' ||
+    norm === 'seqidplacement' ||
+    norm === 'uplinkdataplacement'
+  );
+}
 
 /**
  * 结构化读取 XHTTP 所有专属配置并执行类型与枚举校验
@@ -143,7 +159,7 @@ function mapXhttpFields(
   r: JsonFieldReader,
   prefix: string,
   ignoreKeys: string[] = []
-): { mapped: Record<string, unknown>; unmapped: string[] } {
+): { mapped: Record<string, unknown>; unmapped: string[]; fatal?: true; skipReason?: string } {
   const mapped: Record<string, unknown> = {};
   const unmapped: string[] = [];
 
@@ -231,8 +247,16 @@ function mapXhttpFields(
   const scMinPostsInterval = r.getStrictInt('sc-min-posts-interval-ms', 'scMinPostsIntervalMs');
   if (scMinPostsInterval !== undefined) mapped['sc-min-posts-interval-ms'] = scMinPostsInterval;
 
-  // 收集非法字段
+  // 校验关键参数非法 -> 触发 Fatal
   for (const inv of r.getInvalidFields()) {
+    if (isXhttpCriticalField(inv.key)) {
+      return {
+        mapped: {},
+        fatal: true,
+        skipReason: `XHTTP 关键参数 [${prefix}.${inv.key}] 非法: ${inv.reason}`,
+        unmapped: []
+      };
+    }
     unmapped.push(`${prefix}.${inv.key} (非法值: "${inv.value}")`);
   }
 
@@ -268,25 +292,49 @@ function mapXrayDownloadSettingsToMihomo(
   const mapped: Record<string, unknown> = {};
   const unmapped: string[] = [];
 
-  // 1. address / server -> server
-  const server = r.getString('server', 'address');
-  if (server) mapped.server = server;
-
-  // 2. port -> port (strict int 1-65535)
-  const port = r.getStrictInt('port');
-  if (port !== undefined) {
-    if (port >= 1 && port <= 65535) {
-      mapped.port = port;
-    } else {
-      unmapped.push(`download-settings.port (超出合法范围 1-65535: ${port})`);
+  // 1. address / server -> server (Critical Gate)
+  const rawServer = r.getRaw('server', 'address');
+  if (rawServer !== undefined && rawServer !== null && rawServer !== '') {
+    const server = r.getString('server', 'address');
+    if (!server || typeof rawServer !== 'string' || !rawServer.trim()) {
+      return {
+        mapped: {},
+        fatal: true,
+        skipReason: `节点 [${nodeName}] downloadSettings 关键参数 [server] 不能为空或格式非法: [${rawServer}]`,
+        unmapped: []
+      };
     }
+    mapped.server = server;
   }
 
-  // 3. security / tls (处理上行继承与清空语义)
+  // 2. port -> port (strict int 1-65535, Critical Gate)
+  const rawPort = r.getRaw('port');
+  if (rawPort !== undefined && rawPort !== null && rawPort !== '') {
+    const port = r.getStrictInt('port');
+    if (port === undefined || port < 1 || port > 65535) {
+      return {
+        mapped: {},
+        fatal: true,
+        skipReason: `节点 [${nodeName}] downloadSettings 关键参数 [port] 非法: [${rawPort}] (期望 1-65535 整数)`,
+        unmapped: []
+      };
+    }
+    mapped.port = port;
+  }
+
+  // 3. security / tls (Critical Gate: 处理上行继承与清空语义)
   const rawSec = r.getRaw('security');
   let sec: string | undefined;
   if (rawSec !== undefined && rawSec !== null && rawSec !== '') {
     sec = r.getEnum(['tls', 'reality', 'none'], 'security');
+    if (sec === undefined) {
+      return {
+        mapped: {},
+        fatal: true,
+        skipReason: `节点 [${nodeName}] downloadSettings 关键参数 [security] 非法: [${rawSec}] 不是合法的安全协议 (仅支持 tls / reality / none)`,
+        unmapped: []
+      };
+    }
     if (sec === 'tls') {
       mapped.tls = true;
       if (context?.uplinkIsReality) {
@@ -302,8 +350,17 @@ function mapXrayDownloadSettingsToMihomo(
     }
   }
 
-  const directTls = r.getStrictBool('tls');
-  if (directTls !== undefined) {
+  const rawDirectTls = r.getRaw('tls');
+  if (rawDirectTls !== undefined && rawDirectTls !== null && rawDirectTls !== '') {
+    const directTls = r.getStrictBool('tls');
+    if (directTls === undefined) {
+      return {
+        mapped: {},
+        fatal: true,
+        skipReason: `节点 [${nodeName}] downloadSettings 关键参数 [tls] 不是合法的布尔值: [${rawDirectTls}]`,
+        unmapped: []
+      };
+    }
     if (directTls === true) {
       mapped.tls = true;
       if (context?.uplinkIsReality && sec !== 'reality') {
@@ -317,7 +374,7 @@ function mapXrayDownloadSettingsToMihomo(
     }
   }
 
-  // 4. network -> 校验下行传输协议
+  // 4. network -> 校验下行传输协议 (Critical Gate)
   const rawNet = r.getRaw('network');
   if (rawNet !== undefined && rawNet !== null && rawNet !== '') {
     const net = r.getEnum(['xhttp', 'splithttp', 'tcp', ''], 'network');
@@ -433,7 +490,10 @@ function mapXrayDownloadSettingsToMihomo(
           if (Object.keys(subReuse).length > 0) mapped['reuse-settings'] = subReuse;
           unmapped.push(...subU.map(u => `download-settings.xhttpSettings.extra.${u}`));
         }
-        const { mapped: subXhttp, unmapped: subU } = mapXhttpFields(er, 'download-settings.xhttpSettings.extra', ['xmux', 'reusesettings', 'reuse-settings']);
+        const { mapped: subXhttp, unmapped: subU, fatal, skipReason } = mapXhttpFields(er, 'download-settings.xhttpSettings.extra', ['xmux', 'reusesettings', 'reuse-settings']);
+        if (fatal) {
+          return { mapped: {}, fatal: true, skipReason: `节点 [${nodeName}] ${skipReason}`, unmapped: [] };
+        }
         Object.assign(mapped, subXhttp);
         unmapped.push(...subU);
       } else if (typeof extraVal === 'string') {
@@ -447,7 +507,10 @@ function mapXrayDownloadSettingsToMihomo(
               if (Object.keys(subReuse).length > 0) mapped['reuse-settings'] = subReuse;
               unmapped.push(...subU.map(u => `download-settings.xhttpSettings.extra.${u}`));
             }
-            const { mapped: subXhttp, unmapped: subU } = mapXhttpFields(er, 'download-settings.xhttpSettings.extra', ['xmux', 'reusesettings', 'reuse-settings']);
+            const { mapped: subXhttp, unmapped: subU, fatal, skipReason } = mapXhttpFields(er, 'download-settings.xhttpSettings.extra', ['xmux', 'reusesettings', 'reuse-settings']);
+            if (fatal) {
+              return { mapped: {}, fatal: true, skipReason: `节点 [${nodeName}] ${skipReason}`, unmapped: [] };
+            }
             Object.assign(mapped, subXhttp);
             unmapped.push(...subU);
           }
@@ -457,7 +520,10 @@ function mapXrayDownloadSettingsToMihomo(
       }
     }
 
-    const { mapped: subXhttp, unmapped: subU } = mapXhttpFields(xr, 'download-settings.xhttpSettings', ['extra']);
+    const { mapped: subXhttp, unmapped: subU, fatal, skipReason } = mapXhttpFields(xr, 'download-settings.xhttpSettings', ['extra']);
+    if (fatal) {
+      return { mapped: {}, fatal: true, skipReason: `节点 [${nodeName}] ${skipReason}`, unmapped: [] };
+    }
     Object.assign(mapped, subXhttp);
     unmapped.push(...subU);
   }
@@ -480,7 +546,10 @@ function mapXrayDownloadSettingsToMihomo(
       if (Object.keys(subReuse).length > 0) mapped['reuse-settings'] = subReuse;
       unmapped.push(...subU.map(u => `download-settings.extra.${u}`));
     }
-    const { mapped: subXhttp, unmapped: subU } = mapXhttpFields(er, 'download-settings.extra', ['xmux', 'reusesettings', 'reuse-settings']);
+    const { mapped: subXhttp, unmapped: subU, fatal, skipReason } = mapXhttpFields(er, 'download-settings.extra', ['xmux', 'reusesettings', 'reuse-settings']);
+    if (fatal) {
+      return { mapped: {}, fatal: true, skipReason: `节点 [${nodeName}] ${skipReason}`, unmapped: [] };
+    }
     Object.assign(mapped, subXhttp);
     unmapped.push(...subU);
   }
@@ -496,13 +565,16 @@ function mapXrayDownloadSettingsToMihomo(
   if (topSkipCert) mapped['skip-cert-verify'] = true;
 
   // 11. Mihomo 顶层 XHTTP 标量字段直接读取
-  const { mapped: topXhttp, unmapped: topXhttpU } = mapXhttpFields(r, 'download-settings', [
+  const { mapped: topXhttp, unmapped: topXhttpU, fatal, skipReason } = mapXhttpFields(r, 'download-settings', [
     'server', 'address', 'port', 'security', 'tls', 'network',
     'tlssettings', 'tls-settings', 'realitysettings', 'reality-settings', 'realityopts', 'reality-opts',
     'xhttpsettings', 'xhttp-settings', 'xmux', 'reusesettings', 'reuse-settings', 'extra',
     'servername', 'serverName', 'sni', 'client-fingerprint', 'clientFingerprint', 'fingerprint', 'fp',
     'skip-cert-verify', 'skipCertVerify', 'allowInsecure', 'insecure'
   ]);
+  if (fatal) {
+    return { mapped: {}, fatal: true, skipReason: `节点 [${nodeName}] ${skipReason}`, unmapped: [] };
+  }
   Object.assign(mapped, topXhttp);
   unmapped.push(...topXhttpU);
 
@@ -566,17 +638,23 @@ function applyXhttpExtra(
   const xhttpVal = er.getRaw('xhttpSettings', 'xhttp-settings');
   if (xhttpVal && typeof xhttpVal === 'object' && !Array.isArray(xhttpVal)) {
     const xr = new JsonFieldReader(xhttpVal as Record<string, unknown>);
-    const { mapped: subXhttp, unmapped: subU } = mapXhttpFields(xr, 'xhttp-opts.xhttpSettings');
+    const { mapped: subXhttp, unmapped: subU, fatal, skipReason } = mapXhttpFields(xr, 'xhttp-opts.xhttpSettings');
+    if (fatal) {
+      return { fatal: true, skipReason: `节点 [${nodeName}] ${skipReason}`, unmapped: ['xhttp-opts.xhttpSettings'] };
+    }
     Object.assign(opts, subXhttp);
     unmapped.push(...subU);
   }
 
   // 4. 顶层标量字段
-  const { mapped: scalarXhttp, unmapped: scalarU } = mapXhttpFields(er, 'xhttp-opts.extra', [
+  const { mapped: scalarXhttp, unmapped: scalarU, fatal, skipReason } = mapXhttpFields(er, 'xhttp-opts.extra', [
     'xmux', 'reusesettings', 'reuse-settings',
     'downloadsettings', 'download-settings',
     'xhttpsettings', 'xhttp-settings'
   ]);
+  if (fatal) {
+    return { fatal: true, skipReason: `节点 [${nodeName}] ${skipReason}`, unmapped: ['xhttp-opts.extra'] };
+  }
   Object.assign(opts, scalarXhttp);
   unmapped.push(...scalarU);
 
@@ -716,12 +794,18 @@ export function adaptVlessToMihomo(node: VlessNode): AdapterResult {
         if (matchedMode) {
           xhttpOpts.mode = matchedMode;
         } else {
-          unsupportedParams.push('transport.mode');
-          warnings.push({
-            level: 'warn',
-            field: 'transport.mode',
-            message: `XHTTP mode [${t.mode}] 不是合法的枚举值 (允许值: ${XHTTP_VALID_MODES.join(', ')})`
-          });
+          return {
+            fatal: true,
+            lossy: true,
+            emitted: false,
+            skipReason: `节点 [${node.name}] XHTTP 关键参数 [mode] 非法: "${t.mode}" 不是合法的枚举值 (允许值: ${XHTTP_VALID_MODES.join(', ')})`,
+            warnings: [{
+              level: 'fatal',
+              field: 'transport.mode',
+              message: `XHTTP mode [${t.mode}] 不是合法的枚举值 (允许值: ${XHTTP_VALID_MODES.join(', ')})`
+            }],
+            unsupportedParams: ['transport.mode']
+          };
         }
       }
 

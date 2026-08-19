@@ -351,7 +351,7 @@ describe('Tower-Inspired Compatibility Gate Suite', () => {
       'vless://b831381d-6324-4d53-ad4f-8cda48b30811@1.2.3.4:443' +
       '?type=xhttp&security=tls&sni=cdn.example.com' +
       '&extra=' + encodeURIComponent(JSON.stringify({
-        sessionIDPlacement: 'path',
+        sessionIDPlacement: 'header',
         sessionIDKey: 'skey',
         sessionIDTable: 'stable',
         sessionIDLength: 16,
@@ -364,7 +364,7 @@ describe('Tower-Inspired Compatibility Gate Suite', () => {
     expect(res.fatal).toBe(false);
     expect(res.emitted).toBe(true);
     const xhttpOpts = res.config!['xhttp-opts'] as Record<string, any>;
-    expect(xhttpOpts['session-placement']).toBe('path');
+    expect(xhttpOpts['session-placement']).toBe('header');
     expect(xhttpOpts['session-key']).toBe('skey');
     expect(xhttpOpts['session-table']).toBe('stable');
     expect(xhttpOpts['session-length']).toBe(16);
@@ -837,7 +837,7 @@ describe('Tower-Inspired Compatibility Gate Suite', () => {
   // ── P0-2: XHTTP 严格类型与枚举门禁测试 ─────────────────────────────────────
 
   test('23. XHTTP options enforce strict types and enum gates', () => {
-    // 1. 合法枚举与严格布尔值
+    // 1. 合法枚举与严格布尔值 (包含 queryInHeader 与合法 client mode)
     const validXhttpNode = parseSingleNode(
       'vless://b831381d-6324-4d53-ad4f-8cda48b30811@1.2.3.4:443' +
       '?type=xhttp&security=tls&sni=main.example.com' +
@@ -845,10 +845,10 @@ describe('Tower-Inspired Compatibility Gate Suite', () => {
         mode: 'stream-up',
         noGRPCHeader: 'false',
         uplinkHTTPMethod: 'POST',
-        sessionIDPlacement: 'path',
+        sessionIDPlacement: 'header',
         seqPlacement: 'cookie',
         uplinkDataPlacement: 'body',
-        xPaddingPlacement: 'header',
+        xPaddingPlacement: 'queryInHeader',
         xPaddingObfsMode: 'true',
         xPaddingBytes: '100-1000'
       })) +
@@ -862,22 +862,21 @@ describe('Tower-Inspired Compatibility Gate Suite', () => {
     expect(opts.mode).toBe('stream-up');
     expect(opts['no-grpc-header']).toBe(false);
     expect(opts['uplink-http-method']).toBe('POST');
-    expect(opts['session-placement']).toBe('path');
+    expect(opts['session-placement']).toBe('header');
     expect(opts['seq-placement']).toBe('cookie');
     expect(opts['uplink-data-placement']).toBe('body');
-    expect(opts['x-padding-placement']).toBe('header');
+    expect(opts['x-padding-placement']).toBe('queryInHeader');
     expect(opts['x-padding-obfs-mode']).toBe(true);
     expect(opts['x-padding-bytes']).toBe('100-1000');
 
-    // 2. 非法枚举与类型错误（拦截并产生警告，不透传非法值）
+    // 2. 非关键参数非法枚举与类型错误（path on xPaddingPlacement, 拦截并产生警告，不透传非法值，节点仍可发出）
     const invalidXhttpNode = parseSingleNode(
       'vless://b831381d-6324-4d53-ad4f-8cda48b30811@1.2.3.4:443' +
       '?type=xhttp&security=tls&sni=main.example.com' +
       '&extra=' + encodeURIComponent(JSON.stringify({
-        mode: 'invalid_mode',
         noGRPCHeader: 'invalid_bool',
         uplinkHTTPMethod: 'INVALID_METHOD',
-        sessionIDPlacement: 'invalid_placement',
+        xPaddingPlacement: 'path', // path 非合法 x-padding-placement (非关键参数 -> warning)
         xPaddingBytes: 'invalid_range'
       })) +
       '#Invalid%20XHTTP'
@@ -886,12 +885,11 @@ describe('Tower-Inspired Compatibility Gate Suite', () => {
     expect(resInvalid.fatal).toBe(false);
     expect(resInvalid.lossy).toBe(true);
     const badOpts = resInvalid.config!['xhttp-opts'] || {};
-    expect(badOpts.mode).toBeUndefined();
     expect(badOpts['no-grpc-header']).toBeUndefined();
     expect(badOpts['uplink-http-method']).toBeUndefined();
-    expect(badOpts['session-placement']).toBeUndefined();
+    expect(badOpts['x-padding-placement']).toBeUndefined();
     expect(badOpts['x-padding-bytes']).toBeUndefined();
-    expect(resInvalid.unsupportedParams.some(p => p.includes('mode'))).toBe(true);
+    expect(resInvalid.unsupportedParams.some(p => p.includes('xPaddingPlacement') || p.includes('x-padding-placement'))).toBe(true);
     expect(resInvalid.unsupportedParams.some(p => p.includes('noGRPCHeader') || p.includes('no-grpc-header'))).toBe(true);
   });
 
@@ -1009,5 +1007,108 @@ describe('Tower-Inspired Compatibility Gate Suite', () => {
     expect(resBadRange.lossy).toBe(true);
     expect(resBadRange.config!['xhttp-opts']['session-length']).toBeUndefined();
     expect(resBadRange.unsupportedParams.some(p => p.includes('session-length') || p.includes('sessionIDLength'))).toBe(true);
+  });
+
+  // ── P0 Escalation: XHTTP_CRITICAL_FIELDS 门禁测试 ─────────────────────────
+
+  test('26. XHTTP and downloadSettings critical fields escalate to fatal when invalid', () => {
+    // 1. mode 非法 (如 stream-down, invalid_mode) -> Fatal
+    const badModeNode = parseSingleNode(
+      'vless://b831381d-6324-4d53-ad4f-8cda48b30811@1.2.3.4:443?type=xhttp&security=tls&mode=stream-down#Bad%20Mode'
+    );
+    const resBadMode = adaptNodeToMihomo(badModeNode!);
+    expect(resBadMode.fatal).toBe(true);
+    expect(resBadMode.emitted).toBe(false);
+    expect(resBadMode.skipReason).toContain('mode');
+
+    const badModeInExtra = parseSingleNode(
+      'vless://b831381d-6324-4d53-ad4f-8cda48b30811@1.2.3.4:443?type=xhttp&security=tls&extra=' +
+      encodeURIComponent(JSON.stringify({ mode: 'invalid_mode' })) + '#Bad%20Mode%20Extra'
+    );
+    const resBadModeExtra = adaptNodeToMihomo(badModeInExtra!);
+    expect(resBadModeExtra.fatal).toBe(true);
+    expect(resBadModeExtra.emitted).toBe(false);
+
+    // 2. download-settings.port 非法 (超出 1-65535 或非整数) -> Fatal
+    const badDlPortNode = parseSingleNode(
+      'vless://b831381d-6324-4d53-ad4f-8cda48b30811@1.2.3.4:443?type=xhttp&security=tls&extra=' +
+      encodeURIComponent(JSON.stringify({
+        downloadSettings: {
+          server: 'dl.example.com',
+          port: 70000
+        }
+      })) + '#Bad%20Dl%20Port'
+    );
+    const resBadDlPort = adaptNodeToMihomo(badDlPortNode!);
+    expect(resBadDlPort.fatal).toBe(true);
+    expect(resBadDlPort.emitted).toBe(false);
+    expect(resBadDlPort.skipReason).toContain('port');
+
+    // 3. download-settings.server 为空或类型非法 -> Fatal
+    const badDlServerNode = parseSingleNode(
+      'vless://b831381d-6324-4d53-ad4f-8cda48b30811@1.2.3.4:443?type=xhttp&security=tls&extra=' +
+      encodeURIComponent(JSON.stringify({
+        downloadSettings: {
+          server: '   ',
+          port: 443
+        }
+      })) + '#Bad%20Dl%20Server'
+    );
+    const resBadDlServer = adaptNodeToMihomo(badDlServerNode!);
+    expect(resBadDlServer.fatal).toBe(true);
+    expect(resBadDlServer.emitted).toBe(false);
+    expect(resBadDlServer.skipReason).toContain('server');
+
+    // 4. download-settings.security 非法 -> Fatal
+    const badDlSecNode = parseSingleNode(
+      'vless://b831381d-6324-4d53-ad4f-8cda48b30811@1.2.3.4:443?type=xhttp&security=tls&extra=' +
+      encodeURIComponent(JSON.stringify({
+        downloadSettings: {
+          server: 'dl.example.com',
+          port: 443,
+          security: 'quic'
+        }
+      })) + '#Bad%20Dl%20Security'
+    );
+    const resBadDlSec = adaptNodeToMihomo(badDlSecNode!);
+    expect(resBadDlSec.fatal).toBe(true);
+    expect(resBadDlSec.emitted).toBe(false);
+    expect(resBadDlSec.skipReason).toContain('security');
+
+    // 5. session-placement / sessionIDPlacement 非法 -> Fatal
+    const badSessionPlacementNode = parseSingleNode(
+      'vless://b831381d-6324-4d53-ad4f-8cda48b30811@1.2.3.4:443?type=xhttp&security=tls&extra=' +
+      encodeURIComponent(JSON.stringify({
+        sessionIDPlacement: 'invalid_placement'
+      })) + '#Bad%20Session%20Placement'
+    );
+    const resBadSessionPlacement = adaptNodeToMihomo(badSessionPlacementNode!);
+    expect(resBadSessionPlacement.fatal).toBe(true);
+    expect(resBadSessionPlacement.emitted).toBe(false);
+    expect(resBadSessionPlacement.skipReason).toContain('sessionIDPlacement');
+
+    // 6. seq-placement / seqPlacement 非法 -> Fatal
+    const badSeqPlacementNode = parseSingleNode(
+      'vless://b831381d-6324-4d53-ad4f-8cda48b30811@1.2.3.4:443?type=xhttp&security=tls&extra=' +
+      encodeURIComponent(JSON.stringify({
+        seqPlacement: 'body' // body 不是合法的 seq-placement (仅 header/cookie/query)
+      })) + '#Bad%20Seq%20Placement'
+    );
+    const resBadSeqPlacement = adaptNodeToMihomo(badSeqPlacementNode!);
+    expect(resBadSeqPlacement.fatal).toBe(true);
+    expect(resBadSeqPlacement.emitted).toBe(false);
+    expect(resBadSeqPlacement.skipReason).toContain('seqPlacement');
+
+    // 7. uplink-data-placement / uplinkDataPlacement 非法 -> Fatal
+    const badUplinkDataPlacementNode = parseSingleNode(
+      'vless://b831381d-6324-4d53-ad4f-8cda48b30811@1.2.3.4:443?type=xhttp&security=tls&extra=' +
+      encodeURIComponent(JSON.stringify({
+        uplinkDataPlacement: 'path' // path 不是合法的 uplink-data-placement (仅 body/header/cookie/query)
+      })) + '#Bad%20Uplink%20Data%20Placement'
+    );
+    const resBadUplinkDataPlacement = adaptNodeToMihomo(badUplinkDataPlacementNode!);
+    expect(resBadUplinkDataPlacement.fatal).toBe(true);
+    expect(resBadUplinkDataPlacement.emitted).toBe(false);
+    expect(resBadUplinkDataPlacement.skipReason).toContain('uplinkDataPlacement');
   });
 });
