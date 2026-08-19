@@ -27,7 +27,7 @@ export function parsePlugin(pluginParam: string): { plugin: string; pluginOpts: 
 
 export function parseShadowsocks(urlStr: string): ShadowsocksNode | null {
   try {
-    let raw = urlStr.replace('ss://', '').trim();
+    let raw = urlStr.replace(/^ss:\/\//i, '').trim();
     let name = 'Shadowsocks Node';
 
     const hashIndex = raw.indexOf('#');

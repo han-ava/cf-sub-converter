@@ -4,7 +4,7 @@ import { parseRawQuery, parseStrictEndpoint, QueryParamReader, tryDecodeURICompo
 
 export function parseVless(urlStr: string): VlessNode | null {
   try {
-    const raw = urlStr.replace('vless://', '').trim();
+    const raw = urlStr.replace(/^vless:\/\//i, '').trim();
     let name = 'VLESS Node';
     let content = raw;
 

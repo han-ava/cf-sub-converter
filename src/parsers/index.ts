@@ -81,15 +81,16 @@ export function parseSingleNode(link: string): NodeEnvelope | null {
   if (trimmed.includes('\n') || trimmed.includes('\r')) return null;
 
   let node: NodeEnvelope | null = null;
+  const lower = trimmed.toLowerCase();
 
-  if (trimmed.startsWith('vless://')) node = parseVless(trimmed);
-  else if (trimmed.startsWith('vmess://')) node = parseVmess(trimmed);
-  else if (trimmed.startsWith('trojan://')) node = parseTrojan(trimmed);
-  else if (trimmed.startsWith('ss://')) node = parseShadowsocks(trimmed);
-  else if (trimmed.startsWith('ssr://')) node = parseShadowsocksR(trimmed);
-  else if (trimmed.startsWith('hysteria2://') || trimmed.startsWith('hy2://')) node = parseHysteria2(trimmed);
-  else if (trimmed.startsWith('anytls://')) node = parseAnyTLS(trimmed);
-  else if (trimmed.startsWith('tuic://')) node = parseTuic(trimmed);
+  if (lower.startsWith('vless://')) node = parseVless(trimmed);
+  else if (lower.startsWith('vmess://')) node = parseVmess(trimmed);
+  else if (lower.startsWith('trojan://')) node = parseTrojan(trimmed);
+  else if (lower.startsWith('ss://')) node = parseShadowsocks(trimmed);
+  else if (lower.startsWith('ssr://')) node = parseShadowsocksR(trimmed);
+  else if (lower.startsWith('hysteria2://') || lower.startsWith('hy2://')) node = parseHysteria2(trimmed);
+  else if (lower.startsWith('anytls://')) node = parseAnyTLS(trimmed);
+  else if (lower.startsWith('tuic://')) node = parseTuic(trimmed);
   else {
     // 兼容可能未经 scheme 包装的单行 Base64 节点或 Base64(URI) 格式
     try {
@@ -98,16 +99,17 @@ export function parseSingleNode(link: string): NodeEnvelope | null {
         const innerTrimmed = decoded.trim();
         // 严格限制为单行节点（不能包含换行）
         if (!innerTrimmed.includes('\n') && !innerTrimmed.includes('\r')) {
+          const innerLower = innerTrimmed.toLowerCase();
           if (
-            innerTrimmed.startsWith('vless://') ||
-            innerTrimmed.startsWith('vmess://') ||
-            innerTrimmed.startsWith('trojan://') ||
-            innerTrimmed.startsWith('ss://') ||
-            innerTrimmed.startsWith('ssr://') ||
-            innerTrimmed.startsWith('hysteria2://') ||
-            innerTrimmed.startsWith('hy2://') ||
-            innerTrimmed.startsWith('anytls://') ||
-            innerTrimmed.startsWith('tuic://')
+            innerLower.startsWith('vless://') ||
+            innerLower.startsWith('vmess://') ||
+            innerLower.startsWith('trojan://') ||
+            innerLower.startsWith('ss://') ||
+            innerLower.startsWith('ssr://') ||
+            innerLower.startsWith('hysteria2://') ||
+            innerLower.startsWith('hy2://') ||
+            innerLower.startsWith('anytls://') ||
+            innerLower.startsWith('tuic://')
           ) {
             node = parseSingleNode(innerTrimmed);
           } else if (innerTrimmed.startsWith('{') && innerTrimmed.endsWith('}')) {

@@ -4,7 +4,7 @@ import { parseRawQuery, QueryParamReader, safeBase64Decode, tryDecodeURIComponen
 
 export function parseShadowsocksR(urlStr: string): ShadowsocksRNode | null {
   try {
-    const raw = urlStr.replace('ssr://', '').trim();
+    const raw = urlStr.replace(/^ssr:\/\//i, '').trim();
     const decoded = safeBase64Decode(raw);
     if (!decoded) return null;
 

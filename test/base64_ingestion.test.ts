@@ -252,5 +252,54 @@ proxies:
     expect(json.finalCount).toBe(25);
     expect(json.nodes.length).toBe(25);
     expect(json.nodes[0].name).toContain('🇭🇰');
+    expect(json.debug).toBeDefined();
+    expect(json.debug.sources).toBeDefined();
+    expect(json.debug.sources.length).toBeGreaterThan(0);
+  });
+
+  test('14. Case-insensitive protocol schemes (VLESS://, VMESS://, SS://, TROJAN://) are parsed cleanly', async () => {
+    const uppercaseList = [
+      'VLESS://b831381d-6324-4d53-ad4f-8cda48b30811@1.2.3.4:443?security=reality&type=tcp#Upper%20VLESS',
+      sampleVmess.replace('vmess://', 'VMESS://'),
+      'SS://YWVzLTEyOC1nY206cGFzc3dvcmQ=@1.2.3.4:8388#Upper%20SS',
+      'TROJAN://trojanpass@1.2.3.4:443?security=tls#Upper%20Trojan',
+      'HYSTERIA2://hy2pass@1.2.3.4:443?sni=hy2.com#Upper%20HY2'
+    ].join('\n');
+
+    const nodes = await parseContent(uppercaseList);
+    expect(nodes.length).toBe(5);
+    expect(nodes[0]!.protocol).toBe('vless');
+    expect(nodes[1]!.protocol).toBe('vmess');
+    expect(nodes[2]!.protocol).toBe('shadowsocks');
+    expect(nodes[3]!.protocol).toBe('trojan');
+    expect(nodes[4]!.protocol).toBe('hysteria2');
+  });
+
+  test('15. Multi-source conversion to target=clash with Base64 subscription + plain VLESS node', async () => {
+    const rawSub = [sampleVless, sampleTrojan].join('\n');
+    const b64Sub = safeBase64Encode(rawSub);
+    const directVless = 'vless://b831381d-6324-4d53-ad4f-8cda48b30811@5.6.7.8:443?security=tls&sni=direct.vless.com&type=ws&path=%2Fws#Direct%20VLESS';
+
+    const multiInput = [b64Sub, directVless].join('\n');
+
+    const req = new Request('http://localhost/sub?target=clash', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        url: multiInput,
+        token: 'test-token'
+      })
+    });
+
+    const env = { AUTH_TOKEN: 'test-token' } as any;
+    const ctx = { waitUntil: () => {}, passThroughOnException: () => {} } as any;
+
+    const resp = await worker.fetch(req, env, ctx);
+    expect(resp.status).toBe(200);
+    const text = await resp.text();
+    expect(text).toContain('proxies:');
+    expect(text).toContain('VLESS Node');
+    expect(text).toContain('Trojan Node');
+    expect(text).toContain('Direct VLESS');
   });
 });

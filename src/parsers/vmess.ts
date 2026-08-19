@@ -4,7 +4,7 @@ import { JsonFieldReader, safeBase64Decode, tryDecodeURIComponent } from '../uti
 
 export function parseVmess(urlStr: string): VmessNode | null {
   try {
-    const raw = urlStr.replace('vmess://', '').trim();
+    const raw = urlStr.replace(/^vmess:\/\//i, '').trim();
     const decoded = safeBase64Decode(raw);
     if (!decoded) return null;
 

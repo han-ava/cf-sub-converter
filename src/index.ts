@@ -84,6 +84,18 @@ function mergeUserinfos(userinfos: string[], strategy: 'first' | 'sum' | 'none')
   return `upload=${totalUpload}; download=${totalDownload}; total=${totalTotal}${expirePart}`;
 }
 
+export interface SourceSummary {
+  index: number;
+  url: string;
+  type: 'remote' | 'direct';
+  status?: number;
+  contentType?: string;
+  rawLength: number;
+  decodedLength?: number;
+  nodeCount: number;
+  protocols: string[];
+}
+
 /**
  * 核心节点聚合与并发控制抓取逻辑
  */
@@ -94,26 +106,80 @@ async function loadAllNodes(
   cacheTtl = 180,
   userinfoStrategy?: 'first' | 'sum' | 'none',
   outerSignal?: AbortSignal
-): Promise<{ nodes: ProxyNode[]; userinfo?: string }> {
+): Promise<{ nodes: ProxyNode[]; userinfo?: string; sources?: SourceSummary[] }> {
   const trimmedUrlParam = urlParam.replace(/^﻿/, '').trim();
   if (!trimmedUrlParam) {
-    return { nodes: [], userinfo: undefined };
+    return { nodes: [], userinfo: undefined, sources: [] };
   }
 
   // 若输入不包含任何 http/https 远程订阅地址（即为用户直接粘贴的 Base64 订阅、YAML、JSON 或多行节点列表），优先作为整段配置解析，避免被行分割破坏 MIME Base64 或截断
   if (!trimmedUrlParam.includes('http://') && !trimmedUrlParam.includes('https://')) {
-    console.log('[DEBUG][SOURCE_RAW]', trimmedUrlParam);
+    console.log('[SOURCE_START]', { index: 0, url: 'direct_input' });
+    console.log('[SOURCE_RESPONSE]', {
+      index: 0,
+      url: 'direct_input',
+      status: 200,
+      contentType: 'text/plain',
+      length: trimmedUrlParam.length
+    });
+    console.log('[SOURCE_RAW]', { index: 0, url: 'direct_input', content: trimmedUrlParam });
+
+    let decoded = '';
+    try {
+      const candidate = safeBase64Decode(trimmedUrlParam);
+      if (candidate && candidate !== trimmedUrlParam && candidate.trim() !== trimmedUrlParam.trim()) {
+        decoded = candidate;
+        console.log('[SOURCE_BASE64_DECODED]', { index: 0, url: 'direct_input', decoded });
+      }
+    } catch {
+      console.warn('[SOURCE_BASE64_DECODE_FAILED]', { index: 0, url: 'direct_input', content: trimmedUrlParam });
+    }
+
     try {
       const parsed = await parseContent(trimmedUrlParam);
+      const protocols = parsed.map(n => n.protocol);
+      console.log('[SOURCE_PARSE_RESULT]', {
+        index: 0,
+        url: 'direct_input',
+        nodes: parsed.length,
+        protocols,
+        parsedNodes: parsed
+      });
+
+      const singleSummary: SourceSummary[] = [{
+        index: 0,
+        url: 'direct_input',
+        type: 'direct',
+        status: 200,
+        contentType: 'text/plain',
+        rawLength: trimmedUrlParam.length,
+        decodedLength: decoded ? decoded.length : undefined,
+        nodeCount: parsed.length,
+        protocols
+      }];
+
+      console.log('[ALL_SOURCES_SUMMARY]', singleSummary.map(s => ({
+        index: s.index,
+        url: s.url,
+        status: s.status,
+        rawLength: s.rawLength,
+        decodedLength: s.decodedLength,
+        nodeCount: s.nodeCount,
+        protocols: s.protocols
+      })));
+
       if (parsed.length > 0) {
-        return { nodes: parsed, userinfo: undefined };
+        return { nodes: parsed, userinfo: undefined, sources: singleSummary };
       }
-    } catch {}
+    } catch (err: any) {
+      console.error('[SOURCE_PARSE_ERROR]', { index: 0, url: 'direct_input', error: err?.message || err });
+    }
   }
 
   const inputs = urlParam.split(/[\n\r|]+/);
   const allNodes: ProxyNode[] = [];
   const fetchedUserinfos: string[] = [];
+  const sourceSummaries: SourceSummary[] = [];
 
   const remoteUrls: string[] = [];
   const rawTexts: string[] = [];
@@ -132,56 +198,173 @@ async function loadAllNodes(
   const safeRemoteUrls = remoteUrls.slice(0, 20);
   if (safeRemoteUrls.length > 0) {
     const fetchResults = await pMap(
-      safeRemoteUrls,
-      async (url) => {
+      safeRemoteUrls.map((url, i) => ({ url, index: i })),
+      async ({ url, index }) => {
+        console.log('[SOURCE_START]', { index, url });
         try {
-          return await fetchSubscriptionWithTimeout(url, customUserAgent, enableCache, cacheTtl, outerSignal);
+          const res = await fetchSubscriptionWithTimeout(url, customUserAgent, enableCache, cacheTtl, outerSignal);
+          return { index, url, ...res };
         } catch (err: any) {
           console.error(`Fetch subscription failed for: ${sanitizeUrlForLog(url)} - ${err.message}`);
-          return { ok: false, status: 500, text: '', userinfo: undefined };
+          return { index, url, ok: false, status: 500, text: '', userinfo: undefined, contentType: undefined, error: err.message };
         }
       },
       6
     );
 
-    for (const result of fetchResults) {
-      if (result.ok && result.text) {
-        console.log('[DEBUG][SOURCE_RAW]', result.text);
-        if (result.userinfo) {
-          fetchedUserinfos.push(result.userinfo);
-        }
+    for (const res of fetchResults) {
+      const { index, url, ok, status, text, userinfo, contentType } = res;
+      console.log('[SOURCE_RESPONSE]', {
+        index,
+        url,
+        status,
+        contentType,
+        length: text ? text.length : 0
+      });
+
+      if (userinfo) {
+        fetchedUserinfos.push(userinfo);
+      }
+
+      if (ok && text) {
+        console.log('[SOURCE_RAW]', { index, url, content: text });
+
+        let decoded = '';
         try {
-          const parsed = await parseContent(result.text);
-          allNodes.push(...parsed);
+          const candidate = safeBase64Decode(text);
+          if (candidate && candidate !== text && candidate.trim() !== text.trim()) {
+            decoded = candidate;
+            console.log('[SOURCE_BASE64_DECODED]', { index, url, decoded });
+          }
         } catch {
-          console.error('Parse subscription content failed');
+          console.warn('[SOURCE_BASE64_DECODE_FAILED]', { index, url, content: text });
         }
+
+        let parsedNodes: NodeEnvelope[] = [];
+        try {
+          parsedNodes = await parseContent(text);
+          allNodes.push(...parsedNodes);
+        } catch (err: any) {
+          console.error('[SOURCE_PARSE_ERROR]', { index, url, error: err?.message || err });
+        }
+
+        const protocols = parsedNodes.map(n => n.protocol);
+        console.log('[SOURCE_PARSE_RESULT]', {
+          index,
+          url,
+          nodes: parsedNodes.length,
+          protocols,
+          parsedNodes
+        });
+
+        if (parsedNodes.length === 0) {
+          console.warn('[SOURCE_PARSE_EMPTY]', { index, url, status, length: text.length });
+        }
+
+        sourceSummaries.push({
+          index,
+          url,
+          type: 'remote',
+          status,
+          contentType,
+          rawLength: text.length,
+          decodedLength: decoded ? decoded.length : undefined,
+          nodeCount: parsedNodes.length,
+          protocols
+        });
+      } else {
+        sourceSummaries.push({
+          index,
+          url,
+          type: 'remote',
+          status,
+          contentType,
+          rawLength: 0,
+          nodeCount: 0,
+          protocols: []
+        });
       }
     }
   }
 
   // 解析直接输入的本地节点链接、多行文本或 Base64 块
   if (rawTexts.length > 0) {
-    const combinedRaw = rawTexts.join('\n');
-    try {
-      const parsed = await parseContent(combinedRaw);
-      allNodes.push(...parsed);
-    } catch {
-      for (const rawText of rawTexts) {
-        try {
-          const parsed = await parseContent(rawText);
-          allNodes.push(...parsed);
-        } catch {
-          console.error('Parse raw node input failed');
+    let directIdx = safeRemoteUrls.length;
+    for (const rawText of rawTexts) {
+      const idx = directIdx++;
+      console.log('[SOURCE_START]', { index: idx, url: 'direct_input' });
+      console.log('[SOURCE_RESPONSE]', {
+        index: idx,
+        url: 'direct_input',
+        status: 200,
+        contentType: 'text/plain',
+        length: rawText.length
+      });
+      console.log('[SOURCE_RAW]', { index: idx, url: 'direct_input', content: rawText });
+
+      let decoded = '';
+      try {
+        const candidate = safeBase64Decode(rawText);
+        if (candidate && candidate !== rawText && candidate.trim() !== rawText.trim()) {
+          decoded = candidate;
+          console.log('[SOURCE_BASE64_DECODED]', { index: idx, url: 'direct_input', decoded });
         }
+      } catch {
+        console.warn('[SOURCE_BASE64_DECODE_FAILED]', { index: idx, url: 'direct_input', content: rawText });
       }
+
+      let parsedNodes: NodeEnvelope[] = [];
+      try {
+        parsedNodes = await parseContent(rawText);
+        allNodes.push(...parsedNodes);
+      } catch (err: any) {
+        console.error('[SOURCE_PARSE_ERROR]', { index: idx, url: 'direct_input', error: err?.message || err });
+      }
+
+      const protocols = parsedNodes.map(n => n.protocol);
+      console.log('[SOURCE_PARSE_RESULT]', {
+        index: idx,
+        url: 'direct_input',
+        nodes: parsedNodes.length,
+        protocols,
+        parsedNodes
+      });
+
+      if (parsedNodes.length === 0) {
+        console.warn('[SOURCE_PARSE_EMPTY]', { index: idx, url: 'direct_input', length: rawText.length });
+      }
+
+      sourceSummaries.push({
+        index: idx,
+        url: 'direct_input',
+        type: 'direct',
+        status: 200,
+        contentType: 'text/plain',
+        rawLength: rawText.length,
+        decodedLength: decoded ? decoded.length : undefined,
+        nodeCount: parsedNodes.length,
+        protocols
+      });
     }
   }
+
+  console.log(
+    '[ALL_SOURCES_SUMMARY]',
+    sourceSummaries.map(s => ({
+      index: s.index,
+      url: s.url,
+      status: s.status,
+      rawLength: s.rawLength,
+      decodedLength: s.decodedLength,
+      nodeCount: s.nodeCount,
+      protocols: s.protocols
+    }))
+  );
 
   // 多订阅默认不混淆流量（none），单订阅保留原样（first）
   const strategy = userinfoStrategy || (remoteUrls.length > 1 ? 'none' : 'first');
   const mergedUserinfo = mergeUserinfos(fetchedUserinfos, strategy);
-  return { nodes: allNodes, userinfo: mergedUserinfo };
+  return { nodes: allNodes, userinfo: mergedUserinfo, sources: sourceSummaries };
 }
 
 export default {
@@ -251,7 +434,7 @@ export default {
           });
         }
 
-        const { nodes: rawNodes, userinfo } = await loadAllNodes(rawUrl, undefined, true, 180, 'first');
+        const { nodes: rawNodes, userinfo, sources } = await loadAllNodes(rawUrl, undefined, true, 180, 'first');
         console.log('[DEBUG][PARSED_NODES]', JSON.stringify(rawNodes, null, 2));
 
         // 过滤与重命名
@@ -365,6 +548,7 @@ export default {
             warningAggregations,
             nodes: nodeItems,
             debug: {
+              sources,
               parsedNodes: rawNodes,
               processedNodes,
               raw: debugRaw,

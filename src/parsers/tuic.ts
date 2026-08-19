@@ -4,7 +4,7 @@ import { parseRawQuery, parseStrictEndpoint, QueryParamReader, tryDecodeURICompo
 
 export function parseTuic(urlStr: string): TuicNode | null {
   try {
-    let raw = urlStr.replace('tuic://', '').trim();
+    let raw = urlStr.replace(/^tuic:\/\//i, '').trim();
     let name = 'TUIC Node';
 
     const hashIndex = raw.indexOf('#');

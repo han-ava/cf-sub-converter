@@ -205,7 +205,7 @@ export async function fetchSubscriptionWithTimeout(
   enableCache = true,
   cacheTtlSeconds = 180,
   outerSignal?: AbortSignal
-): Promise<{ ok: boolean; status: number; text: string; userinfo?: string }> {
+): Promise<{ ok: boolean; status: number; text: string; userinfo?: string; contentType?: string }> {
   // 向上游请求时始终使用统一固定的代理客户端 UA，确保看板与客户端获取完全一致的完整节点数据，杜绝缓存分裂
   const userAgent = UPSTREAM_USER_AGENT;
 
@@ -221,8 +221,9 @@ export async function fetchSubscriptionWithTimeout(
       const cachedResp = await cache.match(cacheKeyUrl);
       if (cachedResp) {
         const userinfo = cachedResp.headers.get('subscription-userinfo') || undefined;
+        const contentType = cachedResp.headers.get('content-type') || undefined;
         const text = await cachedResp.text();
-        return { ok: true, status: 200, text, userinfo };
+        return { ok: true, status: 200, text, userinfo, contentType };
       }
     } catch {}
   }
@@ -287,9 +288,10 @@ export async function fetchSubscriptionWithTimeout(
       }
 
       const userinfo = response.headers.get('subscription-userinfo') || undefined;
+      const contentType = response.headers.get('content-type') || undefined;
 
       if (!response.ok) {
-        return { ok: false, status: response.status, text: '', userinfo };
+        return { ok: false, status: response.status, text: '', userinfo, contentType };
       }
 
       // 预先检查 Content-Length，若超过 10MB 直接拒绝，避免无谓加载到内存
@@ -314,12 +316,13 @@ export async function fetchSubscriptionWithTimeout(
             'Cache-Control': `public, max-age=${cacheTtlSeconds}`
           };
           if (userinfo) cacheHeaders['subscription-userinfo'] = userinfo;
+          if (contentType) cacheHeaders['content-type'] = contentType;
           const cacheResp = new Response(text, { headers: cacheHeaders });
           cache.put(cacheKeyUrl, cacheResp).catch(() => {});
         } catch {}
       }
 
-      return { ok: true, status: response.status, text, userinfo };
+      return { ok: true, status: response.status, text, userinfo, contentType };
     } catch (err: any) {
       clearTimeout(timeoutId);
       if (err.name === 'AbortError') {

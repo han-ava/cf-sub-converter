@@ -4,7 +4,7 @@ import { parseRawQuery, parseStrictEndpoint, QueryParamReader, tryDecodeURICompo
 
 export function parseTrojan(urlStr: string): TrojanNode | null {
   try {
-    let raw = urlStr.replace('trojan://', '').trim();
+    let raw = urlStr.replace(/^trojan:\/\//i, '').trim();
     let name = 'Trojan Node';
 
     const hashIndex = raw.indexOf('#');
