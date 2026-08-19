@@ -12,53 +12,166 @@ const SUPPORTED_SS_PLUGINS = new Set([
   'jls'
 ]);
 
+/**
+ * 插件连接关键字段门禁表 (Critical Field Gate)
+ * 当用户提供了这些关键字段但值非法或无法安全转换时，必须升级为 Fatal 拦截，禁止静默丢弃
+ */
+const PLUGIN_CRITICAL_FIELDS: Record<string, Set<string>> = {
+  'shadow-tls':   new Set(['host', 'password', 'version']),
+  'obfs':         new Set(['mode', 'host']),
+  'v2ray-plugin': new Set(['mode']),
+  'restls':       new Set(['host', 'password']),
+  'gost-plugin':  new Set(['mode']),
+  'kcptun':       new Set([])
+};
+
 function formatMihomoPluginOpts(
   plugin: string,
   rawOpts: Record<string, any>
 ): { opts: Record<string, any>; invalidParams: InvalidQueryParam[] } {
   const result: Record<string, any> = {};
   const invalidParams: InvalidQueryParam[] = [];
-  const booleanKeys = new Set(['tls', 'mux', 'skip-cert-verify', 'skipcertverify', 'nocomp', 'quiet']);
+  const booleanKeys = new Set(['tls', 'mux', 'skip-cert-verify', 'skipcertverify', 'nocomp', 'quiet', 'insecure', 'allowinsecure']);
   const numberKeys = new Set([
     'version', 'mtu', 'sndwnd', 'rcvwnd', 'datashard', 'parityshard', 'dscp', 'interval', 'resend', 'nc'
   ]);
 
-  for (const [k, v] of Object.entries(rawOpts)) {
-    const kLower = k.toLowerCase();
-    if (v === true || v === false) {
-      result[k] = v;
-    } else if (typeof v === 'string') {
-      const valTrimmed = v.trim();
-      const valLower = valTrimmed.toLowerCase();
-      if (booleanKeys.has(kLower)) {
+  for (const [rawK, v] of Object.entries(rawOpts)) {
+    const kTrimmed = rawK.trim();
+    const kLower = kTrimmed.toLowerCase();
+
+    // 插件别名规范化映射
+    let targetKey = kTrimmed;
+    if (plugin === 'obfs') {
+      if (kLower === 'obfs') targetKey = 'mode';
+      else if (kLower === 'obfs-host' || kLower === 'obfshost') targetKey = 'host';
+    } else if (plugin === 'shadow-tls') {
+      if (kLower === 'sni' || kLower === 'server-name' || kLower === 'servername') targetKey = 'host';
+      else if (kLower === 'pass' || kLower === 'pwd') targetKey = 'password';
+      else if (kLower === 'ver') targetKey = 'version';
+    } else if (plugin === 'restls') {
+      if (kLower === 'sni' || kLower === 'server-name' || kLower === 'servername') targetKey = 'host';
+      else if (kLower === 'pass' || kLower === 'pwd') targetKey = 'password';
+      else if (kLower === 'version_hint' || kLower === 'versionhint') targetKey = 'version-hint';
+    } else if (plugin === 'v2ray-plugin') {
+      if (kLower === 'skipcertverify' || kLower === 'insecure' || kLower === 'allowinsecure') targetKey = 'skip-cert-verify';
+    }
+
+    const targetKeyLower = targetKey.toLowerCase();
+
+    // 1. obfs mode 枚举校验 (仅支持 http 或 tls)
+    if (plugin === 'obfs' && targetKeyLower === 'mode') {
+      const modeStr = String(v).trim().toLowerCase();
+      if (modeStr === 'http' || modeStr === 'tls') {
+        result[targetKey] = modeStr;
+      } else {
+        invalidParams.push({
+          key: `plugin-opts.${targetKey}`,
+          value: String(v),
+          reason: `obfs 插件 mode 仅支持 http 或 tls (当前为: "${v}")`
+        });
+      }
+      continue;
+    }
+
+    // 2. v2ray-plugin mode 枚举校验 (仅支持 websocket 或 http)
+    if (plugin === 'v2ray-plugin' && targetKeyLower === 'mode') {
+      const modeStr = String(v).trim().toLowerCase();
+      if (modeStr === 'websocket' || modeStr === 'http') {
+        result[targetKey] = modeStr;
+      } else {
+        invalidParams.push({
+          key: `plugin-opts.${targetKey}`,
+          value: String(v),
+          reason: `v2ray-plugin 插件 mode 仅支持 websocket 或 http (当前为: "${v}")`
+        });
+      }
+      continue;
+    }
+
+    // 3. shadow-tls version 校验 (必须为 1, 2 或 3)
+    if (plugin === 'shadow-tls' && targetKeyLower === 'version') {
+      let verNum: number | undefined;
+      if (typeof v === 'number' && Number.isInteger(v)) {
+        verNum = v;
+      } else if (typeof v === 'string' && /^\d+$/.test(v.trim())) {
+        verNum = parseInt(v.trim(), 10);
+      }
+      if (verNum !== undefined && (verNum === 1 || verNum === 2 || verNum === 3)) {
+        result[targetKey] = verNum;
+      } else {
+        invalidParams.push({
+          key: `plugin-opts.${targetKey}`,
+          value: String(v),
+          reason: `shadow-tls 插件 version 必须为 1, 2 或 3 (当前为: "${v}")`
+        });
+      }
+      continue;
+    }
+
+    // 4. shadow-tls & restls password 保持纯字符串格式
+    if ((plugin === 'shadow-tls' || plugin === 'restls') && targetKeyLower === 'password') {
+      const passStr = String(v).trim();
+      if (passStr) {
+        result[targetKey] = passStr;
+      } else {
+        invalidParams.push({
+          key: `plugin-opts.${targetKey}`,
+          value: String(v),
+          reason: `插件 [${plugin}] password 不能为空`
+        });
+      }
+      continue;
+    }
+
+    // 5. 布尔字段严格校验
+    if (booleanKeys.has(targetKeyLower)) {
+      if (v === true || v === false) {
+        result[targetKey] = v;
+      } else if (typeof v === 'string') {
+        const valTrimmed = v.trim();
+        const valLower = valTrimmed.toLowerCase();
         if (valLower === 'true' || valLower === '1' || valTrimmed === '') {
-          result[k] = true;
+          result[targetKey] = true;
         } else if (valLower === 'false' || valLower === '0') {
-          result[k] = false;
+          result[targetKey] = false;
         } else {
           invalidParams.push({
-            key: `plugin-opts.${k}`,
+            key: `plugin-opts.${targetKey}`,
             value: v,
-            reason: `插件参数 [${k}] 期望布尔值 (true/false/1/0)，但实际值为 "${v}"`
-          });
-        }
-      } else if (numberKeys.has(kLower)) {
-        if (/^-?\d+$/.test(valTrimmed)) {
-          result[k] = parseInt(valTrimmed, 10);
-        } else {
-          invalidParams.push({
-            key: `plugin-opts.${k}`,
-            value: v,
-            reason: `插件参数 [${k}] 期望整数，但实际值为 "${v}"`
+            reason: `插件参数 [${targetKey}] 期望布尔值 (true/false/1/0)，但实际值为 "${v}"`
           });
         }
       } else {
-        result[k] = valTrimmed;
+        result[targetKey] = Boolean(v);
       }
+      continue;
+    }
+
+    // 6. 整数字段严格校验
+    if (numberKeys.has(targetKeyLower)) {
+      if (typeof v === 'number' && Number.isInteger(v)) {
+        result[targetKey] = v;
+      } else if (typeof v === 'string' && /^-?\d+$/.test(v.trim())) {
+        result[targetKey] = parseInt(v.trim(), 10);
+      } else {
+        invalidParams.push({
+          key: `plugin-opts.${targetKey}`,
+          value: String(v),
+          reason: `插件参数 [${targetKey}] 期望整数，但实际值为 "${v}"`
+        });
+      }
+      continue;
+    }
+
+    // 7. 通用字符串
+    if (typeof v === 'string') {
+      result[targetKey] = v.trim();
     } else {
-      result[k] = v;
+      result[targetKey] = v;
     }
   }
+
   return { opts: result, invalidParams };
 }
 
@@ -167,18 +280,60 @@ export function adaptShadowsocksToMihomo(node: ShadowsocksNode): AdapterResult {
 
   if (normalizedPlugin) {
     config.plugin = normalizedPlugin;
-    if (p.pluginOpts) {
-      const { opts: formattedOpts, invalidParams: pluginInv } = formatMihomoPluginOpts(normalizedPlugin, p.pluginOpts);
-      config['plugin-opts'] = formattedOpts;
-      if (pluginInv.length > 0) {
-        for (const item of pluginInv) {
-          unsupportedParams.push(item.key);
-          warnings.push({
-            level: 'warn',
-            field: item.key,
-            message: `参数 [${item.key}=${item.value}] 格式非法: ${item.reason}`
-          });
-        }
+    const { opts: formattedOpts, invalidParams: pluginInv } = formatMihomoPluginOpts(normalizedPlugin, p.pluginOpts || {});
+
+    // P0-3: 检查是否有连接关键参数非法，若有则升级为 Fatal
+    const criticalSet = PLUGIN_CRITICAL_FIELDS[normalizedPlugin] || new Set();
+    const fatalPluginInv = pluginInv.filter(inv => {
+      const rawField = inv.key.replace(/^plugin-opts\./, '').toLowerCase();
+      return criticalSet.has(rawField);
+    });
+
+    if (fatalPluginInv.length > 0) {
+      const firstFatal = fatalPluginInv[0]!;
+      return {
+        fatal: true,
+        lossy: true,
+        emitted: false,
+        skipReason: `节点 [${node.name}] 的 Shadowsocks 插件 [${normalizedPlugin}] 关键参数 [${firstFatal.key}] 非法: ${firstFatal.reason}`,
+        warnings: [{ level: 'fatal', field: firstFatal.key, message: firstFatal.reason }],
+        unsupportedParams: [firstFatal.key]
+      };
+    }
+
+    // 检查 shadow-tls 等插件必需的关键凭据
+    if (normalizedPlugin === 'shadow-tls') {
+      if (!formattedOpts.password || !String(formattedOpts.password).trim()) {
+        return {
+          fatal: true,
+          lossy: true,
+          emitted: false,
+          skipReason: `节点 [${node.name}] 的 Shadowsocks 插件 [shadow-tls] 缺少必需的关键参数 [password]`,
+          warnings: [{ level: 'fatal', field: 'plugin-opts.password', message: 'shadow-tls 缺少必需的 password' }],
+          unsupportedParams: ['plugin-opts.password']
+        };
+      }
+      if (!formattedOpts.host || !String(formattedOpts.host).trim()) {
+        return {
+          fatal: true,
+          lossy: true,
+          emitted: false,
+          skipReason: `节点 [${node.name}] 的 Shadowsocks 插件 [shadow-tls] 缺少必需的关键参数 [host]`,
+          warnings: [{ level: 'fatal', field: 'plugin-opts.host', message: 'shadow-tls 缺少必需的 host (SNI)' }],
+          unsupportedParams: ['plugin-opts.host']
+        };
+      }
+    }
+
+    config['plugin-opts'] = formattedOpts;
+    if (pluginInv.length > 0) {
+      for (const item of pluginInv) {
+        unsupportedParams.push(item.key);
+        warnings.push({
+          level: 'warn',
+          field: item.key,
+          message: `参数 [${item.key}=${item.value}] 格式非法: ${item.reason}`
+        });
       }
     }
   }

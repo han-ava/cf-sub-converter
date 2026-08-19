@@ -98,30 +98,211 @@ const REUSE_SETTINGS_FIELD_MAP: Record<string, string> = {
 };
 
 function mapReuseSettings(raw: unknown): { mapped: Record<string, unknown>; unmapped: string[] } {
-  if (!raw || typeof raw !== 'object') return { mapped: {}, unmapped: [] };
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return { mapped: {}, unmapped: [] };
+  const r = new JsonFieldReader(raw as Record<string, unknown>);
   const mapped: Record<string, unknown> = {};
   const unmapped: string[] = [];
-  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
-    const targetKey = REUSE_SETTINGS_FIELD_MAP[k];
-    if (targetKey) {
-      mapped[targetKey] = v;
+
+  const maxConcurrencyRaw = r.getRaw('max-concurrency', 'maxConcurrency');
+  if (maxConcurrencyRaw !== undefined && maxConcurrencyRaw !== null && maxConcurrencyRaw !== '') {
+    if (typeof maxConcurrencyRaw === 'number' && Number.isInteger(maxConcurrencyRaw)) {
+      mapped['max-concurrency'] = maxConcurrencyRaw;
+    } else if (typeof maxConcurrencyRaw === 'string') {
+      const trimmed = maxConcurrencyRaw.trim();
+      if (/^\d+(-\d+)?$/.test(trimmed)) {
+        mapped['max-concurrency'] = /^\d+$/.test(trimmed) ? parseInt(trimmed, 10) : trimmed;
+      } else {
+        unmapped.push(`reuse-settings.max-concurrency (非法值: "${maxConcurrencyRaw}")`);
+      }
     } else {
-      unmapped.push(`reuse-settings.${k}`);
+      unmapped.push(`reuse-settings.max-concurrency (非法值: "${maxConcurrencyRaw}")`);
     }
+  }
+
+  const maxConnectionsRaw = r.getRaw('max-connections', 'maxConnections');
+  if (maxConnectionsRaw !== undefined && maxConnectionsRaw !== null && maxConnectionsRaw !== '') {
+    if (typeof maxConnectionsRaw === 'number' && Number.isInteger(maxConnectionsRaw)) {
+      mapped['max-connections'] = maxConnectionsRaw;
+    } else if (typeof maxConnectionsRaw === 'string') {
+      const trimmed = maxConnectionsRaw.trim();
+      if (/^\d+(-\d+)?$/.test(trimmed)) {
+        mapped['max-connections'] = /^\d+$/.test(trimmed) ? parseInt(trimmed, 10) : trimmed;
+      } else {
+        unmapped.push(`reuse-settings.max-connections (非法值: "${maxConnectionsRaw}")`);
+      }
+    } else {
+      unmapped.push(`reuse-settings.max-connections (非法值: "${maxConnectionsRaw}")`);
+    }
+  }
+
+  const cMaxReuse = r.getStrictInt('c-max-reuse-times', 'cMaxReuseTimes');
+  if (cMaxReuse !== undefined) mapped['c-max-reuse-times'] = cMaxReuse;
+
+  const hMaxReq = r.getStrictInt('h-max-request-times', 'hMaxRequestTimes');
+  if (hMaxReq !== undefined) mapped['h-max-request-times'] = hMaxReq;
+
+  const hMaxReusable = r.getStrictInt('h-max-reusable-secs', 'hMaxReusableSecs');
+  if (hMaxReusable !== undefined) mapped['h-max-reusable-secs'] = hMaxReusable;
+
+  const hKeepAlive = r.getStrictInt('h-keep-alive-period', 'hKeepAlivePeriod');
+  if (hKeepAlive !== undefined) mapped['h-keep-alive-period'] = hKeepAlive;
+
+  for (const inv of r.getInvalidFields()) {
+    unmapped.push(`reuse-settings.${inv.key} (非法值: "${inv.value}")`);
+  }
+  for (const extraKey of Object.keys(r.getUnusedExtras())) {
+    unmapped.push(`reuse-settings.${extraKey}`);
   }
   return { mapped, unmapped };
 }
 
+const XHTTP_VALID_MODES = ['auto', 'stream-up', 'stream-down', 'packet-up', 'packet-down', 'stream-one'];
+const XHTTP_VALID_UPLINK_METHODS = ['POST', 'PUT', 'GET', 'HEAD', 'OPTIONS', 'PATCH', 'DELETE'];
+const XHTTP_VALID_PLACEMENTS = ['header', 'query', 'path', 'cookie'];
+const XHTTP_VALID_DATA_PLACEMENTS = ['body', 'header', 'query', 'cookie', 'path'];
+const XHTTP_VALID_PADDING_PLACEMENTS = ['header', 'query', 'cookie', 'path', 'body'];
+
+/**
+ * 结构化读取 XHTTP 所有专属配置并执行类型与枚举校验
+ */
+function mapXhttpFields(
+  r: JsonFieldReader,
+  prefix: string,
+  ignoreKeys: string[] = []
+): { mapped: Record<string, unknown>; unmapped: string[] } {
+  const mapped: Record<string, unknown> = {};
+  const unmapped: string[] = [];
+
+  // mode
+  const mode = r.getEnum(XHTTP_VALID_MODES, 'mode');
+  if (mode) mapped.mode = mode;
+
+  // path & host
+  const path = r.getString('path');
+  if (path) mapped.path = path;
+
+  const host = r.getString('host');
+  if (host) mapped.host = host;
+
+  // headers
+  const headers = r.getRaw('headers');
+  if (headers && typeof headers === 'object' && !Array.isArray(headers)) {
+    mapped.headers = headers;
+    r.markRecognized('headers');
+  }
+
+  // no-grpc-header
+  const noGrpc = r.getStrictBool('no-grpc-header', 'noGRPCHeader', 'nogrpcheader');
+  if (noGrpc !== undefined) mapped['no-grpc-header'] = noGrpc;
+
+  // x-padding-bytes
+  const rawXPadding = r.getRaw('x-padding-bytes', 'xPaddingBytes', 'xpaddingbytes');
+  if (rawXPadding !== undefined && rawXPadding !== null && rawXPadding !== '') {
+    r.markRecognized('x-padding-bytes', 'xPaddingBytes', 'xpaddingbytes');
+    if (typeof rawXPadding === 'number' && Number.isInteger(rawXPadding) && rawXPadding >= 0) {
+      mapped['x-padding-bytes'] = rawXPadding;
+    } else if (typeof rawXPadding === 'string') {
+      const trimmed = rawXPadding.trim();
+      if (/^\d+(-\d+)?$/.test(trimmed)) {
+        mapped['x-padding-bytes'] = trimmed;
+      } else {
+        unmapped.push(`${prefix}.x-padding-bytes (非法值: "${rawXPadding}")`);
+      }
+    } else {
+      unmapped.push(`${prefix}.x-padding-bytes (非法值: "${rawXPadding}")`);
+    }
+  }
+
+  // x-padding options
+  const xPadObfs = r.getStrictBool('x-padding-obfs-mode', 'xPaddingObfsMode');
+  if (xPadObfs !== undefined) mapped['x-padding-obfs-mode'] = xPadObfs;
+
+  const xPadKey = r.getString('x-padding-key', 'xPaddingKey');
+  if (xPadKey) mapped['x-padding-key'] = xPadKey;
+
+  const xPadHeader = r.getString('x-padding-header', 'xPaddingHeader');
+  if (xPadHeader) mapped['x-padding-header'] = xPadHeader;
+
+  const xPadPlacement = r.getEnum(XHTTP_VALID_PADDING_PLACEMENTS, 'x-padding-placement', 'xPaddingPlacement');
+  if (xPadPlacement) mapped['x-padding-placement'] = xPadPlacement;
+
+  const xPadMethod = r.getString('x-padding-method', 'xPaddingMethod');
+  if (xPadMethod) mapped['x-padding-method'] = xPadMethod;
+
+  // uplink-http-method
+  const uplinkMethod = r.getEnum(XHTTP_VALID_UPLINK_METHODS, 'uplink-http-method', 'uplinkHTTPMethod', 'uplinkHttpMethod');
+  if (uplinkMethod) mapped['uplink-http-method'] = uplinkMethod;
+
+  // session options
+  const sessionPlacement = r.getEnum(XHTTP_VALID_PLACEMENTS, 'session-placement', 'sessionPlacement', 'sessionIDPlacement', 'sessionIdPlacement', 'sessionidplacement');
+  if (sessionPlacement) mapped['session-placement'] = sessionPlacement;
+
+  const sessionKey = r.getString('session-key', 'sessionKey', 'sessionIDKey', 'sessionIdKey', 'sessionidkey');
+  if (sessionKey) mapped['session-key'] = sessionKey;
+
+  const sessionTable = r.getString('session-table', 'sessionTable', 'sessionIDTable', 'sessionIdTable', 'sessionidtable');
+  if (sessionTable) mapped['session-table'] = sessionTable;
+
+  const sessionLength = r.getStrictInt('session-length', 'sessionLength', 'sessionIDLength', 'sessionIdLength', 'sessionidlength');
+  if (sessionLength !== undefined) mapped['session-length'] = sessionLength;
+
+  // seq options
+  const seqPlacement = r.getEnum(XHTTP_VALID_PLACEMENTS, 'seq-placement', 'seqPlacement', 'seqIDPlacement', 'seqIdPlacement');
+  if (seqPlacement) mapped['seq-placement'] = seqPlacement;
+
+  const seqKey = r.getString('seq-key', 'seqKey', 'seqIDKey', 'seqIdKey');
+  if (seqKey) mapped['seq-key'] = seqKey;
+
+  // uplink-data options
+  const uplinkDataPlacement = r.getEnum(XHTTP_VALID_DATA_PLACEMENTS, 'uplink-data-placement', 'uplinkDataPlacement');
+  if (uplinkDataPlacement) mapped['uplink-data-placement'] = uplinkDataPlacement;
+
+  const uplinkDataKey = r.getString('uplink-data-key', 'uplinkDataKey');
+  if (uplinkDataKey) mapped['uplink-data-key'] = uplinkDataKey;
+
+  const uplinkChunkSize = r.getStrictInt('uplink-chunk-size', 'uplinkChunkSize');
+  if (uplinkChunkSize !== undefined) mapped['uplink-chunk-size'] = uplinkChunkSize;
+
+  // sc options
+  const scMaxEachPost = r.getStrictInt('sc-max-each-post-bytes', 'scMaxEachPostBytes');
+  if (scMaxEachPost !== undefined) mapped['sc-max-each-post-bytes'] = scMaxEachPost;
+
+  const scMinPostsInterval = r.getStrictInt('sc-min-posts-interval-ms', 'scMinPostsIntervalMs');
+  if (scMinPostsInterval !== undefined) mapped['sc-min-posts-interval-ms'] = scMinPostsInterval;
+
+  // 收集非法字段
+  for (const inv of r.getInvalidFields()) {
+    unmapped.push(`${prefix}.${inv.key} (非法值: "${inv.value}")`);
+  }
+
+  // 收集未识别 extras
+  for (const extraKey of Object.keys(r.getUnusedExtras(ignoreKeys))) {
+    unmapped.push(`${prefix}.${extraKey}`);
+  }
+
+  return { mapped, unmapped };
+}
+
+interface DownloadSettingsContext {
+  uplinkSecurity?: string;
+  uplinkIsReality?: boolean;
+  uplinkIsTls?: boolean;
+}
+
 /**
  * Xray StreamSettings downloadSettings -> Mihomo download-settings 专属语义转换器
+ * 遵循 Mihomo 官方规范：download-settings 未显式声明的字段会继承上行配置。
+ * 当上行为 Reality 且下行为 TLS/none 时，必须显式清空 reality-opts ({ public-key: "" })。
+ * 当下行显式指定 security: none 时，必须显式输出 tls: false 防止继承上行 TLS。
  * 禁止输出 Xray 专属命名：address / network / tlsSettings / realitySettings / xhttpSettings / xmux
  * 转换为 Mihomo 官方字段：server / port / tls / servername / client-fingerprint / reality-opts / path / host / reuse-settings
  */
 function mapXrayDownloadSettingsToMihomo(
   raw: unknown,
-  nodeName: string
+  nodeName: string,
+  context?: DownloadSettingsContext
 ): { mapped: Record<string, unknown>; fatal?: true; skipReason?: string; unmapped: string[] } {
-  if (!raw || typeof raw !== 'object') return { mapped: {}, unmapped: [] };
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return { mapped: {}, unmapped: [] };
   const r = new JsonFieldReader(raw as Record<string, unknown>);
   const mapped: Record<string, unknown> = {};
   const unmapped: string[] = [];
@@ -140,22 +321,40 @@ function mapXrayDownloadSettingsToMihomo(
     }
   }
 
-  // 3. security / tls
+  // 3. security / tls (处理上行继承与清空语义)
   const rawSec = r.getRaw('security');
+  let sec: string | undefined;
   if (rawSec !== undefined && rawSec !== null && rawSec !== '') {
-    const sec = r.getEnum(['tls', 'reality', 'none'], 'security');
+    sec = r.getEnum(['tls', 'reality', 'none'], 'security');
     if (sec === 'tls') {
       mapped.tls = true;
-      delete mapped['reality-opts'];
+      if (context?.uplinkIsReality) {
+        mapped['reality-opts'] = { 'public-key': '' };
+      }
     } else if (sec === 'reality') {
       mapped.tls = true;
     } else if (sec === 'none') {
-      delete mapped.tls;
-      delete mapped['reality-opts'];
+      mapped.tls = false;
+      if (context?.uplinkIsReality) {
+        mapped['reality-opts'] = { 'public-key': '' };
+      }
     }
   }
+
   const directTls = r.getStrictBool('tls');
-  if (directTls) mapped.tls = true;
+  if (directTls !== undefined) {
+    if (directTls === true) {
+      mapped.tls = true;
+      if (context?.uplinkIsReality && sec !== 'reality') {
+        mapped['reality-opts'] = { 'public-key': '' };
+      }
+    } else if (directTls === false) {
+      mapped.tls = false;
+      if (context?.uplinkIsReality) {
+        mapped['reality-opts'] = { 'public-key': '' };
+      }
+    }
+  }
 
   // 4. network -> 校验下行传输协议
   const rawNet = r.getRaw('network');
@@ -212,17 +411,19 @@ function mapXrayDownloadSettingsToMihomo(
       mapped['reality-opts'] = rMapped;
 
       for (const inv of rr.getInvalidFields()) {
-        unmapped.push(`download-settings.tlsSettings.realitySettings.${inv.field} (非法值: "${inv.rawValue}")`);
+        unmapped.push(`download-settings.tlsSettings.realitySettings.${inv.key} (非法值: "${inv.value}")`);
       }
       for (const extraKey of Object.keys(rr.getUnusedExtras())) {
         unmapped.push(`download-settings.tlsSettings.realitySettings.${extraKey}`);
       }
+    } else if (context?.uplinkIsReality && sec !== 'reality') {
+      mapped['reality-opts'] = { 'public-key': '' };
     }
 
     for (const inv of tr.getInvalidFields()) {
-      unmapped.push(`download-settings.tlsSettings.${inv.field} (非法值: "${inv.rawValue}")`);
+      unmapped.push(`download-settings.tlsSettings.${inv.key} (非法值: "${inv.value}")`);
     }
-    for (const extraKey of Object.keys(tr.getUnusedExtras())) {
+    for (const extraKey of Object.keys(tr.getUnusedExtras(['realitysettings', 'reality-settings', 'realityopts', 'reality-opts']))) {
       unmapped.push(`download-settings.tlsSettings.${extraKey}`);
     }
   }
@@ -250,7 +451,7 @@ function mapXrayDownloadSettingsToMihomo(
     mapped['reality-opts'] = rMapped;
 
     for (const inv of rr.getInvalidFields()) {
-      unmapped.push(`download-settings.realitySettings.${inv.field} (非法值: "${inv.rawValue}")`);
+      unmapped.push(`download-settings.realitySettings.${inv.key} (非法值: "${inv.value}")`);
     }
     for (const extraKey of Object.keys(rr.getUnusedExtras())) {
       unmapped.push(`download-settings.realitySettings.${extraKey}`);
@@ -261,54 +462,33 @@ function mapXrayDownloadSettingsToMihomo(
   const xhttpSettingsRaw = r.getRaw('xhttpSettings', 'xhttp-settings');
   if (xhttpSettingsRaw && typeof xhttpSettingsRaw === 'object' && !Array.isArray(xhttpSettingsRaw)) {
     const xr = new JsonFieldReader(xhttpSettingsRaw as Record<string, unknown>);
-    const path = xr.getString('path');
-    if (path) mapped.path = path;
-    const host = xr.getString('host');
-    if (host) mapped.host = host;
-    const mode = xr.getString('mode');
-    if (mode) mapped.mode = mode;
-    const headers = xr.getRaw('headers');
-    if (headers) mapped.headers = headers;
-    const noGrpc = xr.getRaw('noGRPCHeader', 'no-grpc-header');
-    if (noGrpc !== undefined) mapped['no-grpc-header'] = noGrpc;
-    const xPadding = xr.getRaw('xPaddingBytes', 'x-padding-bytes');
-    if (xPadding !== undefined) mapped['x-padding-bytes'] = xPadding;
-
     const extraVal = xr.getRaw('extra');
     if (extraVal) {
-      if (typeof extraVal === 'object' && extraVal !== null) {
-        for (const [esk, esv] of Object.entries(extraVal as Record<string, unknown>)) {
-          if (esk === 'xmux' || esk === 'reuseSettings' || esk === 'reuse-settings') {
-            const { mapped: subReuse, unmapped: subU } = mapReuseSettings(esv);
-            if (Object.keys(subReuse).length > 0) mapped['reuse-settings'] = subReuse;
-            unmapped.push(...subU.map(u => `download-settings.xhttpSettings.extra.${u}`));
-          } else {
-            const mappedKey = EXTRA_SCALAR_FIELD_MAP[esk];
-            if (mappedKey) {
-              mapped[mappedKey] = esv;
-            } else {
-              unmapped.push(`download-settings.xhttpSettings.extra.${esk}`);
-            }
-          }
+      if (typeof extraVal === 'object' && extraVal !== null && !Array.isArray(extraVal)) {
+        const er = new JsonFieldReader(extraVal as Record<string, unknown>);
+        const reuseVal = er.getRaw('xmux', 'reuseSettings', 'reuse-settings');
+        if (reuseVal) {
+          const { mapped: subReuse, unmapped: subU } = mapReuseSettings(reuseVal);
+          if (Object.keys(subReuse).length > 0) mapped['reuse-settings'] = subReuse;
+          unmapped.push(...subU.map(u => `download-settings.xhttpSettings.extra.${u}`));
         }
+        const { mapped: subXhttp, unmapped: subU } = mapXhttpFields(er, 'download-settings.xhttpSettings.extra', ['xmux', 'reusesettings', 'reuse-settings']);
+        Object.assign(mapped, subXhttp);
+        unmapped.push(...subU);
       } else if (typeof extraVal === 'string') {
         try {
           const parsedExtra = JSON.parse(extraVal);
-          if (typeof parsedExtra === 'object' && parsedExtra !== null) {
-            for (const [esk, esv] of Object.entries(parsedExtra)) {
-              if (esk === 'xmux' || esk === 'reuseSettings' || esk === 'reuse-settings') {
-                const { mapped: subReuse, unmapped: subU } = mapReuseSettings(esv);
-                if (Object.keys(subReuse).length > 0) mapped['reuse-settings'] = subReuse;
-                unmapped.push(...subU.map(u => `download-settings.xhttpSettings.extra.${u}`));
-              } else {
-                const mappedKey = EXTRA_SCALAR_FIELD_MAP[esk];
-                if (mappedKey) {
-                  mapped[mappedKey] = esv;
-                } else {
-                  unmapped.push(`download-settings.xhttpSettings.extra.${esk}`);
-                }
-              }
+          if (typeof parsedExtra === 'object' && parsedExtra !== null && !Array.isArray(parsedExtra)) {
+            const er = new JsonFieldReader(parsedExtra as Record<string, unknown>);
+            const reuseVal = er.getRaw('xmux', 'reuseSettings', 'reuse-settings');
+            if (reuseVal) {
+              const { mapped: subReuse, unmapped: subU } = mapReuseSettings(reuseVal);
+              if (Object.keys(subReuse).length > 0) mapped['reuse-settings'] = subReuse;
+              unmapped.push(...subU.map(u => `download-settings.xhttpSettings.extra.${u}`));
             }
+            const { mapped: subXhttp, unmapped: subU } = mapXhttpFields(er, 'download-settings.xhttpSettings.extra', ['xmux', 'reusesettings', 'reuse-settings']);
+            Object.assign(mapped, subXhttp);
+            unmapped.push(...subU);
           }
         } catch {
           unmapped.push(`download-settings.xhttpSettings.extra (非 JSON 字符串: "${extraVal}")`);
@@ -316,12 +496,9 @@ function mapXrayDownloadSettingsToMihomo(
       }
     }
 
-    for (const inv of xr.getInvalidFields()) {
-      unmapped.push(`download-settings.xhttpSettings.${inv.field} (非法值: "${inv.rawValue}")`);
-    }
-    for (const extraKey of Object.keys(xr.getUnusedExtras())) {
-      unmapped.push(`download-settings.xhttpSettings.${extraKey}`);
-    }
+    const { mapped: subXhttp, unmapped: subU } = mapXhttpFields(xr, 'download-settings.xhttpSettings', ['extra']);
+    Object.assign(mapped, subXhttp);
+    unmapped.push(...subU);
   }
 
   // 8. xmux / reuseSettings / reuse-settings (顶层)
@@ -334,24 +511,20 @@ function mapXrayDownloadSettingsToMihomo(
 
   // 9. downloadSettings.extra 直接嵌套
   const directExtra = r.getRaw('extra');
-  if (directExtra && typeof directExtra === 'object' && directExtra !== null) {
-    for (const [desk, desv] of Object.entries(directExtra as Record<string, unknown>)) {
-      if (desk === 'xmux' || desk === 'reuseSettings' || desk === 'reuse-settings') {
-        const { mapped: subReuse, unmapped: subU } = mapReuseSettings(desv);
-        if (Object.keys(subReuse).length > 0) mapped['reuse-settings'] = subReuse;
-        unmapped.push(...subU.map(u => `download-settings.extra.${u}`));
-      } else {
-        const mappedKey = EXTRA_SCALAR_FIELD_MAP[desk];
-        if (mappedKey) {
-          mapped[mappedKey] = desv;
-        } else {
-          unmapped.push(`download-settings.extra.${desk}`);
-        }
-      }
+  if (directExtra && typeof directExtra === 'object' && directExtra !== null && !Array.isArray(directExtra)) {
+    const er = new JsonFieldReader(directExtra as Record<string, unknown>);
+    const reuseVal = er.getRaw('xmux', 'reuseSettings', 'reuse-settings');
+    if (reuseVal) {
+      const { mapped: subReuse, unmapped: subU } = mapReuseSettings(reuseVal);
+      if (Object.keys(subReuse).length > 0) mapped['reuse-settings'] = subReuse;
+      unmapped.push(...subU.map(u => `download-settings.extra.${u}`));
     }
+    const { mapped: subXhttp, unmapped: subU } = mapXhttpFields(er, 'download-settings.extra', ['xmux', 'reusesettings', 'reuse-settings']);
+    Object.assign(mapped, subXhttp);
+    unmapped.push(...subU);
   }
 
-  // 10. Mihomo 原生已规范字段直接读取
+  // 10. Mihomo 顶层 TLS 字段直接读取
   const topSni = r.getString('servername', 'serverName', 'sni');
   if (topSni) mapped.servername = topSni;
 
@@ -361,31 +534,16 @@ function mapXrayDownloadSettingsToMihomo(
   const topSkipCert = r.getStrictBool('skip-cert-verify', 'skipCertVerify', 'allowInsecure', 'insecure');
   if (topSkipCert) mapped['skip-cert-verify'] = true;
 
-  const topPath = r.getString('path');
-  if (topPath) mapped.path = topPath;
-
-  const topHost = r.getString('host');
-  if (topHost) mapped.host = topHost;
-
-  const topHeaders = r.getRaw('headers');
-  if (topHeaders) mapped.headers = topHeaders;
-
-  const topMode = r.getString('mode');
-  if (topMode) mapped.mode = topMode;
-
-  const topNoGrpc = r.getRaw('no-grpc-header', 'noGRPCHeader');
-  if (topNoGrpc !== undefined) mapped['no-grpc-header'] = topNoGrpc;
-
-  const topXPadding = r.getRaw('x-padding-bytes', 'xPaddingBytes');
-  if (topXPadding !== undefined) mapped['x-padding-bytes'] = topXPadding;
-
-  // 收集顶层非法字段与未识别字段
-  for (const inv of r.getInvalidFields()) {
-    unmapped.push(`download-settings.${inv.field} (非法值: "${inv.rawValue}")`);
-  }
-  for (const extraKey of Object.keys(r.getUnusedExtras())) {
-    unmapped.push(`download-settings.${extraKey}`);
-  }
+  // 11. Mihomo 顶层 XHTTP 标量字段直接读取
+  const { mapped: topXhttp, unmapped: topXhttpU } = mapXhttpFields(r, 'download-settings', [
+    'server', 'address', 'port', 'security', 'tls', 'network',
+    'tlssettings', 'tls-settings', 'realitysettings', 'reality-settings', 'realityopts', 'reality-opts',
+    'xhttpsettings', 'xhttp-settings', 'xmux', 'reusesettings', 'reuse-settings', 'extra',
+    'servername', 'serverName', 'sni', 'client-fingerprint', 'clientFingerprint', 'fingerprint', 'fp',
+    'skip-cert-verify', 'skipCertVerify', 'allowInsecure', 'insecure'
+  ]);
+  Object.assign(mapped, topXhttp);
+  unmapped.push(...topXhttpU);
 
   return { mapped, unmapped };
 }
@@ -396,9 +554,9 @@ function mapXrayDownloadSettingsToMihomo(
 function applyXhttpExtra(
   rawExtra: string | object,
   opts: Record<string, unknown>,
-  nodeName: string
+  nodeName: string,
+  context?: DownloadSettingsContext
 ): { fatal?: true; skipReason?: string; unmapped: string[] } {
-
   let extraObj: Record<string, unknown> | null = null;
 
   if (typeof rawExtra === 'string') {
@@ -415,40 +573,51 @@ function applyXhttpExtra(
         unmapped: ['xhttp-opts.extra']
       };
     }
-  } else if (typeof rawExtra === 'object' && rawExtra !== null) {
+  } else if (typeof rawExtra === 'object' && rawExtra !== null && !Array.isArray(rawExtra)) {
     extraObj = rawExtra as Record<string, unknown>;
   }
 
   if (!extraObj) return { unmapped: [] };
 
   const unmapped: string[] = [];
+  const er = new JsonFieldReader(extraObj);
 
-  for (const [k, v] of Object.entries(extraObj)) {
-    // 1. xmux / reuseSettings / reuse-settings -> reuse-settings
-    if (k === 'xmux' || k === 'reuseSettings' || k === 'reuse-settings') {
-      const { mapped, unmapped: subUnmapped } = mapReuseSettings(v);
-      if (Object.keys(mapped).length > 0) opts['reuse-settings'] = mapped;
-      unmapped.push(...subUnmapped.map(u => `xhttp-opts.${u}`));
-    }
-    // 2. downloadSettings / download-settings -> 专有 StreamSettings 转换
-    else if (k === 'downloadSettings' || k === 'download-settings') {
-      const dlRes = mapXrayDownloadSettingsToMihomo(v, nodeName);
-      if (dlRes.fatal) {
-        return { fatal: true, skipReason: dlRes.skipReason, unmapped: ['xhttp-opts.download-settings'] };
-      }
-      if (Object.keys(dlRes.mapped).length > 0) opts['download-settings'] = dlRes.mapped;
-      unmapped.push(...dlRes.unmapped.map(u => `xhttp-opts.${u}`));
-    }
-    // 3. 顶层标量字段
-    else {
-      const mappedKey = EXTRA_SCALAR_FIELD_MAP[k];
-      if (mappedKey) {
-        opts[mappedKey] = v;
-      } else {
-        unmapped.push(`xhttp-opts.extra.${k}`);
-      }
-    }
+  // 1. xmux / reuseSettings / reuse-settings -> reuse-settings
+  const reuseVal = er.getRaw('xmux', 'reuseSettings', 'reuse-settings');
+  if (reuseVal) {
+    const { mapped, unmapped: subUnmapped } = mapReuseSettings(reuseVal);
+    if (Object.keys(mapped).length > 0) opts['reuse-settings'] = mapped;
+    unmapped.push(...subUnmapped.map(u => `xhttp-opts.${u}`));
   }
+
+  // 2. downloadSettings / download-settings -> 专有 StreamSettings 转换
+  const dlVal = er.getRaw('downloadSettings', 'download-settings');
+  if (dlVal) {
+    const dlRes = mapXrayDownloadSettingsToMihomo(dlVal, nodeName, context);
+    if (dlRes.fatal) {
+      return { fatal: true, skipReason: dlRes.skipReason, unmapped: ['xhttp-opts.download-settings'] };
+    }
+    if (Object.keys(dlRes.mapped).length > 0) opts['download-settings'] = dlRes.mapped;
+    unmapped.push(...dlRes.unmapped.map(u => `xhttp-opts.${u}`));
+  }
+
+  // 3. xhttpSettings / xhttp-settings
+  const xhttpVal = er.getRaw('xhttpSettings', 'xhttp-settings');
+  if (xhttpVal && typeof xhttpVal === 'object' && !Array.isArray(xhttpVal)) {
+    const xr = new JsonFieldReader(xhttpVal as Record<string, unknown>);
+    const { mapped: subXhttp, unmapped: subU } = mapXhttpFields(xr, 'xhttp-opts.xhttpSettings');
+    Object.assign(opts, subXhttp);
+    unmapped.push(...subU);
+  }
+
+  // 4. 顶层标量字段
+  const { mapped: scalarXhttp, unmapped: scalarU } = mapXhttpFields(er, 'xhttp-opts.extra', [
+    'xmux', 'reusesettings', 'reuse-settings',
+    'downloadsettings', 'download-settings',
+    'xhttpsettings', 'xhttp-settings'
+  ]);
+  Object.assign(opts, scalarXhttp);
+  unmapped.push(...scalarU);
 
   return { unmapped };
 }
@@ -581,10 +750,26 @@ export function adaptVlessToMihomo(node: VlessNode): AdapterResult {
       const xhttpOpts: Record<string, unknown> = {};
       if (t.path) xhttpOpts.path = t.path;
       if (t.headers?.Host) xhttpOpts.host = t.headers.Host;
-      if (t.mode) xhttpOpts.mode = t.mode;
+      if (t.mode) {
+        const matchedMode = XHTTP_VALID_MODES.find(m => m.toLowerCase() === t.mode?.toLowerCase());
+        if (matchedMode) {
+          xhttpOpts.mode = matchedMode;
+        } else {
+          unsupportedParams.push('transport.mode');
+          warnings.push({
+            level: 'warn',
+            field: 'transport.mode',
+            message: `XHTTP mode [${t.mode}] 不是合法的枚举值 (允许值: ${XHTTP_VALID_MODES.join(', ')})`
+          });
+        }
+      }
 
       if (t.extra) {
-        const extraRes = applyXhttpExtra(t.extra, xhttpOpts, node.name);
+        const extraRes = applyXhttpExtra(t.extra, xhttpOpts, node.name, {
+          uplinkSecurity: p.security,
+          uplinkIsReality: isReality,
+          uplinkIsTls: isTls
+        });
         if (extraRes.fatal) {
           return { fatal: true, lossy: true, emitted: false,
             skipReason: extraRes.skipReason || 'XHTTP extra 无法安全解析',

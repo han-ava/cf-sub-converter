@@ -277,11 +277,34 @@ describe('Tower-Inspired Compatibility Gate Suite', () => {
     expect(res.emitted).toBe(true);
     // 主连接有 reality-opts
     expect(res.config!['reality-opts']).toBeDefined();
-    // download-settings 必须显式没有 reality-opts
+    // download-settings 必须显式清空 reality-opts 以避免继承上行 Reality 导致超时
     const dlSettings = res.config!['xhttp-opts']['download-settings'];
     expect(dlSettings).toBeDefined();
     expect(dlSettings.tls).toBe(true);
-    expect(dlSettings['reality-opts']).toBeUndefined();
+    expect(dlSettings['reality-opts']).toEqual({ 'public-key': '' });
+
+    // 节点主连接是 Reality，但 downloadSettings 声明 security: none
+    const realityToNoneNode = parseSingleNode(
+      'vless://b831381d-6324-4d53-ad4f-8cda48b30811@1.2.3.4:443' +
+      '?type=xhttp&security=reality&pbk=abcdefghijklmnopqrstuvwxyz012345&sni=cdn.example.com' +
+      '&extra=' + encodeURIComponent(JSON.stringify({
+        downloadSettings: {
+          address: 'dl.example.com',
+          port: 80,
+          security: 'none'
+        }
+      })) +
+      '#Reality%20to%20None'
+    );
+    expect(realityToNoneNode).not.toBeNull();
+    const resNone = adaptNodeToMihomo(realityToNoneNode!);
+    expect(resNone.fatal).toBe(false);
+    expect(resNone.emitted).toBe(true);
+    const dlSettingsNone = resNone.config!['xhttp-opts']['download-settings'];
+    expect(dlSettingsNone).toBeDefined();
+    // 显式输出 tls: false 与清空 reality-opts，防止继承上行配置
+    expect(dlSettingsNone.tls).toBe(false);
+    expect(dlSettingsNone['reality-opts']).toEqual({ 'public-key': '' });
   });
 
   test('9d. VLESS XHTTP: downloadSettings with unsupported transport (e.g. grpc) triggers fatal (P0-1C)', () => {
@@ -744,5 +767,178 @@ describe('Tower-Inspired Compatibility Gate Suite', () => {
     expect(hy2Res.config!.up).toBe('100');
     expect(hy2Res.config!.down).toBe('500');
     expect(hy2Res.config!['skip-cert-verify']).toBe(true);
+  });
+
+  // ── P0-1: XHTTP download-settings 上行继承与 Reality 清空验证 ─────────────────
+
+  test('22. XHTTP download-settings properly inherits uplink and clears reality-opts for TLS/none downlink', () => {
+    // 1. Uplink Reality -> Downlink TLS
+    const nodeRealityToTls = parseSingleNode(
+      'vless://b831381d-6324-4d53-ad4f-8cda48b30811@1.2.3.4:443' +
+      '?type=xhttp&security=reality&pbk=abcdefghijklmnopqrstuvwxyz012345&sni=main.example.com' +
+      '&extra=' + encodeURIComponent(JSON.stringify({
+        downloadSettings: {
+          server: 'dl.example.com',
+          port: 443,
+          security: 'tls',
+          servername: 'dl.example.com'
+        }
+      })) +
+      '#Reality%20to%20TLS'
+    );
+    expect(nodeRealityToTls).not.toBeNull();
+    const resTls = adaptNodeToMihomo(nodeRealityToTls!);
+    expect(resTls.fatal).toBe(false);
+    expect(resTls.config!['reality-opts']).toBeDefined();
+    const dlTls = resTls.config!['xhttp-opts']['download-settings'];
+    expect(dlTls.tls).toBe(true);
+    expect(dlTls.servername).toBe('dl.example.com');
+    expect(dlTls['reality-opts']).toEqual({ 'public-key': '' });
+
+    // 2. Uplink Reality -> Downlink None
+    const nodeRealityToNone = parseSingleNode(
+      'vless://b831381d-6324-4d53-ad4f-8cda48b30811@1.2.3.4:443' +
+      '?type=xhttp&security=reality&pbk=abcdefghijklmnopqrstuvwxyz012345&sni=main.example.com' +
+      '&extra=' + encodeURIComponent(JSON.stringify({
+        downloadSettings: {
+          server: 'dl.example.com',
+          port: 80,
+          security: 'none'
+        }
+      })) +
+      '#Reality%20to%20None'
+    );
+    const resNone = adaptNodeToMihomo(nodeRealityToNone!);
+    expect(resNone.fatal).toBe(false);
+    const dlNone = resNone.config!['xhttp-opts']['download-settings'];
+    expect(dlNone.tls).toBe(false);
+    expect(dlNone['reality-opts']).toEqual({ 'public-key': '' });
+
+    // 3. Uplink TLS -> Downlink None
+    const nodeTlsToNone = parseSingleNode(
+      'vless://b831381d-6324-4d53-ad4f-8cda48b30811@1.2.3.4:443' +
+      '?type=xhttp&security=tls&sni=main.example.com' +
+      '&extra=' + encodeURIComponent(JSON.stringify({
+        downloadSettings: {
+          server: 'dl.example.com',
+          port: 80,
+          security: 'none'
+        }
+      })) +
+      '#TLS%20to%20None'
+    );
+    const resTlsNone = adaptNodeToMihomo(nodeTlsToNone!);
+    expect(resTlsNone.fatal).toBe(false);
+    const dlTlsNone = resTlsNone.config!['xhttp-opts']['download-settings'];
+    expect(dlTlsNone.tls).toBe(false);
+    expect(dlTlsNone['reality-opts']).toBeUndefined();
+  });
+
+  // ── P0-2: XHTTP 严格类型与枚举门禁测试 ─────────────────────────────────────
+
+  test('23. XHTTP options enforce strict types and enum gates', () => {
+    // 1. 合法枚举与严格布尔值
+    const validXhttpNode = parseSingleNode(
+      'vless://b831381d-6324-4d53-ad4f-8cda48b30811@1.2.3.4:443' +
+      '?type=xhttp&security=tls&sni=main.example.com' +
+      '&extra=' + encodeURIComponent(JSON.stringify({
+        mode: 'stream-up',
+        noGRPCHeader: 'false',
+        uplinkHTTPMethod: 'POST',
+        sessionIDPlacement: 'path',
+        seqPlacement: 'cookie',
+        uplinkDataPlacement: 'body',
+        xPaddingPlacement: 'header',
+        xPaddingObfsMode: 'true',
+        xPaddingBytes: '100-1000'
+      })) +
+      '#Valid%20XHTTP'
+    );
+    expect(validXhttpNode).not.toBeNull();
+    const resValid = adaptNodeToMihomo(validXhttpNode!);
+    expect(resValid.fatal).toBe(false);
+    expect(resValid.lossy).toBe(false);
+    const opts = resValid.config!['xhttp-opts'];
+    expect(opts.mode).toBe('stream-up');
+    expect(opts['no-grpc-header']).toBe(false);
+    expect(opts['uplink-http-method']).toBe('POST');
+    expect(opts['session-placement']).toBe('path');
+    expect(opts['seq-placement']).toBe('cookie');
+    expect(opts['uplink-data-placement']).toBe('body');
+    expect(opts['x-padding-placement']).toBe('header');
+    expect(opts['x-padding-obfs-mode']).toBe(true);
+    expect(opts['x-padding-bytes']).toBe('100-1000');
+
+    // 2. 非法枚举与类型错误（拦截并产生警告，不透传非法值）
+    const invalidXhttpNode = parseSingleNode(
+      'vless://b831381d-6324-4d53-ad4f-8cda48b30811@1.2.3.4:443' +
+      '?type=xhttp&security=tls&sni=main.example.com' +
+      '&extra=' + encodeURIComponent(JSON.stringify({
+        mode: 'invalid_mode',
+        noGRPCHeader: 'invalid_bool',
+        uplinkHTTPMethod: 'INVALID_METHOD',
+        sessionIDPlacement: 'invalid_placement',
+        xPaddingBytes: 'invalid_range'
+      })) +
+      '#Invalid%20XHTTP'
+    );
+    const resInvalid = adaptNodeToMihomo(invalidXhttpNode!);
+    expect(resInvalid.fatal).toBe(false);
+    expect(resInvalid.lossy).toBe(true);
+    const badOpts = resInvalid.config!['xhttp-opts'] || {};
+    expect(badOpts.mode).toBeUndefined();
+    expect(badOpts['no-grpc-header']).toBeUndefined();
+    expect(badOpts['uplink-http-method']).toBeUndefined();
+    expect(badOpts['session-placement']).toBeUndefined();
+    expect(badOpts['x-padding-bytes']).toBeUndefined();
+    expect(resInvalid.unsupportedParams.some(p => p.includes('mode'))).toBe(true);
+    expect(resInvalid.unsupportedParams.some(p => p.includes('noGRPCHeader') || p.includes('no-grpc-header'))).toBe(true);
+  });
+
+  // ── P0-3: SS 插件关键参数非法时升级 Fatal 门禁测试 ────────────────────────
+
+  test('24. Shadowsocks plugin connection-critical parameter gates escalate to fatal', () => {
+    // 1. shadow-tls version 非法 (如 abc 或 5) -> Fatal
+    const ssBadVer = parseSingleNode('ss://' + Buffer.from('chacha20-ietf-poly1305:mypassword123!').toString('base64') + '@1.1.1.1:8388/?plugin=shadow-tls%3Bpassword%3D123456%3Bhost%3Dexample.com%3Bversion%3Dabc#SS%20Bad%20Ver');
+    const resBadVer = adaptNodeToMihomo(ssBadVer!);
+    expect(resBadVer.fatal).toBe(true);
+    expect(resBadVer.emitted).toBe(false);
+    expect(resBadVer.skipReason).toContain('shadow-tls');
+
+    const ssBadVerNum = parseSingleNode('ss://' + Buffer.from('chacha20-ietf-poly1305:mypassword123!').toString('base64') + '@1.1.1.1:8388/?plugin=shadow-tls%3Bpassword%3D123456%3Bhost%3Dexample.com%3Bversion%3D5#SS%20Bad%20Ver%20Num');
+    const resBadVerNum = adaptNodeToMihomo(ssBadVerNum!);
+    expect(resBadVerNum.fatal).toBe(true);
+    expect(resBadVerNum.emitted).toBe(false);
+
+    // 2. shadow-tls 缺失 password 或 host -> Fatal
+    const ssMissingHost = parseSingleNode('ss://' + Buffer.from('chacha20-ietf-poly1305:mypassword123!').toString('base64') + '@1.1.1.1:8388/?plugin=shadow-tls%3Bpassword%3D123456%3Bversion%3D3#SS%20Missing%20Host');
+    const resMissingHost = adaptNodeToMihomo(ssMissingHost!);
+    expect(resMissingHost.fatal).toBe(true);
+    expect(resMissingHost.emitted).toBe(false);
+    expect(resMissingHost.skipReason).toContain('host');
+
+    // 3. obfs mode 非法 (如 quic 或 websocket) -> Fatal
+    const ssBadObfsMode = parseSingleNode('ss://' + Buffer.from('chacha20-ietf-poly1305:mypassword123!').toString('base64') + '@1.1.1.1:8388/?plugin=obfs%3Bmode%3Dquic%3Bhost%3Dexample.com#SS%20Bad%20Obfs');
+    const resBadObfsMode = adaptNodeToMihomo(ssBadObfsMode!);
+    expect(resBadObfsMode.fatal).toBe(true);
+    expect(resBadObfsMode.emitted).toBe(false);
+    expect(resBadObfsMode.skipReason).toContain('obfs');
+
+    // 4. v2ray-plugin mode 非法 (如 grpc) -> Fatal
+    const ssBadV2rayMode = parseSingleNode('ss://' + Buffer.from('chacha20-ietf-poly1305:mypassword123!').toString('base64') + '@1.1.1.1:8388/?plugin=v2ray-plugin%3Bmode%3Dgrpc%3Bhost%3Dexample.com#SS%20Bad%20V2ray');
+    const resBadV2rayMode = adaptNodeToMihomo(ssBadV2rayMode!);
+    expect(resBadV2rayMode.fatal).toBe(true);
+    expect(resBadV2rayMode.emitted).toBe(false);
+    expect(resBadV2rayMode.skipReason).toContain('v2ray-plugin');
+
+    // 5. 非关键参数非法 (如 v2ray-plugin 的 mtu) -> 不 Fatal，记录 lossy 与 warnings
+    const ssBadMtu = parseSingleNode('ss://' + Buffer.from('chacha20-ietf-poly1305:mypassword123!').toString('base64') + '@1.1.1.1:8388/?plugin=v2ray-plugin%3Bmode%3Dwebsocket%3Bmtu%3Dxyz#SS%20Bad%20Mtu');
+    const resBadMtu = adaptNodeToMihomo(ssBadMtu!);
+    expect(resBadMtu.fatal).toBe(false);
+    expect(resBadMtu.emitted).toBe(true);
+    expect(resBadMtu.lossy).toBe(true);
+    expect(resBadMtu.config!['plugin-opts'].mtu).toBeUndefined();
+    expect(resBadMtu.config!['plugin-opts'].mode).toBe('websocket');
+    expect(resBadMtu.unsupportedParams).toContain('plugin-opts.mtu');
   });
 });
