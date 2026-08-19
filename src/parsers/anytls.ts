@@ -1,6 +1,6 @@
 // src/parsers/anytls.ts
 import { AnyTLSNode } from '../types';
-import { parseRawQuery, parseStrictEndpoint, QueryParamReader, safeBase64Decode, tryDecodeURIComponent } from '../utils';
+import { parseRawQuery, parseStrictEndpoint, QueryParamReader, tryDecodeURIComponent } from '../utils';
 
 export function parseAnyTLS(urlStr: string): AnyTLSNode | null {
   try {
@@ -23,21 +23,10 @@ export function parseAnyTLS(urlStr: string): AnyTLSNode | null {
     const rawQuery = parseRawQuery(queryPart);
     const q = new QueryParamReader(rawQuery.entries);
 
-    let password = '';
-    let serverPortStr = '';
-
-    if (raw.includes('@')) {
-      const atIndex = raw.indexOf('@');
-      password = tryDecodeURIComponent(raw.substring(0, atIndex));
-      serverPortStr = raw.substring(atIndex + 1);
-    } else {
-      const decoded = safeBase64Decode(raw);
-      if (decoded && decoded.includes('@')) {
-        const atIndex = decoded.indexOf('@');
-        password = decoded.substring(0, atIndex);
-        serverPortStr = decoded.substring(atIndex + 1);
-      }
-    }
+    if (!raw.includes('@')) return null;
+    const atIndex = raw.indexOf('@');
+    const password = tryDecodeURIComponent(raw.substring(0, atIndex));
+    const serverPortStr = raw.substring(atIndex + 1);
 
     const ep = parseStrictEndpoint(serverPortStr, 443);
     const server = ep.server;

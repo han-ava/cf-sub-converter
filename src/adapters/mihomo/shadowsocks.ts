@@ -1,5 +1,5 @@
 // src/adapters/mihomo/shadowsocks.ts
-import { AdapterResult, ConversionWarning, ShadowsocksNode } from '../../types';
+import { AdapterResult, ConversionWarning, ShadowsocksNode, InvalidQueryParam } from '../../types';
 import { strictBase64Decode, detectUnmappedFields, processInvalidParams } from '../../utils';
 
 const SUPPORTED_SS_PLUGINS = new Set([
@@ -12,8 +12,12 @@ const SUPPORTED_SS_PLUGINS = new Set([
   'jls'
 ]);
 
-function formatMihomoPluginOpts(plugin: string, rawOpts: Record<string, any>): Record<string, any> {
+function formatMihomoPluginOpts(
+  plugin: string,
+  rawOpts: Record<string, any>
+): { opts: Record<string, any>; invalidParams: InvalidQueryParam[] } {
   const result: Record<string, any> = {};
+  const invalidParams: InvalidQueryParam[] = [];
   const booleanKeys = new Set(['tls', 'mux', 'skip-cert-verify', 'skipcertverify', 'nocomp', 'quiet']);
   const numberKeys = new Set([
     'version', 'mtu', 'sndwnd', 'rcvwnd', 'datashard', 'parityshard', 'dscp', 'interval', 'resend', 'nc'
@@ -32,13 +36,21 @@ function formatMihomoPluginOpts(plugin: string, rawOpts: Record<string, any>): R
         } else if (valLower === 'false' || valLower === '0') {
           result[k] = false;
         } else {
-          result[k] = valTrimmed;
+          invalidParams.push({
+            key: `plugin-opts.${k}`,
+            value: v,
+            reason: `插件参数 [${k}] 期望布尔值 (true/false/1/0)，但实际值为 "${v}"`
+          });
         }
       } else if (numberKeys.has(kLower)) {
         if (/^-?\d+$/.test(valTrimmed)) {
           result[k] = parseInt(valTrimmed, 10);
         } else {
-          result[k] = valTrimmed;
+          invalidParams.push({
+            key: `plugin-opts.${k}`,
+            value: v,
+            reason: `插件参数 [${k}] 期望整数，但实际值为 "${v}"`
+          });
         }
       } else {
         result[k] = valTrimmed;
@@ -47,7 +59,7 @@ function formatMihomoPluginOpts(plugin: string, rawOpts: Record<string, any>): R
       result[k] = v;
     }
   }
-  return result;
+  return { opts: result, invalidParams };
 }
 
 export function adaptShadowsocksToMihomo(node: ShadowsocksNode): AdapterResult {
@@ -156,7 +168,18 @@ export function adaptShadowsocksToMihomo(node: ShadowsocksNode): AdapterResult {
   if (normalizedPlugin) {
     config.plugin = normalizedPlugin;
     if (p.pluginOpts) {
-      config['plugin-opts'] = formatMihomoPluginOpts(normalizedPlugin, p.pluginOpts);
+      const { opts: formattedOpts, invalidParams: pluginInv } = formatMihomoPluginOpts(normalizedPlugin, p.pluginOpts);
+      config['plugin-opts'] = formattedOpts;
+      if (pluginInv.length > 0) {
+        for (const item of pluginInv) {
+          unsupportedParams.push(item.key);
+          warnings.push({
+            level: 'warn',
+            field: item.key,
+            message: `参数 [${item.key}=${item.value}] 格式非法: ${item.reason}`
+          });
+        }
+      }
     }
   }
 

@@ -1,6 +1,6 @@
 // src/adapters/mihomo/vless.ts
 import { AdapterResult, ConversionWarning, VlessNode } from '../../types';
-import { parseALPN, detectUnmappedFields, processInvalidParams } from '../../utils';
+import { parseALPN, detectUnmappedFields, processInvalidParams, JsonFieldReader } from '../../utils';
 
 const SUPPORTED_VLESS_TRANSPORTS = new Set([
   'tcp', 'ws', 'grpc', 'http', 'h2', 'xhttp', 'splithttp'
@@ -122,222 +122,269 @@ function mapXrayDownloadSettingsToMihomo(
   nodeName: string
 ): { mapped: Record<string, unknown>; fatal?: true; skipReason?: string; unmapped: string[] } {
   if (!raw || typeof raw !== 'object') return { mapped: {}, unmapped: [] };
-  const input = raw as Record<string, unknown>;
+  const r = new JsonFieldReader(raw as Record<string, unknown>);
   const mapped: Record<string, unknown> = {};
   const unmapped: string[] = [];
 
-  for (const [k, v] of Object.entries(input)) {
-    // 1. address -> server
-    if (k === 'address' || k === 'server') {
-      mapped.server = String(v);
+  // 1. address / server -> server
+  const server = r.getString('server', 'address');
+  if (server) mapped.server = server;
+
+  // 2. port -> port (strict int 1-65535)
+  const port = r.getStrictInt('port');
+  if (port !== undefined) {
+    if (port >= 1 && port <= 65535) {
+      mapped.port = port;
+    } else {
+      unmapped.push(`download-settings.port (超出合法范围 1-65535: ${port})`);
     }
-    // 2. port -> port
-    else if (k === 'port') {
-      mapped.port = typeof v === 'number' ? v : parseInt(String(v), 10);
+  }
+
+  // 3. security / tls
+  const rawSec = r.getRaw('security');
+  if (rawSec !== undefined && rawSec !== null && rawSec !== '') {
+    const sec = r.getEnum(['tls', 'reality', 'none'], 'security');
+    if (sec === 'tls') {
+      mapped.tls = true;
+      delete mapped['reality-opts'];
+    } else if (sec === 'reality') {
+      mapped.tls = true;
+    } else if (sec === 'none') {
+      delete mapped.tls;
+      delete mapped['reality-opts'];
     }
-    // 3. security -> tls: true
-    else if (k === 'security') {
-      const sec = String(v).toLowerCase();
-      if (sec === 'tls') {
-        mapped.tls = true;
-        // 显式清除继承的 reality-opts (Reality 上行 -> TLS 下行)
-        delete mapped['reality-opts'];
-      } else if (sec === 'reality') {
-        mapped.tls = true;
-      } else if (sec === 'none') {
-        delete mapped.tls;
-        delete mapped['reality-opts'];
-      } else {
-        unmapped.push(`download-settings.security.${v}`);
-      }
+  }
+  const directTls = r.getStrictBool('tls');
+  if (directTls) mapped.tls = true;
+
+  // 4. network -> 校验下行传输协议
+  const rawNet = r.getRaw('network');
+  if (rawNet !== undefined && rawNet !== null && rawNet !== '') {
+    const net = r.getEnum(['xhttp', 'splithttp', 'tcp', ''], 'network');
+    if (net === undefined) {
+      return {
+        mapped: {},
+        fatal: true,
+        skipReason: `节点 [${nodeName}] downloadSettings 声明了 Mihomo 无法支持的独立下行传输协议: [${rawNet}]`,
+        unmapped: []
+      };
     }
-    else if (k === 'tls') {
-      if (v) mapped.tls = true;
+  }
+
+  // 5. tlsSettings / tls-settings
+  const tlsSettingsRaw = r.getRaw('tlsSettings', 'tls-settings');
+  if (tlsSettingsRaw && typeof tlsSettingsRaw === 'object' && !Array.isArray(tlsSettingsRaw)) {
+    mapped.tls = true;
+    const tr = new JsonFieldReader(tlsSettingsRaw as Record<string, unknown>);
+    const sni = tr.getString('serverName', 'server-name', 'sni', 'servername');
+    if (sni) mapped.servername = sni;
+
+    const fp = tr.getString('fingerprint', 'fp', 'client-fingerprint', 'clientFingerprint');
+    if (fp) mapped['client-fingerprint'] = fp;
+
+    const alpnRaw = tr.getRaw('alpn');
+    if (alpnRaw !== undefined) {
+      const alpn = parseALPN(alpnRaw as string | string[]);
+      if (alpn && alpn.length > 0) mapped.alpn = alpn;
     }
-    // 4. network -> 校验下行传输协议：如果是非 xhttp/splithttp/tcp 等 Mihomo 无法表达的独立传输，严格 fatal
-    else if (k === 'network') {
-      const net = String(v).toLowerCase();
-      if (net === 'xhttp' || net === 'splithttp' || net === 'tcp' || net === '') {
-        // 允许的下行传输类型
-      } else {
+
+    const skipCert = tr.getStrictBool('allowInsecure', 'insecure', 'skipCertVerify', 'skip-cert-verify');
+    if (skipCert) mapped['skip-cert-verify'] = true;
+
+    const realitySub = tr.getRaw('realitySettings', 'reality-settings', 'realityOpts', 'reality-opts');
+    if (realitySub && typeof realitySub === 'object' && !Array.isArray(realitySub)) {
+      const rr = new JsonFieldReader(realitySub as Record<string, unknown>);
+      const pbk = rr.getString('publicKey', 'public-key', 'pbk');
+      const sid = rr.getString('shortId', 'short-id', 'sid');
+      const spx = rr.getString('spiderX', 'spider-x', 'spx');
+
+      if (!pbk) {
         return {
           mapped: {},
           fatal: true,
-          skipReason: `节点 [${nodeName}] downloadSettings 声明了 Mihomo 无法支持的独立下行传输协议: [${v}]`,
+          skipReason: `节点 [${nodeName}] downloadSettings 中的 Reality 缺少必需的 publicKey (pbk)`,
           unmapped: []
         };
       }
-    }
-    // 5. Xray tlsSettings 展开到顶层字段
-    else if (k === 'tlsSettings' || k === 'tls-settings') {
-      if (typeof v === 'object' && v !== null) {
-        mapped.tls = true;
-        const tlsObj = v as Record<string, unknown>;
-        for (const [tk, tv] of Object.entries(tlsObj)) {
-          if (tk === 'serverName' || tk === 'server-name' || tk === 'sni' || tk === 'servername') {
-            mapped.servername = String(tv);
-          } else if (tk === 'fingerprint' || tk === 'fp' || tk === 'client-fingerprint' || tk === 'clientFingerprint') {
-            mapped['client-fingerprint'] = String(tv);
-          } else if (tk === 'alpn') {
-            const alpn = parseALPN(tv as string | string[]);
-            if (alpn && alpn.length > 0) mapped.alpn = alpn;
-          } else if (tk === 'allowInsecure' || tk === 'insecure' || tk === 'skipCertVerify' || tk === 'skip-cert-verify') {
-            if (tv) mapped['skip-cert-verify'] = true;
-          } else if (tk === 'realitySettings' || tk === 'reality-settings' || tk === 'realityOpts' || tk === 'reality-opts') {
-            if (typeof tv === 'object' && tv !== null) {
-              const rObj = tv as Record<string, unknown>;
-              const rMapped: Record<string, string> = {};
-              const pbk = rObj.publicKey || rObj['public-key'] || rObj.pbk;
-              if (pbk) rMapped['public-key'] = String(pbk).trim();
-              const sid = rObj.shortId || rObj['short-id'] || rObj.sid;
-              if (sid !== undefined) rMapped['short-id'] = String(sid);
-              const spx = rObj.spiderX || rObj['spider-x'] || rObj.spx;
-              if (spx !== undefined) rMapped['spider-x'] = String(spx);
+      const rMapped: Record<string, string> = { 'public-key': pbk.trim() };
+      if (sid !== undefined) rMapped['short-id'] = sid;
+      if (spx !== undefined) rMapped['spider-x'] = spx;
+      mapped['reality-opts'] = rMapped;
 
-              if (!rMapped['public-key']) {
-                return {
-                  mapped: {},
-                  fatal: true,
-                  skipReason: `节点 [${nodeName}] downloadSettings 中的 Reality 缺少必需的 publicKey (pbk)`,
-                  unmapped: []
-                };
-              }
-              mapped['reality-opts'] = rMapped;
-            }
-          } else {
-            unmapped.push(`download-settings.tlsSettings.${tk}`);
-          }
-        }
+      for (const inv of rr.getInvalidFields()) {
+        unmapped.push(`download-settings.tlsSettings.realitySettings.${inv.field} (非法值: "${inv.rawValue}")`);
+      }
+      for (const extraKey of Object.keys(rr.getUnusedExtras())) {
+        unmapped.push(`download-settings.tlsSettings.realitySettings.${extraKey}`);
       }
     }
-    // 6. Xray realitySettings 展开到 reality-opts
-    else if (k === 'realitySettings' || k === 'reality-settings' || k === 'realityOpts' || k === 'reality-opts') {
-      if (typeof v === 'object' && v !== null) {
-        mapped.tls = true;
-        const rObj = v as Record<string, unknown>;
-        const rMapped: Record<string, string> = {};
-        const pbk = rObj.publicKey || rObj['public-key'] || rObj.pbk;
-        if (pbk) rMapped['public-key'] = String(pbk).trim();
-        const sid = rObj.shortId || rObj['short-id'] || rObj.sid;
-        if (sid !== undefined) rMapped['short-id'] = String(sid);
-        const spx = rObj.spiderX || rObj['spider-x'] || rObj.spx;
-        if (spx !== undefined) rMapped['spider-x'] = String(spx);
 
-        if (!rMapped['public-key']) {
-          return {
-            mapped: {},
-            fatal: true,
-            skipReason: `节点 [${nodeName}] downloadSettings 中的 Reality 缺少必需的 publicKey (pbk)`,
-            unmapped: []
-          };
-        }
-        mapped['reality-opts'] = rMapped;
-      }
+    for (const inv of tr.getInvalidFields()) {
+      unmapped.push(`download-settings.tlsSettings.${inv.field} (非法值: "${inv.rawValue}")`);
     }
-    // 7. Xray xhttpSettings 展开到顶层
-    else if (k === 'xhttpSettings' || k === 'xhttp-settings') {
-      if (typeof v === 'object' && v !== null) {
-        const xObj = v as Record<string, unknown>;
-        for (const [xk, xv] of Object.entries(xObj)) {
-          if (xk === 'path') mapped.path = String(xv);
-          else if (xk === 'host') mapped.host = String(xv);
-          else if (xk === 'headers') mapped.headers = xv;
-          else if (xk === 'mode') mapped.mode = String(xv);
-          else if (xk === 'noGRPCHeader' || xk === 'no-grpc-header') mapped['no-grpc-header'] = xv;
-          else if (xk === 'xPaddingBytes' || xk === 'x-padding-bytes') mapped['x-padding-bytes'] = xv;
-          else if (xk === 'extra') {
-            if (typeof xv === 'object' && xv !== null) {
-              const extraSub = xv as Record<string, unknown>;
-              for (const [esk, esv] of Object.entries(extraSub)) {
-                if (esk === 'xmux' || esk === 'reuseSettings' || esk === 'reuse-settings') {
-                  const { mapped: subReuse, unmapped: subU } = mapReuseSettings(esv);
-                  if (Object.keys(subReuse).length > 0) mapped['reuse-settings'] = subReuse;
-                  unmapped.push(...subU.map(u => `download-settings.xhttpSettings.extra.${u}`));
-                } else {
-                  const mappedKey = EXTRA_SCALAR_FIELD_MAP[esk];
-                  if (mappedKey) {
-                    mapped[mappedKey] = esv;
-                  } else {
-                    unmapped.push(`download-settings.xhttpSettings.extra.${esk}`);
-                  }
-                }
-              }
-            } else if (typeof xv === 'string') {
-              try {
-                const parsedExtra = JSON.parse(xv);
-                if (typeof parsedExtra === 'object' && parsedExtra !== null) {
-                  for (const [esk, esv] of Object.entries(parsedExtra)) {
-                    if (esk === 'xmux' || esk === 'reuseSettings' || esk === 'reuse-settings') {
-                      const { mapped: subReuse, unmapped: subU } = mapReuseSettings(esv);
-                      if (Object.keys(subReuse).length > 0) mapped['reuse-settings'] = subReuse;
-                      unmapped.push(...subU.map(u => `download-settings.xhttpSettings.extra.${u}`));
-                    } else {
-                      const mappedKey = EXTRA_SCALAR_FIELD_MAP[esk];
-                      if (mappedKey) {
-                        mapped[mappedKey] = esv;
-                      } else {
-                        unmapped.push(`download-settings.xhttpSettings.extra.${esk}`);
-                      }
-                    }
-                  }
-                }
-              } catch {
-                unmapped.push(`download-settings.xhttpSettings.extra (非 JSON 字符串: "${xv}")`);
-              }
-            }
-          } else {
-            unmapped.push(`download-settings.xhttpSettings.${xk}`);
-          }
-        }
-      }
+    for (const extraKey of Object.keys(tr.getUnusedExtras())) {
+      unmapped.push(`download-settings.tlsSettings.${extraKey}`);
     }
-    // 8. xmux / reuseSettings / reuse-settings -> reuse-settings
-    else if (k === 'xmux' || k === 'reuseSettings' || k === 'reuse-settings') {
-      const { mapped: subReuse, unmapped: subU } = mapReuseSettings(v);
-      if (Object.keys(subReuse).length > 0) mapped['reuse-settings'] = subReuse;
-      unmapped.push(...subU.map(u => `download-settings.${u}`));
+  }
+
+  // 6. realitySettings / reality-settings (顶层)
+  const realitySettingsRaw = r.getRaw('realitySettings', 'reality-settings', 'realityOpts', 'reality-opts');
+  if (realitySettingsRaw && typeof realitySettingsRaw === 'object' && !Array.isArray(realitySettingsRaw)) {
+    mapped.tls = true;
+    const rr = new JsonFieldReader(realitySettingsRaw as Record<string, unknown>);
+    const pbk = rr.getString('publicKey', 'public-key', 'pbk');
+    const sid = rr.getString('shortId', 'short-id', 'sid');
+    const spx = rr.getString('spiderX', 'spider-x', 'spx');
+
+    if (!pbk) {
+      return {
+        mapped: {},
+        fatal: true,
+        skipReason: `节点 [${nodeName}] downloadSettings 中的 Reality 缺少必需的 publicKey (pbk)`,
+        unmapped: []
+      };
     }
-    // 9. downloadSettings.extra 直接嵌套
-    else if (k === 'extra') {
-      if (typeof v === 'object' && v !== null) {
-        for (const [desk, desv] of Object.entries(v as Record<string, unknown>)) {
-          if (desk === 'xmux' || desk === 'reuseSettings' || desk === 'reuse-settings') {
-            const { mapped: subReuse, unmapped: subU } = mapReuseSettings(desv);
+    const rMapped: Record<string, string> = { 'public-key': pbk.trim() };
+    if (sid !== undefined) rMapped['short-id'] = sid;
+    if (spx !== undefined) rMapped['spider-x'] = spx;
+    mapped['reality-opts'] = rMapped;
+
+    for (const inv of rr.getInvalidFields()) {
+      unmapped.push(`download-settings.realitySettings.${inv.field} (非法值: "${inv.rawValue}")`);
+    }
+    for (const extraKey of Object.keys(rr.getUnusedExtras())) {
+      unmapped.push(`download-settings.realitySettings.${extraKey}`);
+    }
+  }
+
+  // 7. xhttpSettings / xhttp-settings
+  const xhttpSettingsRaw = r.getRaw('xhttpSettings', 'xhttp-settings');
+  if (xhttpSettingsRaw && typeof xhttpSettingsRaw === 'object' && !Array.isArray(xhttpSettingsRaw)) {
+    const xr = new JsonFieldReader(xhttpSettingsRaw as Record<string, unknown>);
+    const path = xr.getString('path');
+    if (path) mapped.path = path;
+    const host = xr.getString('host');
+    if (host) mapped.host = host;
+    const mode = xr.getString('mode');
+    if (mode) mapped.mode = mode;
+    const headers = xr.getRaw('headers');
+    if (headers) mapped.headers = headers;
+    const noGrpc = xr.getRaw('noGRPCHeader', 'no-grpc-header');
+    if (noGrpc !== undefined) mapped['no-grpc-header'] = noGrpc;
+    const xPadding = xr.getRaw('xPaddingBytes', 'x-padding-bytes');
+    if (xPadding !== undefined) mapped['x-padding-bytes'] = xPadding;
+
+    const extraVal = xr.getRaw('extra');
+    if (extraVal) {
+      if (typeof extraVal === 'object' && extraVal !== null) {
+        for (const [esk, esv] of Object.entries(extraVal as Record<string, unknown>)) {
+          if (esk === 'xmux' || esk === 'reuseSettings' || esk === 'reuse-settings') {
+            const { mapped: subReuse, unmapped: subU } = mapReuseSettings(esv);
             if (Object.keys(subReuse).length > 0) mapped['reuse-settings'] = subReuse;
-            unmapped.push(...subU.map(u => `download-settings.extra.${u}`));
+            unmapped.push(...subU.map(u => `download-settings.xhttpSettings.extra.${u}`));
           } else {
-            const mappedKey = EXTRA_SCALAR_FIELD_MAP[desk];
+            const mappedKey = EXTRA_SCALAR_FIELD_MAP[esk];
             if (mappedKey) {
-              mapped[mappedKey] = desv;
+              mapped[mappedKey] = esv;
             } else {
-              unmapped.push(`download-settings.extra.${desk}`);
+              unmapped.push(`download-settings.xhttpSettings.extra.${esk}`);
             }
           }
         }
+      } else if (typeof extraVal === 'string') {
+        try {
+          const parsedExtra = JSON.parse(extraVal);
+          if (typeof parsedExtra === 'object' && parsedExtra !== null) {
+            for (const [esk, esv] of Object.entries(parsedExtra)) {
+              if (esk === 'xmux' || esk === 'reuseSettings' || esk === 'reuse-settings') {
+                const { mapped: subReuse, unmapped: subU } = mapReuseSettings(esv);
+                if (Object.keys(subReuse).length > 0) mapped['reuse-settings'] = subReuse;
+                unmapped.push(...subU.map(u => `download-settings.xhttpSettings.extra.${u}`));
+              } else {
+                const mappedKey = EXTRA_SCALAR_FIELD_MAP[esk];
+                if (mappedKey) {
+                  mapped[mappedKey] = esv;
+                } else {
+                  unmapped.push(`download-settings.xhttpSettings.extra.${esk}`);
+                }
+              }
+            }
+          }
+        } catch {
+          unmapped.push(`download-settings.xhttpSettings.extra (非 JSON 字符串: "${extraVal}")`);
+        }
       }
     }
-    // 10. Mihomo 原生已规范字段直接透传
-    else if (k === 'servername' || k === 'serverName' || k === 'sni') {
-      mapped.servername = String(v);
-    } else if (k === 'client-fingerprint' || k === 'clientFingerprint' || k === 'fingerprint' || k === 'fp') {
-      mapped['client-fingerprint'] = String(v);
-    } else if (k === 'skip-cert-verify' || k === 'skipCertVerify' || k === 'allowInsecure' || k === 'insecure') {
-      if (v) mapped['skip-cert-verify'] = true;
-    } else if (k === 'path') {
-      mapped.path = String(v);
-    } else if (k === 'host') {
-      mapped.host = String(v);
-    } else if (k === 'headers') {
-      mapped.headers = v;
-    } else if (k === 'mode') {
-      mapped.mode = String(v);
-    } else if (k === 'no-grpc-header' || k === 'noGRPCHeader') {
-      mapped['no-grpc-header'] = v;
-    } else if (k === 'x-padding-bytes' || k === 'xPaddingBytes') {
-      mapped['x-padding-bytes'] = v;
-    } else {
-      unmapped.push(`download-settings.${k}`);
+
+    for (const inv of xr.getInvalidFields()) {
+      unmapped.push(`download-settings.xhttpSettings.${inv.field} (非法值: "${inv.rawValue}")`);
     }
+    for (const extraKey of Object.keys(xr.getUnusedExtras())) {
+      unmapped.push(`download-settings.xhttpSettings.${extraKey}`);
+    }
+  }
+
+  // 8. xmux / reuseSettings / reuse-settings (顶层)
+  const reuseRaw = r.getRaw('xmux', 'reuseSettings', 'reuse-settings');
+  if (reuseRaw) {
+    const { mapped: subReuse, unmapped: subU } = mapReuseSettings(reuseRaw);
+    if (Object.keys(subReuse).length > 0) mapped['reuse-settings'] = subReuse;
+    unmapped.push(...subU.map(u => `download-settings.${u}`));
+  }
+
+  // 9. downloadSettings.extra 直接嵌套
+  const directExtra = r.getRaw('extra');
+  if (directExtra && typeof directExtra === 'object' && directExtra !== null) {
+    for (const [desk, desv] of Object.entries(directExtra as Record<string, unknown>)) {
+      if (desk === 'xmux' || desk === 'reuseSettings' || desk === 'reuse-settings') {
+        const { mapped: subReuse, unmapped: subU } = mapReuseSettings(desv);
+        if (Object.keys(subReuse).length > 0) mapped['reuse-settings'] = subReuse;
+        unmapped.push(...subU.map(u => `download-settings.extra.${u}`));
+      } else {
+        const mappedKey = EXTRA_SCALAR_FIELD_MAP[desk];
+        if (mappedKey) {
+          mapped[mappedKey] = desv;
+        } else {
+          unmapped.push(`download-settings.extra.${desk}`);
+        }
+      }
+    }
+  }
+
+  // 10. Mihomo 原生已规范字段直接读取
+  const topSni = r.getString('servername', 'serverName', 'sni');
+  if (topSni) mapped.servername = topSni;
+
+  const topFp = r.getString('client-fingerprint', 'clientFingerprint', 'fingerprint', 'fp');
+  if (topFp) mapped['client-fingerprint'] = topFp;
+
+  const topSkipCert = r.getStrictBool('skip-cert-verify', 'skipCertVerify', 'allowInsecure', 'insecure');
+  if (topSkipCert) mapped['skip-cert-verify'] = true;
+
+  const topPath = r.getString('path');
+  if (topPath) mapped.path = topPath;
+
+  const topHost = r.getString('host');
+  if (topHost) mapped.host = topHost;
+
+  const topHeaders = r.getRaw('headers');
+  if (topHeaders) mapped.headers = topHeaders;
+
+  const topMode = r.getString('mode');
+  if (topMode) mapped.mode = topMode;
+
+  const topNoGrpc = r.getRaw('no-grpc-header', 'noGRPCHeader');
+  if (topNoGrpc !== undefined) mapped['no-grpc-header'] = topNoGrpc;
+
+  const topXPadding = r.getRaw('x-padding-bytes', 'xPaddingBytes');
+  if (topXPadding !== undefined) mapped['x-padding-bytes'] = topXPadding;
+
+  // 收集顶层非法字段与未识别字段
+  for (const inv of r.getInvalidFields()) {
+    unmapped.push(`download-settings.${inv.field} (非法值: "${inv.rawValue}")`);
+  }
+  for (const extraKey of Object.keys(r.getUnusedExtras())) {
+    unmapped.push(`download-settings.${extraKey}`);
   }
 
   return { mapped, unmapped };
@@ -479,8 +526,30 @@ export function adaptVlessToMihomo(node: VlessNode): AdapterResult {
     udp: node.udp !== false
   };
 
-  if (p.flow) config.flow = p.flow;
-  if (p.packetEncoding) config['packet-encoding'] = p.packetEncoding;
+  if (p.flow) {
+    if (p.flow === 'xtls-rprx-vision-udp443' || p.flow === 'xtls-rprx-vision') {
+      config.flow = 'xtls-rprx-vision';
+    } else {
+      unsupportedParams.push('flow');
+      warnings.push({
+        level: 'warn',
+        field: 'flow',
+        message: `VLESS flow [${p.flow}] 在 Mihomo 中不受支持，已忽略`
+      });
+    }
+  }
+  if (p.packetEncoding) {
+    if (p.packetEncoding === 'packetaddr' || p.packetEncoding === 'xudp') {
+      config['packet-encoding'] = p.packetEncoding;
+    } else {
+      unsupportedParams.push('packet-encoding');
+      warnings.push({
+        level: 'warn',
+        field: 'packet-encoding',
+        message: `VLESS packet-encoding [${p.packetEncoding}] 在 Mihomo 中不受支持 (仅支持 packetaddr / xudp)`
+      });
+    }
+  }
   if (p.encryption) config.encryption = p.encryption;
 
   // P1: 仅在 TLS/Reality 为真时输出 TLS 相关字段，避免 tls=false 产生假 servername

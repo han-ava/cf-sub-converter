@@ -49,7 +49,7 @@ export function parseVless(urlStr: string): VlessNode | null {
     const rawPacketEncoding = q.get('packetEncoding', 'packet-encoding', 'packet_encoding', 'packetencoding', 'packet_addr', 'packetaddr', 'packet-addr');
     let packetEncoding: string | undefined = undefined;
     if (rawPacketEncoding) {
-      packetEncoding = q.getEnum(['packet', 'packetaddr', 'xudp'], 'packetEncoding', 'packet-encoding', 'packet_encoding', 'packetencoding', 'packet_addr', 'packetaddr', 'packet-addr');
+      packetEncoding = q.getEnum(['packetaddr', 'xudp'], 'packetEncoding', 'packet-encoding', 'packet_encoding', 'packetencoding', 'packet_addr', 'packetaddr', 'packet-addr');
     }
     const encryption = q.get('encryption');
     const sni = q.get('sni', 'servername', 'serverName', 'server-name', 'server_name', 'peer') || server;

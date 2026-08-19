@@ -553,4 +553,127 @@ describe('QueryParamReader & Universal Alias Suite', () => {
     expect(res.fatal).toBe(true);
     expect(res.emitted).toBe(false);
   });
+
+  test('23. VLESS flow normalization & strict packet-encoding gating', () => {
+    // 1. flow: xtls-rprx-vision-udp443 normalized to xtls-rprx-vision in Mihomo
+    const uri1 = 'vless://b831381d-6324-4d53-ad4f-8cda48b30811@1.2.3.4:443?security=reality&pbk=f6Hq_u8bL6ZtD3yL5p1bUv8tH9zQ6wK7nJ4mP2sE5rY&flow=xtls-rprx-vision-udp443&packet-encoding=packetaddr#VLESS%20Flow%20Normalize';
+    const node1 = parseSingleNode(uri1);
+    expect(node1).not.toBeNull();
+    expect(node1!.protocolData.flow).toBe('xtls-rprx-vision-udp443');
+    expect(node1!.protocolData.packetEncoding).toBe('packetaddr');
+
+    const res1 = adaptNodeToMihomo(node1!);
+    expect(res1.fatal).toBe(false);
+    expect(res1.config!.flow).toBe('xtls-rprx-vision');
+    expect(res1.config!['packet-encoding']).toBe('packetaddr');
+
+    // 2. packet-encoding: legacy "packet" rejected into invalidParams
+    const uri2 = 'vless://b831381d-6324-4d53-ad4f-8cda48b30811@1.2.3.4:443?security=tls&packet-encoding=packet#VLESS%20Legacy%20Packet';
+    const node2 = parseSingleNode(uri2);
+    expect(node2).not.toBeNull();
+    expect(node2!.protocolData.invalidParams?.some(p => p.key === 'packet-encoding' && p.value === 'packet')).toBe(true);
+    expect(node2!.protocolData.packetEncoding).toBeUndefined();
+
+    const res2 = adaptNodeToMihomo(node2!);
+    expect(res2.fatal).toBe(false);
+    expect(res2.lossy).toBe(true);
+    expect(res2.config!['packet-encoding']).toBeUndefined();
+    expect(res2.unsupportedParams).toContain('packet-encoding');
+  });
+
+  test('24. XHTTP nested downloadSettings JsonFieldReader strict parsing', () => {
+    // Nested downloadSettings inside XHTTP extra with strict types
+    const extraObj = {
+      downloadSettings: {
+        server: 'dl.example.com',
+        port: 8443,
+        security: 'tls',
+        tlsSettings: {
+          serverName: 'sni.dl.example.com',
+          allowInsecure: true,
+          fingerprint: 'chrome',
+          alpn: ['h2', 'http/1.1']
+        },
+        xhttpSettings: {
+          path: '/dl-path',
+          host: 'dl-host.example.com',
+          mode: 'stream-up'
+        }
+      }
+    };
+    const uri = `vless://b831381d-6324-4d53-ad4f-8cda48b30811@1.2.3.4:443?type=xhttp&path=%2Fmain&extra=${encodeURIComponent(JSON.stringify(extraObj))}#XHTTP%20Strict%20DL`;
+    const node = parseSingleNode(uri);
+    expect(node).not.toBeNull();
+
+    const res = adaptNodeToMihomo(node!);
+    expect(res.fatal).toBe(false);
+    expect(res.emitted).toBe(true);
+    expect(res.config!['xhttp-opts']).toBeDefined();
+    const dl = res.config!['xhttp-opts']['download-settings'];
+    expect(dl).toBeDefined();
+    expect(dl.server).toBe('dl.example.com');
+    expect(dl.port).toBe(8443);
+    expect(dl.tls).toBe(true);
+    expect(dl.servername).toBe('sni.dl.example.com');
+    expect(dl['skip-cert-verify']).toBe(true);
+    expect(dl['client-fingerprint']).toBe('chrome');
+    expect(dl.alpn).toEqual(['h2', 'http/1.1']);
+    expect(dl.path).toBe('/dl-path');
+    expect(dl.host).toBe('dl-host.example.com');
+    expect(dl.mode).toBe('stream-up');
+
+    // Invalid port in downloadSettings
+    const badExtra = {
+      downloadSettings: {
+        server: 'dl.example.com',
+        port: '443abc',
+        tlsSettings: {
+          allowInsecure: 'false' // String 'false' -> not true!
+        }
+      }
+    };
+    const badUri = `vless://b831381d-6324-4d53-ad4f-8cda48b30811@1.2.3.4:443?type=xhttp&extra=${encodeURIComponent(JSON.stringify(badExtra))}#XHTTP%20Bad%20DL`;
+    const badNode = parseSingleNode(badUri);
+    expect(badNode).not.toBeNull();
+
+    const badRes = adaptNodeToMihomo(badNode!);
+    expect(badRes.fatal).toBe(false);
+    expect(badRes.lossy).toBe(true);
+    const badDl = badRes.config!['xhttp-opts']['download-settings'];
+    expect(badDl.port).toBeUndefined(); // 443abc not coerced to 443
+    expect(badDl['skip-cert-verify']).toBeUndefined(); // allowInsecure="false" not coerced to true
+  });
+
+  test('25. AnyTLS: Non-standard URI without auth@host is rejected by parser', () => {
+    // Official spec: anytls://[auth@]hostname[:port]/?...
+    // Base64 encoded payload without @ must return null directly
+    const invalidAnytlsUri = 'anytls://YW55X3Bhc3N3b3JkXzEyM0Bhbnl0bHMuZXhhbXBsZS5jb206ODQ0Mw#NonStandard%20Base64';
+    const node = parseSingleNode(invalidAnytlsUri);
+    expect(node).toBeNull();
+
+    // Standard AnyTLS with @ passes
+    const validAnytlsUri = 'anytls://any_password_123@anytls.example.com:8443?sni=anytls.example.com#Valid%20AnyTLS';
+    const validNode = parseSingleNode(validAnytlsUri);
+    expect(validNode).not.toBeNull();
+    expect(validNode!.protocolData.password).toBe('any_password_123');
+  });
+
+  test('26. Shadowsocks plugin-opts type mismatch gating', () => {
+    // plugin-opts with invalid boolean tls=abc and invalid integer mtu=xyz
+    const ssBadOptsUri = 'ss://Y2hhY2hhMjAtaWV0Zi1wb2x5MTMwNTpteXBhc3N3b3JkMTIzIQ@1.2.3.4:8388/?plugin=v2ray-plugin%3Bmode%3Dwebsocket%3Btls%3Dabc%3Bmtu%3Dxyz#SS%20Bad%20Plugin%20Opts';
+    const node = parseSingleNode(ssBadOptsUri);
+    expect(node).not.toBeNull();
+
+    const res = adaptNodeToMihomo(node!);
+    expect(res.fatal).toBe(false);
+    expect(res.lossy).toBe(true);
+    // Malformed types should be excluded from yaml plugin-opts and reported in unsupportedParams
+    expect(res.config!['plugin-opts'].tls).toBeUndefined();
+    expect(res.config!['plugin-opts'].mtu).toBeUndefined();
+    expect(res.config!['plugin-opts'].mode).toBe('websocket');
+    expect(res.unsupportedParams).toContain('plugin-opts.tls');
+    expect(res.unsupportedParams).toContain('plugin-opts.mtu');
+    expect(res.warnings.some(w => w.field === 'plugin-opts.tls')).toBe(true);
+    expect(res.warnings.some(w => w.field === 'plugin-opts.mtu')).toBe(true);
+  });
 });
