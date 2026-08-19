@@ -1,11 +1,11 @@
 // src/index.ts
 import packageJson from '../package.json';
-import { Env, ProxyNode } from './types';
+import { Env, ProxyNode, NodeEnvelope } from './types';
 import { parseContent } from './parser';
 import { toClashMeta, toSingBox, toSurge, toShadowrocketConf } from './generator';
 import { toRawLinks, toBase64 } from './adapters/raw';
 import { adaptNodeToMihomo } from './adapters/mihomo';
-import { processNodes, createUserinfoNodes, parseUserinfo, getRegionByNodeName, parseRenameRules, formatContentDisposition } from './utils';
+import { processNodes, createUserinfoNodes, parseUserinfo, getRegionByNodeName, parseRenameRules, formatContentDisposition, safeBase64Decode } from './utils';
 import { isAuthorized, checkAuthStatus, fetchSubscriptionWithTimeout, extractRequestToken, sanitizeUrlForLog } from './security';
 import { renderHtmlPage } from './ui';
 
