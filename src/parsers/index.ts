@@ -74,8 +74,11 @@ export function isValidNode(node: NodeEnvelope | null): boolean {
  * 单条节点链接识别并解析
  */
 export function parseSingleNode(link: string): NodeEnvelope | null {
-  const trimmed = link.trim().replace(/^["']|["']$/g, '');
-  if (!trimmed) return null;
+  const trimmed = link.replace(/^﻿/, '').trim().replace(/^["']|["']$/g, '');
+  if (!trimmed || trimmed.startsWith('#') || trimmed.startsWith('//')) return null;
+
+  // 如果包含换行符，说明是多行内容或订阅块，不是单节点链接
+  if (trimmed.includes('\n') || trimmed.includes('\r')) return null;
 
   let node: NodeEnvelope | null = null;
 
@@ -87,16 +90,44 @@ export function parseSingleNode(link: string): NodeEnvelope | null {
   else if (trimmed.startsWith('hysteria2://') || trimmed.startsWith('hy2://')) node = parseHysteria2(trimmed);
   else if (trimmed.startsWith('anytls://')) node = parseAnyTLS(trimmed);
   else if (trimmed.startsWith('tuic://')) node = parseTuic(trimmed);
+  else {
+    // 兼容可能未经 scheme 包装的单行 Base64 节点或 Base64(URI) 格式
+    try {
+      const decoded = safeBase64Decode(trimmed);
+      if (decoded && decoded !== trimmed) {
+        const innerTrimmed = decoded.trim();
+        // 严格限制为单行节点（不能包含换行）
+        if (!innerTrimmed.includes('\n') && !innerTrimmed.includes('\r')) {
+          if (
+            innerTrimmed.startsWith('vless://') ||
+            innerTrimmed.startsWith('vmess://') ||
+            innerTrimmed.startsWith('trojan://') ||
+            innerTrimmed.startsWith('ss://') ||
+            innerTrimmed.startsWith('ssr://') ||
+            innerTrimmed.startsWith('hysteria2://') ||
+            innerTrimmed.startsWith('hy2://') ||
+            innerTrimmed.startsWith('anytls://') ||
+            innerTrimmed.startsWith('tuic://')
+          ) {
+            node = parseSingleNode(innerTrimmed);
+          } else if (innerTrimmed.startsWith('{') && innerTrimmed.endsWith('}')) {
+            node = parseVmess('vmess://' + trimmed);
+          }
+        }
+      }
+    } catch {}
+  }
 
   return isValidNode(node) ? node : null;
 }
 
 /**
- * 完整订阅内容解析（支持 Clash YAML、Sing-box JSON、Base64 订阅、多行链接）
+ * 完整订阅内容解析（支持 Clash YAML、Sing-box JSON、Base64 订阅、多行链接、混合内容解析）
  */
-export async function parseContent(text: string): Promise<NodeEnvelope[]> {
+export async function parseContent(text: string, depth = 0): Promise<NodeEnvelope[]> {
+  if (depth > 5) return [];
   const nodes: NodeEnvelope[] = [];
-  const trimmed = text.trim();
+  const trimmed = text.replace(/^﻿/, '').trim();
   if (!trimmed) return nodes;
 
   // 1. 尝试解析为 Clash YAML
@@ -132,26 +163,47 @@ export async function parseContent(text: string): Promise<NodeEnvelope[]> {
     } catch {}
   }
 
-  // 3. 尝试作为多行链接直接解析
-  const lines = trimmed.split(/[\r\n]+/);
-  for (const line of lines) {
-    const node = parseSingleNode(line);
-    if (node) {
-      nodes.push(node);
-    }
-  }
-
-  if (nodes.length > 0) {
-    return nodes;
-  }
-
-  // 4. 尝试 Base64 解码后解析 (递归调用，无缝支持 Base64 内嵌 YAML/JSON/多行)
+  // 3. 尝试整段 Base64 解码解析 (针对标准的整段 Base64 订阅，包含 MIME 换行 Base64 等)
+  let fullDecodedNodes: NodeEnvelope[] = [];
   try {
     const decoded = safeBase64Decode(trimmed);
-    if (decoded && decoded !== trimmed) {
-      return await parseContent(decoded);
+    if (decoded && decoded !== trimmed && decoded.trim() !== trimmed) {
+      fullDecodedNodes = await parseContent(decoded, depth + 1);
     }
   } catch {}
 
-  return nodes;
+  // 4. 尝试按行逐行解析（支持多行 URI、混合单行 Base64 块等）
+  const lineNodes: NodeEnvelope[] = [];
+  const lines = trimmed.split(/[\r\n]+/);
+  for (const line of lines) {
+    const lineTrimmed = line.trim();
+    if (!lineTrimmed || lineTrimmed.startsWith('#') || lineTrimmed.startsWith('//')) continue;
+
+    const node = parseSingleNode(lineTrimmed);
+    if (node) {
+      lineNodes.push(node);
+    } else {
+      // 若该单行不是标准 URI，尝试按 Base64 解码并提取可能的多节点
+      try {
+        const decodedLine = safeBase64Decode(lineTrimmed);
+        if (decodedLine && decodedLine !== lineTrimmed) {
+          const subNodes = await parseContent(decodedLine, depth + 1);
+          if (subNodes.length > 0) {
+            lineNodes.push(...subNodes);
+          }
+        }
+      } catch {}
+    }
+  }
+
+  // 择优采纳：若整段 Base64 解码提取的有效节点数大于等于逐行提取数，优先采用整段解析结果
+  if (fullDecodedNodes.length >= lineNodes.length && fullDecodedNodes.length > 0) {
+    return fullDecodedNodes;
+  }
+
+  if (lineNodes.length > 0) {
+    return lineNodes;
+  }
+
+  return fullDecodedNodes;
 }

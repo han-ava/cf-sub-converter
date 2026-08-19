@@ -2,16 +2,44 @@
 import { ConversionWarning, InvalidQueryParam, NodeEnvelope, RawQuery, RawQueryEntry, ShadowsocksNode } from './types';
 
 /**
- * 带有完整 UTF-8 支持的安全 Base64 解码
+ * 带有完整 UTF-8 支持的安全 Base64 解码（支持 URL-Safe、BOM 清除、自动补齐 Padding、MIME 换行与空白过滤、URL 编码字符自适应）
  */
 export function safeBase64Decode(str: string): string {
-  if (!str) return '';
-  try {
-    let clean = str.trim().replace(/-/g, '+').replace(/_/g, '/');
-    while (clean.length % 4) {
-      clean += '=';
-    }
+  if (!str || typeof str !== 'string') return '';
+  let s = str.replace(/^﻿/, '').trim();
+  if (!s) return '';
 
+  // 移除常见 Base64 前缀协议头
+  if (s.startsWith('data:text/plain;base64,')) {
+    s = s.substring('data:text/plain;base64,'.length);
+  } else if (s.startsWith('data:application/octet-stream;base64,')) {
+    s = s.substring('data:application/octet-stream;base64,'.length);
+  } else if (s.startsWith('base64://')) {
+    s = s.substring('base64://'.length);
+  }
+
+  // 针对经过 URL 编码的 Base64 文本进行自适应还原
+  if (s.includes('%')) {
+    try {
+      s = decodeURIComponent(s);
+    } catch {}
+  }
+
+  // 过滤所有内部换行符、空格与制表符（MIME Base64 换行兼容），并将 URL-Safe 字符统一转为标准 Base64 字符
+  let clean = s.replace(/[\s\r\n\t]+/g, '').replace(/-/g, '+').replace(/_/g, '/');
+  if (!clean) return '';
+
+  // 补齐缺失的 '=' Padding
+  const remainder = clean.length % 4;
+  if (remainder === 2) {
+    clean += '==';
+  } else if (remainder === 3) {
+    clean += '=';
+  } else if (remainder === 1) {
+    clean = clean.slice(0, -1);
+  }
+
+  try {
     const binaryString = atob(clean);
     const bytes = new Uint8Array(binaryString.length);
     for (let i = 0; i < binaryString.length; i++) {
@@ -20,7 +48,7 @@ export function safeBase64Decode(str: string): string {
     return new TextDecoder('utf-8').decode(bytes);
   } catch {
     try {
-      return atob(str.trim());
+      return atob(clean);
     } catch {
       return '';
     }

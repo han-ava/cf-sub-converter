@@ -95,14 +95,13 @@ async function loadAllNodes(
   userinfoStrategy?: 'first' | 'sum' | 'none',
   outerSignal?: AbortSignal
 ): Promise<{ nodes: ProxyNode[]; userinfo?: string }> {
-  const trimmedUrlParam = urlParam.trim();
+  const trimmedUrlParam = urlParam.replace(/^﻿/, '').trim();
+  if (!trimmedUrlParam) {
+    return { nodes: [], userinfo: undefined };
+  }
 
-  // 如果是完整的 YAML 或 JSON 配置文本直接输入，优先整体解析，避免被行分割破坏结构
-  if (
-    trimmedUrlParam.includes('proxies:') ||
-    (trimmedUrlParam.startsWith('{') && trimmedUrlParam.endsWith('}')) ||
-    (trimmedUrlParam.startsWith('[') && trimmedUrlParam.endsWith(']'))
-  ) {
+  // 若输入不包含任何 http/https 远程订阅地址（即为用户直接粘贴的 Base64 订阅、YAML、JSON 或多行节点列表），优先作为整段配置解析，避免被行分割破坏 MIME Base64 或截断
+  if (!trimmedUrlParam.includes('http://') && !trimmedUrlParam.includes('https://')) {
     try {
       const parsed = await parseContent(trimmedUrlParam);
       if (parsed.length > 0) {
@@ -115,12 +114,11 @@ async function loadAllNodes(
   const allNodes: ProxyNode[] = [];
   const fetchedUserinfos: string[] = [];
 
-  const safeInputs = inputs.slice(0, 20); // 最多 20 个订阅源
   const remoteUrls: string[] = [];
   const rawTexts: string[] = [];
 
-  for (const input of safeInputs) {
-    const trimmed = input.trim();
+  for (const input of inputs) {
+    const trimmed = input.replace(/^﻿/, '').trim();
     if (!trimmed) continue;
     if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
       remoteUrls.push(trimmed);
@@ -129,10 +127,11 @@ async function loadAllNodes(
     }
   }
 
-  // 限制最大并发数为 6，避免对 Worker 与上游造成瞬时压力
-  if (remoteUrls.length > 0) {
+  // 远程订阅源最多并发拉取前 20 个，避免对 Worker 与上游造成瞬时压力
+  const safeRemoteUrls = remoteUrls.slice(0, 20);
+  if (safeRemoteUrls.length > 0) {
     const fetchResults = await pMap(
-      remoteUrls,
+      safeRemoteUrls,
       async (url) => {
         try {
           return await fetchSubscriptionWithTimeout(url, customUserAgent, enableCache, cacheTtl, outerSignal);
@@ -159,13 +158,21 @@ async function loadAllNodes(
     }
   }
 
-  // 解析直接输入的节点链接或 Base64
-  for (const rawText of rawTexts) {
+  // 解析直接输入的本地节点链接、多行文本或 Base64 块
+  if (rawTexts.length > 0) {
+    const combinedRaw = rawTexts.join('\n');
     try {
-      const parsed = await parseContent(rawText);
+      const parsed = await parseContent(combinedRaw);
       allNodes.push(...parsed);
     } catch {
-      console.error('Parse raw node input failed');
+      for (const rawText of rawTexts) {
+        try {
+          const parsed = await parseContent(rawText);
+          allNodes.push(...parsed);
+        } catch {
+          console.error('Parse raw node input failed');
+        }
+      }
     }
   }
 
