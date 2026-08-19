@@ -15,8 +15,16 @@ export function parseShadowsocksR(urlStr: string): ShadowsocksRNode | null {
     const parts = mainPart.split(':');
     if (parts.length < 6) return null;
 
-    const server = parts[0] || '';
-    const rawPort = parts[1] || '';
+    const passwordB64 = parts[parts.length - 1] || '';
+    const obfs = parts[parts.length - 2] || 'plain';
+    const cipher = parts[parts.length - 3] || '';
+    const protocol = parts[parts.length - 4] || 'origin';
+    const rawPort = parts[parts.length - 5] || '';
+    let server = parts.slice(0, parts.length - 5).join(':').trim();
+    if (server.startsWith('[') && server.endsWith(']')) {
+      server = server.slice(1, -1).trim();
+    }
+
     let port = 0;
     let portError: string | undefined;
     if (!/^\d+$/.test(rawPort.trim())) {
@@ -28,10 +36,7 @@ export function parseShadowsocksR(urlStr: string): ShadowsocksRNode | null {
         portError = `端口 [${port}] 超出合法范围 (1-65535)`;
       }
     }
-    const protocol = parts[2] || 'origin';
-    const cipher = parts[3] || '';
-    const obfs = parts[4] || 'plain';
-    const password = safeBase64Decode(parts.slice(5).join(':'));
+    const password = safeBase64Decode(passwordB64);
 
     if (!server || !cipher || !password) return null;
 

@@ -701,13 +701,13 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
         <div>
           <label for="targetClient">目标客户端 / 格式</label>
           <select id="targetClient" onchange="onTargetChange()">
-            <option value="clash" selected>Clash Meta / Mihomo (YAML)</option>
+            <option value="clash" selected>Clash Meta / Mihomo (YAML) [稳定推荐]</option>
             <option value="shadowrocket">Shadowrocket (小火箭 - 标准订阅)</option>
-            <option value="singbox">Sing-Box 1.8+ (JSON)</option>
+            <option value="singbox">Sing-Box 1.8+ (JSON) [实验性]</option>
             <option value="base64">Base64 (V2RayN / 通用订阅)</option>
-            <option value="shadowrocket-conf">Shadowrocket (.conf 规则配置)</option>
+            <option value="shadowrocket-conf">Shadowrocket (.conf 规则配置) [实验性]</option>
             <option value="raw">Raw Links (明文链接列表)</option>
-            <option value="surge">Surge (Proxy 列表)</option>
+            <option value="surge">Surge (Proxy 列表) [实验性]</option>
           </select>
         </div>
 

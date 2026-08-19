@@ -139,6 +139,34 @@ describe('Lossless Parser Suite', () => {
     expect(tuic.protocolData.udpRelayMode).toBe('native');
   });
 
+  test('ShadowsocksR IPv4 and IPv6 parsing', () => {
+    // IPv4 SSR
+    const ssrIpv4 = 'ssr://' + Buffer.from('1.2.3.4:8388:origin:aes-128-cfb:plain:bXlwYXNz/?remarks=U1NSX05vZGU').toString('base64');
+    const node4 = parseSingleNode(ssrIpv4) as ShadowsocksRNode;
+    expect(node4).not.toBeNull();
+    expect(node4.server).toBe('1.2.3.4');
+    expect(node4.port).toBe(8388);
+    expect(node4.protocolData.cipher).toBe('aes-128-cfb');
+    expect(node4.protocolData.password).toBe('mypass');
+    expect(node4.name).toBe('SSR_Node');
+
+    // IPv6 with brackets SSR
+    const ssrIpv6Bracket = 'ssr://' + Buffer.from('[2001:db8::1]:8388:origin:aes-128-cfb:plain:bXlwYXNz/?remarks=U1NSX0lQdjY').toString('base64');
+    const node6 = parseSingleNode(ssrIpv6Bracket) as ShadowsocksRNode;
+    expect(node6).not.toBeNull();
+    expect(node6.server).toBe('2001:db8::1');
+    expect(node6.port).toBe(8388);
+    expect(node6.protocolData.password).toBe('mypass');
+
+    // IPv6 without brackets SSR
+    const ssrIpv6NoBracket = 'ssr://' + Buffer.from('2001:db8::1:8388:origin:aes-128-cfb:plain:bXlwYXNz').toString('base64');
+    const node6No = parseSingleNode(ssrIpv6NoBracket) as ShadowsocksRNode;
+    expect(node6No).not.toBeNull();
+    expect(node6No.server).toBe('2001:db8::1');
+    expect(node6No.port).toBe(8388);
+    expect(node6No.protocolData.password).toBe('mypass');
+  });
+
   test('Clash YAML parsing without lossy decode on special characters in password', async () => {
     const clashYaml = `
 proxies:
