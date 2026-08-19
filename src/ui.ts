@@ -1413,7 +1413,7 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
         });
       }
 
-      const reportText = lines.join('\n');
+      const reportText = lines.join(String.fromCharCode(10));
       copyTextToClipboard(reportText, '📋 转换警告诊断报告已复制到剪贴板');
     }
 
@@ -1434,7 +1434,7 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       ];
       if (conv.skipReason) lines.push('排除原因: ' + conv.skipReason);
 
-      copyTextToClipboard(lines.join('\n'), '📋 已复制 [' + node.name + '] 节点诊断');
+      copyTextToClipboard(lines.join(String.fromCharCode(10)), '📋 已复制 [' + node.name + '] 节点诊断');
     }
 
     function copyTextToClipboard(text, successMsg) {

@@ -79,4 +79,22 @@ proxies:
     expect(outProxy.plugin).toBe('v2ray-plugin');
     expect(outProxy['plugin-opts']).toEqual({ mode: 'websocket', host: 'roundtrip.com' });
   });
+
+  test('renderHtmlPage outputs syntactically valid JavaScript in script tag', async () => {
+    const { renderHtmlPage } = await import('../src/ui');
+    const html = renderHtmlPage('test-version');
+    const match = html.match(/<script>([\s\S]*?)<\/script>/);
+    expect(match).not.toBeNull();
+    const script = match![1];
+
+    const acorn = await import('acorn');
+    let parsed = false;
+    try {
+      acorn.parse(script, { ecmaVersion: 2020 });
+      parsed = true;
+    } catch (e: any) {
+      console.error('HTML Script syntax error:', e);
+    }
+    expect(parsed).toBe(true);
+  });
 });
