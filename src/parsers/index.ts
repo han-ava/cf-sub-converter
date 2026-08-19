@@ -132,18 +132,30 @@ export async function parseContent(text: string, depth = 0): Promise<NodeEnvelop
   const trimmed = text.replace(/^﻿/, '').trim();
   if (!trimmed) return nodes;
 
-  // 1. 尝试解析为 Clash YAML
-  if (trimmed.includes('proxies:') && (trimmed.includes('name:') || trimmed.includes('server:'))) {
+  // 1. 尝试解析为 Clash YAML (支持 proxies, Proxy, payload 字段)
+  if (
+    (trimmed.includes('proxies:') || trimmed.includes('Proxy:') || trimmed.includes('payload:')) &&
+    (trimmed.includes('name:') || trimmed.includes('server:') || trimmed.includes('type:'))
+  ) {
     try {
       const doc: any = yaml.load(trimmed);
-      if (doc && Array.isArray(doc.proxies)) {
-        for (const p of doc.proxies) {
-          const node = parseClashProxy(p);
-          if (isValidNode(node)) {
-            nodes.push(node!);
+      if (doc && typeof doc === 'object') {
+        const proxyList = Array.isArray(doc.proxies)
+          ? doc.proxies
+          : Array.isArray(doc.Proxy)
+          ? doc.Proxy
+          : Array.isArray(doc.payload)
+          ? doc.payload
+          : null;
+        if (proxyList) {
+          for (const p of proxyList) {
+            const node = parseClashProxy(p);
+            if (isValidNode(node)) {
+              nodes.push(node!);
+            }
           }
+          if (nodes.length > 0) return nodes;
         }
-        if (nodes.length > 0) return nodes;
       }
     } catch {}
   }

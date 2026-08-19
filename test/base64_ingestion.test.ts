@@ -302,4 +302,31 @@ proxies:
     expect(text).toContain('Trojan Node');
     expect(text).toContain('Direct VLESS');
   });
+
+  test('16. Clash YAML variants (Proxy: and payload:) are parsed recursively even within Base64', async () => {
+    const classicClashYaml = `
+Proxy:
+  - name: "Classic Clash VLESS"
+    type: vless
+    server: 1.2.3.4
+    port: 443
+    uuid: b831381d-6324-4d53-ad4f-8cda48b30811
+`;
+    const providerYaml = `
+payload:
+  - name: "Provider Trojan"
+    type: trojan
+    server: 5.6.7.8
+    port: 443
+    password: pass
+`;
+
+    const nodes1 = await parseContent(classicClashYaml);
+    expect(nodes1.length).toBe(1);
+    expect(nodes1[0]!.name).toBe('Classic Clash VLESS');
+
+    const nodes2 = await parseContent(safeBase64Encode(providerYaml));
+    expect(nodes2.length).toBe(1);
+    expect(nodes2[0]!.name).toBe('Provider Trojan');
+  });
 });
