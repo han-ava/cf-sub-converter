@@ -264,27 +264,142 @@ proxies:
       public-key: pbk_key_123456
       short-id: 1a2b3c4d
       spider-x: /spx
+  - name: "Clash VLESS WS"
+    type: vless
+    server: vless.ws.com
+    port: 443
+    uuid: 22345678-1234-1234-1234-123456789abc
+    network: ws
+    tls: true
+    servername: sni.ws.com
+    ws-opts:
+      path: /vlessws
+      headers:
+        Host: ws.domain.com
+  - name: "Clash VLESS gRPC"
+    type: vless
+    server: vless.grpc.com
+    port: 443
+    uuid: 32345678-1234-1234-1234-123456789abc
+    network: grpc
+    tls: true
+    servername: sni.grpc.com
+    grpc-opts:
+      grpc-service-name: vless-grpc-service
 `;
 
     const nodes = await parseContent(clashYaml);
-    expect(nodes.length).toBe(1);
+    expect(nodes.length).toBe(3);
 
     const b64 = toBase64(nodes);
     const decoded = safeBase64Decode(b64);
-    expect(decoded.startsWith('vless://')).toBe(true);
+    const lines = decoded.split('\n').filter(Boolean);
+    expect(lines.length).toBe(3);
 
-    const vlessNode = parseSingleNode(decoded);
-    expect(vlessNode).not.toBeNull();
-    expect(vlessNode!.name).toBe('Clash VLESS Reality');
-    expect(vlessNode!.server).toBe('vless.reality.com');
-    expect(vlessNode!.port).toBe(443);
-    expect(vlessNode!.protocolData.uuid).toBe('12345678-1234-1234-1234-123456789abc');
-    expect(vlessNode!.protocolData.flow).toBe('xtls-rprx-vision');
-    expect(vlessNode!.protocolData.packetEncoding).toBe('xudp');
-    expect(vlessNode!.protocolData.security).toBe('reality');
-    expect(vlessNode!.protocolData.realityOpts?.publicKey).toBe('pbk_key_123456');
-    expect(vlessNode!.protocolData.realityOpts?.shortId).toBe('1a2b3c4d');
-    expect(vlessNode!.protocolData.realityOpts?.spiderX).toBe('/spx');
+    // 1. Reality Node
+    const realityNode = parseSingleNode(lines[0]!);
+    expect(realityNode).not.toBeNull();
+    expect(realityNode!.name).toBe('Clash VLESS Reality');
+    expect(realityNode!.server).toBe('vless.reality.com');
+    expect(realityNode!.port).toBe(443);
+    expect(realityNode!.protocolData.uuid).toBe('12345678-1234-1234-1234-123456789abc');
+    expect(realityNode!.protocolData.flow).toBe('xtls-rprx-vision');
+    expect(realityNode!.protocolData.packetEncoding).toBe('xudp');
+    expect(realityNode!.protocolData.security).toBe('reality');
+    expect(realityNode!.protocolData.realityOpts?.publicKey).toBe('pbk_key_123456');
+    expect(realityNode!.protocolData.realityOpts?.shortId).toBe('1a2b3c4d');
+    expect(realityNode!.protocolData.realityOpts?.spiderX).toBe('/spx');
+
+    // 2. WS Node: type MUST be 'ws' (NOT 'vless'!), path and host must be preserved
+    expect(lines[1]!).toContain('type=ws');
+    expect(lines[1]!).not.toContain('type=vless');
+    expect(lines[1]!).toContain('path=%2Fvlessws');
+    expect(lines[1]!).toContain('host=ws.domain.com');
+    const wsNode = parseSingleNode(lines[1]!);
+    expect(wsNode).not.toBeNull();
+    expect(wsNode!.name).toBe('Clash VLESS WS');
+    expect(wsNode!.protocolData.transport?.type).toBe('ws');
+    expect(wsNode!.protocolData.transport?.path).toBe('/vlessws');
+    expect(wsNode!.protocolData.transport?.headers?.Host).toBe('ws.domain.com');
+
+    // 3. gRPC Node: type MUST be 'grpc', serviceName must be preserved
+    expect(lines[2]!).toContain('type=grpc');
+    expect(lines[2]!).not.toContain('type=vless');
+    expect(lines[2]!).toContain('serviceName=vless-grpc-service');
+    const grpcNode = parseSingleNode(lines[2]!);
+    expect(grpcNode).not.toBeNull();
+    expect(grpcNode!.name).toBe('Clash VLESS gRPC');
+    expect(grpcNode!.protocolData.transport?.type).toBe('grpc');
+    expect(grpcNode!.protocolData.transport?.serviceName).toBe('vless-grpc-service');
+  });
+
+  // 4b. Sing-box VLESS -> Base64 -> decode -> vless://
+  test('Sing-box VLESS (WS and gRPC) serializes to valid vless:// links with correct transport type', async () => {
+    const singboxJson = JSON.stringify({
+      outbounds: [
+        {
+          type: 'vless',
+          tag: 'Singbox VLESS WS',
+          server: 'sb.vless.com',
+          server_port: 443,
+          uuid: '42345678-1234-1234-1234-123456789abc',
+          tls: {
+            enabled: true,
+            server_name: 'sb.sni.com'
+          },
+          transport: {
+            type: 'ws',
+            path: '/sb-vless-ws',
+            headers: {
+              Host: 'sb.ws.com'
+            }
+          }
+        },
+        {
+          type: 'vless',
+          tag: 'Singbox VLESS gRPC',
+          server: 'sb.grpc.com',
+          server_port: 443,
+          uuid: '52345678-1234-1234-1234-123456789abc',
+          tls: {
+            enabled: true,
+            server_name: 'sb.grpc.com'
+          },
+          transport: {
+            type: 'grpc',
+            service_name: 'sb-grpc-service'
+          }
+        }
+      ]
+    });
+
+    const nodes = await parseContent(singboxJson);
+    expect(nodes.length).toBe(2);
+
+    const b64 = toBase64(nodes);
+    const decoded = safeBase64Decode(b64);
+    const lines = decoded.split('\n').filter(Boolean);
+    expect(lines.length).toBe(2);
+
+    // WS
+    expect(lines[0]!).toContain('type=ws');
+    expect(lines[0]!).not.toContain('type=vless');
+    expect(lines[0]!).toContain('path=%2Fsb-vless-ws');
+    expect(lines[0]!).toContain('host=sb.ws.com');
+    const wsNode = parseSingleNode(lines[0]!);
+    expect(wsNode).not.toBeNull();
+    expect(wsNode!.protocolData.transport?.type).toBe('ws');
+    expect(wsNode!.protocolData.transport?.path).toBe('/sb-vless-ws');
+    expect(wsNode!.protocolData.transport?.headers?.Host).toBe('sb.ws.com');
+
+    // gRPC
+    expect(lines[1]!).toContain('type=grpc');
+    expect(lines[1]!).not.toContain('type=vless');
+    expect(lines[1]!).toContain('serviceName=sb-grpc-service');
+    const grpcNode = parseSingleNode(lines[1]!);
+    expect(grpcNode).not.toBeNull();
+    expect(grpcNode!.protocolData.transport?.type).toBe('grpc');
+    expect(grpcNode!.protocolData.transport?.serviceName).toBe('sb-grpc-service');
   });
 
   // 5. Clash SSR -> Base64 -> decode -> ssr://
@@ -444,5 +559,42 @@ proxies:
     expect(lines.length).toBe(2);
     expect(lines[0]!.startsWith('vmess://')).toBe(true);
     expect(lines[1]!.startsWith('vmess://')).toBe(true);
+  });
+
+  // 9. Unsupported protocol graceful skip & warn
+  test('Unsupported protocols (e.g. wireguard, snell) are skipped with warning while valid nodes serialize cleanly', async () => {
+    const clashYaml = `
+proxies:
+  - name: "Valid VLESS WS"
+    type: vless
+    server: vless.ok.com
+    port: 443
+    uuid: 12345678-1234-1234-1234-123456789012
+    network: ws
+  - name: "Unsupported WireGuard"
+    type: wireguard
+    server: wg.example.com
+    port: 51820
+    ip: 10.0.0.2
+    public-key: wg_pub_key
+  - name: "Valid SS"
+    type: ss
+    server: ss.ok.com
+    port: 8388
+    cipher: chacha20-ietf-poly1305
+    password: sspass
+`;
+
+    const nodes = await parseContent(clashYaml);
+    expect(nodes.length).toBe(3);
+
+    const b64 = toBase64(nodes);
+    const decoded = safeBase64Decode(b64);
+    const lines = decoded.split('\n').filter(Boolean);
+
+    // Wireguard is skipped, 2 valid nodes serialized
+    expect(lines.length).toBe(2);
+    expect(lines[0]!.startsWith('vless://')).toBe(true);
+    expect(lines[1]!.startsWith('ss://')).toBe(true);
   });
 });

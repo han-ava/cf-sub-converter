@@ -12,6 +12,7 @@ export function formatHost(server: string): string {
  */
 export function toRawLinks(nodes: NodeEnvelope[]): string {
   const links: string[] = [];
+  let skippedCount = 0;
 
   for (const node of nodes) {
     try {
@@ -55,7 +56,7 @@ export function toRawLinks(nodes: NodeEnvelope[]): string {
         const isTls = p.tls?.enabled !== undefined ? !!p.tls.enabled : (p.tls !== false && (!!p.tls || !!reality));
         params.set('security', reality ? 'reality' : (isTls ? 'tls' : 'none'));
 
-        const net = String(p.type || p.network || p.transport?.type || 'tcp').toLowerCase();
+        const net = String(p.network || p.net || p.transport?.type || 'tcp').toLowerCase();
         params.set('type', net);
 
         if (p.flow) params.set('flow', p.flow);
@@ -119,7 +120,7 @@ export function toRawLinks(nodes: NodeEnvelope[]): string {
 
         links.push(`vless://${p.uuid || p.id}@${host}:${node.port}?${params.toString()}#${encodeURIComponent(node.name)}`);
       } else if (proto === 'vmess') {
-        const net = String(p.network || p.net || p.transport?.type || p.type || 'tcp').toLowerCase();
+        const net = String(p.network || p.net || p.transport?.type || (p.type && p.type !== 'vmess' ? p.type : '') || 'tcp').toLowerCase();
         const isTls = p.tls?.enabled !== undefined ? !!p.tls.enabled : (typeof p.tls === 'boolean' ? p.tls : (String(p.tls).toLowerCase() === 'tls' || String(p.tls).toLowerCase() === 'true' || String(p.tls) === '1'));
 
         const sni = p.sni || p.servername || p['server-name'] || p.serverName || p.tls?.server_name;
@@ -232,7 +233,7 @@ export function toRawLinks(nodes: NodeEnvelope[]): string {
         const params = new URLSearchParams();
         const sni = p.sni || p.servername || p['server-name'] || p.tls?.server_name;
         if (sni) params.set('sni', sni);
-        const net = String(p.network || p.transport?.type || p.type || 'tcp').toLowerCase();
+        const net = String(p.network || p.net || p.transport?.type || (p.type && p.type !== 'trojan' ? p.type : '') || 'tcp').toLowerCase();
         params.set('type', net);
         const alpn = p.alpn || p.tls?.alpn;
         if (alpn) params.set('alpn', Array.isArray(alpn) ? alpn.join(',') : String(alpn));
@@ -331,10 +332,18 @@ export function toRawLinks(nodes: NodeEnvelope[]): string {
         const pass = p.password || '';
         const auth = user && pass ? `${encodeURIComponent(user)}:${encodeURIComponent(pass)}@` : (user ? `${encodeURIComponent(user)}@` : '');
         links.push(`${scheme}://${auth}${host}:${node.port}#${encodeURIComponent(node.name)}`);
+      } else {
+        skippedCount++;
+        console.warn(`[toRawLinks] Skipped unsupported protocol for Raw/Base64 serialization: "${node.name}" (${proto || 'unknown'})`);
       }
     } catch (err: any) {
+      skippedCount++;
       console.warn(`[toRawLinks] Failed to serialize node "${node.name}" (${node.protocol}):`, err?.message || err);
     }
+  }
+
+  if (skippedCount > 0) {
+    console.warn(`[toRawLinks] Serialized ${links.length}/${nodes.length} nodes (${skippedCount} unsupported/skipped)`);
   }
 
   return links.join('\n');
