@@ -6,6 +6,7 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="version" content="${version}">
   <title>SubConverter Pro | 安全无状态订阅转换器</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -65,6 +66,30 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       -webkit-font-smoothing: antialiased;
     }
 
+    /* SVG 图标基础规范 */
+    .icon {
+      width: 16px;
+      height: 16px;
+      stroke-width: 2;
+      stroke: currentColor;
+      fill: none;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      flex-shrink: 0;
+      display: inline-block;
+      vertical-align: middle;
+    }
+
+    .icon-sm {
+      width: 14px;
+      height: 14px;
+    }
+
+    .icon-lg {
+      width: 18px;
+      height: 18px;
+    }
+
     /* 页面顶部导航栏 */
     header {
       background-color: rgba(19, 27, 46, 0.85);
@@ -73,6 +98,7 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       display: flex;
       align-items: center;
       justify-content: space-between;
+      gap: 1.25rem;
       position: sticky;
       top: 0;
       z-index: 50;
@@ -83,46 +109,56 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       display: flex;
       align-items: center;
       gap: 12px;
+      min-width: 0;
+      flex: 1;
+      overflow: hidden;
     }
 
     .brand-icon {
       width: 36px;
       height: 36px;
-      background: linear-gradient(135deg, #3b82f6, #6366f1);
+      background: linear-gradient(135deg, #2563eb, #4f46e5);
       border-radius: 10px;
       display: flex;
       align-items: center;
       justify-content: center;
       color: white;
-      font-size: 18px;
-      box-shadow: 0 0 16px rgba(59, 130, 246, 0.45);
+      box-shadow: 0 0 16px rgba(59, 130, 246, 0.35);
       flex-shrink: 0;
     }
 
     .brand-titles {
       display: flex;
       flex-direction: column;
+      min-width: 0;
+      overflow: hidden;
+      gap: 2px;
     }
 
     .brand-title {
-      font-size: 1.15rem;
+      font-size: 1.125rem;
       font-weight: 700;
       letter-spacing: -0.02em;
       color: var(--text-main);
       display: flex;
       align-items: center;
       gap: 8px;
+      white-space: nowrap;
     }
 
     .brand-subtitle {
       font-size: 0.75rem;
       color: var(--text-muted);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
 
     .header-actions {
       display: flex;
       align-items: center;
       gap: 10px;
+      flex-shrink: 0;
     }
 
     .guide-btn {
@@ -132,13 +168,15 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       background: rgba(255, 255, 255, 0.05);
       border: 1px solid var(--border);
       color: var(--text-muted);
-      padding: 6px 12px;
+      padding: 6px 14px;
       border-radius: var(--radius-md);
       font-size: 0.8rem;
       font-weight: 500;
       cursor: pointer;
       transition: all 0.2s ease;
       text-decoration: none;
+      white-space: nowrap;
+      flex-shrink: 0;
     }
 
     .guide-btn:hover {
@@ -158,6 +196,8 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       display: inline-flex;
       align-items: center;
       gap: 5px;
+      white-space: nowrap;
+      flex-shrink: 0;
     }
 
     .badge-success {
@@ -207,7 +247,9 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       display: flex;
       align-items: center;
       justify-content: space-between;
+      gap: 1rem;
       margin-bottom: 1.25rem;
+      flex-wrap: wrap;
     }
 
     .panel-title {
@@ -218,6 +260,11 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       align-items: center;
       gap: 8px;
       color: var(--text-main);
+      white-space: nowrap;
+    }
+
+    .panel-title .icon {
+      color: var(--primary);
     }
 
     /* 标准表单控件 */
@@ -237,6 +284,7 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       font-weight: 600;
       color: var(--text-muted);
       margin-bottom: 0.5rem;
+      gap: 10px;
     }
 
     .label-hint {
@@ -297,12 +345,14 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       align-items: center;
       justify-content: space-between;
       padding: 0.65rem 0;
+      gap: 1rem;
       user-select: none;
     }
 
     .switch-info {
       display: flex;
       flex-direction: column;
+      gap: 2px;
     }
 
     .switch-title {
@@ -362,34 +412,7 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       background-color: white;
     }
 
-    /* 折叠高级设置 */
-    .collapse-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      font-size: 0.85rem;
-      color: var(--accent);
-      cursor: pointer;
-      padding: 0.6rem 0;
-      user-select: none;
-      font-weight: 600;
-    }
-
-    .collapse-header:hover {
-      opacity: 0.85;
-    }
-
-    .collapse-content {
-      display: none;
-      padding-top: 0.75rem;
-      animation: fadeIn 0.2s ease;
-    }
-
-    .collapse-content.show {
-      display: block;
-    }
-
-    /* 按钮规范 */
+    /* 按钮规范 (强制禁止换行) */
     .btn-row {
       display: flex;
       gap: 12px;
@@ -412,6 +435,8 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       user-select: none;
       text-decoration: none;
       font-family: inherit;
+      white-space: nowrap;
+      flex-shrink: 0;
     }
 
     .btn-primary {
@@ -442,9 +467,11 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
 
     .btn-sm {
       height: 34px;
-      padding: 0 0.85rem;
+      padding: 0 0.95rem;
       font-size: 0.825rem;
       border-radius: var(--radius-sm);
+      white-space: nowrap;
+      flex-shrink: 0;
     }
 
     /* 转换结果区域 */
@@ -488,6 +515,11 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       border-radius: var(--radius-sm);
       cursor: pointer;
       transition: all 0.15s ease;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      white-space: nowrap;
+      flex-shrink: 0;
     }
 
     .url-inline-copy:hover {
@@ -506,6 +538,7 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       display: flex;
       justify-content: space-between;
       align-items: center;
+      gap: 12px;
       padding: 0.75rem 0;
       border-bottom: 1px solid var(--border);
       font-size: 0.875rem;
@@ -581,6 +614,7 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       font-size: 0.75rem;
       color: var(--text-muted);
       font-weight: 500;
+      white-space: nowrap;
     }
 
     .metric-num {
@@ -614,10 +648,12 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       display: flex;
       justify-content: space-between;
       align-items: center;
+      gap: 12px;
       margin-bottom: 0.5rem;
       font-size: 0.8rem;
       font-weight: 600;
       color: var(--warning);
+      flex-wrap: wrap;
     }
 
     .warning-chips {
@@ -638,6 +674,8 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       cursor: pointer;
       transition: all 0.15s ease;
       font-family: 'JetBrains Mono', monospace;
+      white-space: nowrap;
+      flex-shrink: 0;
     }
 
     .warning-chip:hover {
@@ -656,7 +694,7 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      gap: 12px;
+      gap: 14px;
       margin-bottom: 1rem;
       flex-wrap: wrap;
     }
@@ -679,7 +717,9 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       top: 50%;
       transform: translateY(-50%);
       color: var(--text-dim);
-      font-size: 14px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
     }
 
     .filter-tabs {
@@ -689,6 +729,7 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       border-radius: var(--radius-md);
       padding: 3px;
       gap: 2px;
+      flex-shrink: 0;
     }
 
     .filter-tab {
@@ -700,6 +741,8 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       cursor: pointer;
       transition: all 0.15s ease;
       user-select: none;
+      white-space: nowrap;
+      flex-shrink: 0;
     }
 
     .filter-tab:hover {
@@ -718,6 +761,7 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       padding: 0 28px 0 10px;
       background-size: 14px;
       background-position: right 8px center;
+      flex-shrink: 0;
     }
 
     .region-chips {
@@ -736,6 +780,8 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       color: var(--text-main);
       cursor: pointer;
       transition: all 0.15s ease;
+      white-space: nowrap;
+      flex-shrink: 0;
     }
 
     .region-chip:hover {
@@ -772,6 +818,7 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       padding: 10px 14px;
       border-bottom: 1px solid var(--border);
       user-select: none;
+      white-space: nowrap;
     }
 
     .node-table td {
@@ -828,12 +875,14 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       font-weight: 600;
       font-family: 'JetBrains Mono', monospace;
       display: inline-block;
+      white-space: nowrap;
     }
 
     .latency-val {
       font-family: 'JetBrains Mono', monospace;
       font-weight: 600;
       font-size: 0.8rem;
+      white-space: nowrap;
     }
 
     .latency-good { color: var(--success); }
@@ -845,6 +894,7 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       display: flex;
       gap: 6px;
       align-items: center;
+      white-space: nowrap;
     }
 
     .icon-btn {
@@ -859,7 +909,8 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       justify-content: center;
       cursor: pointer;
       transition: all 0.15s ease;
-      font-size: 13px;
+      white-space: nowrap;
+      flex-shrink: 0;
     }
 
     .icon-btn:hover {
@@ -904,6 +955,7 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       border-radius: 4px;
       font-size: 0.725rem;
       margin: 1px 4px 1px 0;
+      white-space: nowrap;
     }
 
     /* 分页控制器 */
@@ -911,17 +963,20 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       display: flex;
       justify-content: space-between;
       align-items: center;
+      gap: 12px;
       padding: 12px 14px;
       background: #0f172a;
       border-top: 1px solid var(--border);
       font-size: 0.8rem;
       color: var(--text-muted);
+      flex-wrap: wrap;
     }
 
     .page-controls {
       display: flex;
       gap: 4px;
       align-items: center;
+      flex-shrink: 0;
     }
 
     .page-btn {
@@ -930,6 +985,7 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       color: var(--text-main);
       min-width: 28px;
       height: 28px;
+      padding: 0 6px;
       border-radius: var(--radius-sm);
       display: inline-flex;
       align-items: center;
@@ -939,6 +995,8 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       font-weight: 600;
       transition: all 0.15s ease;
       user-select: none;
+      white-space: nowrap;
+      flex-shrink: 0;
     }
 
     .page-btn:hover:not(.disabled) {
@@ -968,11 +1026,31 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding: 0.75rem 1rem;
+      gap: 16px;
+      padding: 0.85rem 1.15rem;
       background: var(--bg-card);
       border: 1px solid var(--border);
       border-radius: var(--radius-md);
       font-size: 0.85rem;
+    }
+
+    .fav-item-main {
+      cursor: pointer;
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+    }
+
+    .fav-actions {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-shrink: 0;
+    }
+
+    .fav-actions .btn-sm {
+      min-width: 54px;
+      padding: 0 12px;
     }
 
     /* 弹窗与 Toast */
@@ -994,6 +1072,7 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
       z-index: 100;
       backdrop-filter: blur(8px);
+      white-space: nowrap;
     }
 
     .toast.show {
@@ -1048,6 +1127,10 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       .panel { padding: 1.25rem; }
     }
 
+    @media (max-width: 640px) {
+      .brand-subtitle { display: none; }
+    }
+
     @media (max-width: 480px) {
       .metrics-grid { grid-template-columns: repeat(2, 1fr); }
       .btn-row { flex-direction: column; }
@@ -1058,18 +1141,20 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
   <!-- 顶部导航栏 -->
   <header>
     <div class="brand-group">
-      <div class="brand-icon">⚡</div>
+      <div class="brand-icon">
+        <svg class="icon icon-lg" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+      </div>
       <div class="brand-titles">
         <div class="brand-title">
           <span>订阅转换器</span>
-          <span class="badge">v${version}</span>
         </div>
         <div class="brand-subtitle">支持多种订阅格式转换，快速生成 Clash / Surge / Shadowrocket 配置</div>
       </div>
     </div>
     <div class="header-actions">
       <button class="guide-btn" onclick="openGuideModal()">
-        <span>📖 使用指南</span>
+        <svg class="icon icon-sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+        <span>使用指南</span>
       </button>
     </div>
   </header>
@@ -1079,7 +1164,8 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
     <div class="panel">
       <div class="panel-header">
         <div class="panel-title">
-          <span>⚙️ 订阅参数配置</span>
+          <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+          <span>订阅参数配置</span>
         </div>
       </div>
 
@@ -1110,10 +1196,10 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
         <div>
           <label for="rulePreset">分流规则预设</label>
           <select id="rulePreset">
-            <option value="standard" selected>🎯 标准全能分流 (国内直连+自动测速)</option>
-            <option value="ai">🤖 智算 AI 增强 (ChatGPT/Claude/Copilot)</option>
-            <option value="media">🎬 国际流媒体 (YouTube/Netflix/Disney+)</option>
-            <option value="minimal">⚡ 极简纯节点 (仅节点输出)</option>
+            <option value="standard" selected>标准全能分流 (国内直连+自动测速)</option>
+            <option value="ai">智算 AI 增强 (ChatGPT/Claude/Copilot)</option>
+            <option value="media">国际流媒体 (YouTube/Netflix/Disney+)</option>
+            <option value="minimal">极简纯节点 (仅节点输出)</option>
           </select>
         </div>
       </div>
@@ -1170,7 +1256,7 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
         <div class="switch-row">
           <div class="switch-info">
             <span class="switch-title">智能添加国旗 Emoji</span>
-            <span class="switch-desc">根据节点所属国家或地区自动添加 🇭🇰 🇯🇵 🇺🇸 前缀</span>
+            <span class="switch-desc">根据节点所属国家或地区自动添加国家代码或旗帜前缀</span>
           </div>
           <label class="switch">
             <input type="checkbox" id="addEmoji" checked>
@@ -1204,10 +1290,12 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       <!-- 核心操作按钮栏 -->
       <div class="btn-row">
         <button class="btn btn-primary" id="btnGenerate" onclick="generateLink()">
-          <span>⚡ 开始转换</span>
+          <svg class="icon" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+          <span>开始转换</span>
         </button>
         <button class="btn btn-secondary" onclick="resetForm()">
-          <span>🔄 重置</span>
+          <svg class="icon" viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"></path><path d="M21 3v5h-5"></path><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"></path><path d="M8 16H3v5"></path></svg>
+          <span>重置</span>
         </button>
       </div>
     </div>
@@ -1216,7 +1304,8 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
     <div class="panel results-wrapper" id="resultsPanel">
       <div class="panel-header">
         <div class="panel-title">
-          <span>🎉 转换结果</span>
+          <svg class="icon" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"></polyline></svg>
+          <span>转换结果</span>
         </div>
         <span id="targetBadge" class="badge badge-success">CLASH META</span>
       </div>
@@ -1225,22 +1314,28 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
         <label for="outputUrl">生成的订阅链接</label>
         <div class="url-display-box">
           <input type="text" id="outputUrl" readonly>
-          <button class="url-inline-copy" onclick="copyLink()" title="复制订阅链接">📋</button>
+          <button class="url-inline-copy" onclick="copyLink()" title="复制订阅链接">
+            <svg class="icon icon-sm" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+          </button>
         </div>
       </div>
 
       <div class="action-grid">
         <button class="btn btn-primary btn-sm" onclick="copyLink()">
-          <span>📋 复制链接</span>
+          <svg class="icon icon-sm" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+          <span>复制链接</span>
         </button>
         <button class="btn btn-secondary btn-sm" onclick="downloadConfigFile()">
-          <span>📥 下载文件</span>
+          <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+          <span>下载文件</span>
         </button>
         <button class="btn btn-secondary btn-sm" onclick="showQrCode()">
-          <span>📱 二维码</span>
+          <svg class="icon icon-sm" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+          <span>二维码</span>
         </button>
         <button class="btn btn-secondary btn-sm" id="btnImportCurrent" onclick="importCurrentClient()">
-          <span>🚀 一键导入</span>
+          <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+          <span>一键导入</span>
         </button>
       </div>
     </div>
@@ -1249,9 +1344,13 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
     <div class="panel results-wrapper" id="subInfoPanel">
       <div class="panel-header">
         <div class="panel-title">
-          <span>📶 订阅信息</span>
+          <svg class="icon" viewBox="0 0 24 24"><path d="M5 12.55a11 11 0 0 1 14.08 0"></path><path d="M1.42 9a16 16 0 0 1 21.16 0"></path><path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path><line x1="12" y1="20" x2="12.01" y2="20"></line></svg>
+          <span>订阅信息</span>
         </div>
-        <button class="btn btn-secondary btn-sm" onclick="inspectNodes()">🔄 刷新</button>
+        <button class="btn btn-secondary btn-sm" onclick="inspectNodes()">
+          <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"></path><path d="M21 3v5h-5"></path><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"></path><path d="M8 16H3v5"></path></svg>
+          <span>刷新</span>
+        </button>
       </div>
 
       <div class="info-row">
@@ -1277,7 +1376,8 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
     <div class="panel results-wrapper" id="metricsPanel">
       <div class="panel-header">
         <div class="panel-title">
-          <span>📊 节点统计概览</span>
+          <svg class="icon" viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
+          <span>节点统计概览</span>
         </div>
       </div>
 
@@ -1308,11 +1408,12 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       <div id="warningInspectorBox" class="warning-box">
         <div class="warning-box-header">
           <div style="display: flex; align-items: center; gap: 8px;">
-            <span>⚠️ 转换警告与参数诊断</span>
+            <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+            <span>转换警告与参数诊断</span>
             <span id="warningAggBadge" class="badge badge-warn">0 类</span>
           </div>
           <div style="display: flex; gap: 6px;">
-            <button class="btn btn-secondary btn-sm" style="height: 26px; padding: 0 8px; font-size: 0.725rem;" onclick="copyWarningReport()">📋 复制报告</button>
+            <button class="btn btn-secondary btn-sm" style="height: 26px; padding: 0 8px; font-size: 0.725rem;" onclick="copyWarningReport()">复制报告</button>
             <button class="btn btn-secondary btn-sm" style="height: 26px; padding: 0 8px; font-size: 0.725rem;" onclick="resetWarningParamFilter()">重置</button>
           </div>
         </div>
@@ -1324,11 +1425,14 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
     <div class="panel results-wrapper" id="nodeListPanel">
       <div class="table-toolbar">
         <div class="panel-title" style="margin-bottom: 0;">
-          <span>📋 节点列表</span>
+          <svg class="icon" viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect><rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect><line x1="6" y1="6" x2="6.01" y2="6"></line><line x1="6" y1="18" x2="6.01" y2="18"></line></svg>
+          <span>节点列表</span>
         </div>
 
         <div class="table-search">
-          <span class="search-icon">🔍</span>
+          <span class="search-icon">
+            <svg class="icon icon-sm" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+          </span>
           <input type="text" id="nodeSearchInput" placeholder="搜索节点名称 / 协议 / 服务器..." oninput="onNodeSearch()">
         </div>
 
@@ -1383,14 +1487,15 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
     <div class="panel" id="favPanel">
       <div class="panel-header">
         <div class="panel-title">
-          <span>⭐ 本地配置收藏夹</span>
+          <svg class="icon" viewBox="0 0 24 24"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path></svg>
+          <span>本地配置收藏夹</span>
         </div>
         <button class="btn btn-secondary btn-sm" onclick="saveToLocalFavorites()">+ 收藏当前配置</button>
       </div>
 
       <div id="favList" class="fav-list">
         <div style="color: var(--text-dim); font-size: 0.85rem; text-align: center; padding: 1.25rem; background: var(--bg-input); border-radius: var(--radius-md); border: 1px dashed var(--border);">
-          ⭐ 暂无保存的配置<br>
+          暂无保存的配置<br>
           <span style="font-size: 0.78rem; color: var(--text-muted); margin-top: 4px; display: inline-block;">在上方配置好订阅与规则后，点击「+ 收藏当前配置」即可保存</span>
         </div>
       </div>
@@ -1400,7 +1505,7 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
   <!-- QR Code Modal -->
   <div class="modal-overlay" id="qrModal" onclick="closeQrModal(event)">
     <div class="modal-content" onclick="event.stopPropagation()">
-      <h3 style="font-size: 1.1rem; font-weight: 700; color: var(--text-main);">📱 扫描二维码导入订阅</h3>
+      <h3 style="font-size: 1.1rem; font-weight: 700; color: var(--text-main); margin-bottom: 0.5rem;">扫描二维码导入订阅</h3>
       <div id="qrcode"></div>
       <button class="btn btn-secondary" style="width: 100%;" onclick="closeQrModal()">关闭</button>
     </div>
@@ -1409,12 +1514,12 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
   <!-- 使用指南 Modal -->
   <div class="modal-overlay" id="guideModal" onclick="closeGuideModal(event)">
     <div class="modal-content" style="max-width: 540px; text-align: left;" onclick="event.stopPropagation()">
-      <h3 style="font-size: 1.15rem; font-weight: 700; color: var(--text-main); margin-bottom: 1rem;">📖 SubConverter Pro 使用指南</h3>
+      <h3 style="font-size: 1.15rem; font-weight: 700; color: var(--text-main); margin-bottom: 1rem;">SubConverter Pro 使用指南</h3>
       <div style="font-size: 0.85rem; color: var(--text-muted); line-height: 1.7; display: flex; flex-direction: column; gap: 10px;">
         <p><strong style="color: var(--text-main);">1. 基础转换：</strong>在「订阅链接」输入机场给出的订阅地址或多个节点链接，选择目标客户端格式（如 Clash Meta），点击「开始转换」即可。</p>
         <p><strong style="color: var(--text-main);">2. 节点过滤：</strong>在「节点过滤模式」填入 <code style="color: var(--accent);">香港|日本|专线</code> 可只保留对应节点；在「节点排除模式」填入 <code style="color: var(--accent);">官网|到期|剩余</code> 可自动剔除提示类节点。</p>
         <p><strong style="color: var(--text-main);">3. 节点重命名：</strong>支持形如 <code style="color: var(--accent);">香港=HK, 日本=JP, DEL-官网</code> 批量规范化节点名称。</p>
-        <p><strong style="color: var(--text-main);">4. 严格兼容性门禁：</strong>内置 Tower-Inspired 门禁引擎，自动拦截非法参数与危险回退，确保生成的配置文件 100% 语法合法。</p>
+        <p><strong style="color: var(--text-main);">4. 严格兼容性门禁：</strong>内置门禁引擎，自动拦截非法参数与危险回退，确保生成的配置文件 100% 语法合法。</p>
       </div>
       <button class="btn btn-primary" style="width: 100%; margin-top: 1.25rem;" onclick="closeGuideModal()">我知道了</button>
     </div>
@@ -1499,15 +1604,15 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       const btnImport = document.getElementById('btnImportCurrent');
       if (!btnImport) return;
       if (target === 'clash') {
-        btnImport.innerHTML = '<span>🚀 导入 Clash</span>';
+        btnImport.innerHTML = '<svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg><span>导入 Clash</span>';
       } else if (target === 'shadowrocket' || target === 'shadowrocket-conf') {
-        btnImport.innerHTML = '<span>🚀 导入小火箭</span>';
+        btnImport.innerHTML = '<svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg><span>导入小火箭</span>';
       } else if (target === 'singbox') {
-        btnImport.innerHTML = '<span>📦 导入 Sing-Box</span>';
+        btnImport.innerHTML = '<svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg><span>导入 Sing-Box</span>';
       } else if (target === 'surge') {
-        btnImport.innerHTML = '<span>🌊 导入 Surge</span>';
+        btnImport.innerHTML = '<svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg><span>导入 Surge</span>';
       } else {
-        btnImport.innerHTML = '<span>🚀 一键导入</span>';
+        btnImport.innerHTML = '<svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg><span>一键导入</span>';
       }
     }
 
@@ -1536,7 +1641,7 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       document.getElementById('addEmoji').checked = true;
       document.getElementById('enableUdp').checked = true;
       document.getElementById('showInfo').checked = true;
-      showToast('🔄 已重置配置表单');
+      showToast('已重置配置表单');
     }
 
     async function inspectNodes(shouldScroll = true) {
@@ -1606,7 +1711,7 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
         document.getElementById('metricFatal').textContent = data.fatalCount || 0;
         document.getElementById('metricWarn').textContent = data.warningCount || 0;
 
-        // 随机或测速延迟渲染
+        // 延迟渲染
         const latencies = (data.nodes || []).map(n => getMockLatency(n.name, n.server)).filter(l => l > 0);
         const bestLat = latencies.length > 0 ? Math.min(...latencies) : 35;
         document.getElementById('metricBestLatency').textContent = bestLat + ' ms';
@@ -1644,7 +1749,7 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
 
       const allChip = document.createElement('div');
       allChip.className = 'region-chip' + (curTokens.length === 0 ? ' active' : '');
-      allChip.textContent = '🌐 全部 (' + (data.totalRaw || 0) + ')';
+      allChip.textContent = '全部 (' + (data.totalRaw || 0) + ')';
       allChip.onclick = () => {
         document.getElementById('includeRegex').value = '';
         inspectNodes(false);
@@ -1790,7 +1895,7 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
         tbody.innerHTML = \`
           <tr>
             <td colspan="5" style="text-align: center; color: var(--text-dim); padding: 2.5rem;">
-              🔍 当前筛选条件下未找到匹配节点
+              当前筛选条件下未找到匹配节点
             </td>
           </tr>
         \`;
@@ -1849,8 +1954,12 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
               </td>
               <td style="text-align: right;" onclick="event.stopPropagation()">
                 <div class="table-actions" style="justify-content: flex-end;">
-                  <button class="icon-btn" onclick="copySingleNodeRaw(\${idx})" title="复制单个节点链接">🔗</button>
-                  <button class="icon-btn" onclick="toggleNodeDetail(\${idx})" title="查看诊断详情">⋯</button>
+                  <button class="icon-btn" onclick="copySingleNodeRaw(\${idx})" title="复制单个节点链接">
+                    <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
+                  </button>
+                  <button class="icon-btn" onclick="toggleNodeDetail(\${idx})" title="查看诊断详情">
+                    <svg class="icon icon-sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle><circle cx="5" cy="12" r="1"></circle></svg>
+                  </button>
                 </div>
               </td>
             </tr>
@@ -1888,7 +1997,7 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
                     \` : ''}
                     <div class="details-item" style="margin-top: 4px; padding-top: 4px; border-top: 1px solid rgba(255,255,255,0.06); justify-content: space-between; align-items: center;">
                       <div>\${actionDesc}</div>
-                      <button class="btn btn-secondary btn-sm" style="height: 24px; padding: 0 8px; font-size: 0.7rem;" onclick="copySingleNodeWarning(\${idx})">📋 复制诊断</button>
+                      <button class="btn btn-secondary btn-sm" style="height: 24px; padding: 0 8px; font-size: 0.7rem;" onclick="copySingleNodeWarning(\${idx})">复制诊断</button>
                     </div>
                   </div>
                 </td>
@@ -1960,7 +2069,7 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
         generateLink();
       }
       if (!outputInput.value) return;
-      copyTextToClipboard(outputInput.value, '✅ 订阅链接已复制');
+      copyTextToClipboard(outputInput.value, '订阅链接已复制');
     }
 
     function downloadConfigFile() {
@@ -1971,7 +2080,7 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       const targetUrl = document.getElementById('outputUrl').value;
       if (!targetUrl) return;
       window.open(targetUrl, '_blank');
-      showToast('📥 正在下载配置文件');
+      showToast('正在下载配置文件');
     }
 
     function importCurrentClient() {
@@ -2033,7 +2142,7 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       const node = currentPreviewData.nodes[idx];
       if (!node) return;
       const uri = node.rawUri || node.name;
-      copyTextToClipboard(uri, '🔗 节点链接已复制');
+      copyTextToClipboard(uri, '节点链接已复制');
     }
 
     function copySingleNodeWarning(idx) {
@@ -2050,7 +2159,7 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
         '警告信息: ' + ((conv.warnings || []).join('; ') || '无')
       ];
       if (conv.skipReason) lines.push('排除原因: ' + conv.skipReason);
-      copyTextToClipboard(lines.join(String.fromCharCode(10)), '📋 已复制节点诊断报告');
+      copyTextToClipboard(lines.join(String.fromCharCode(10)), '已复制节点诊断报告');
     }
 
     function copyWarningReport() {
@@ -2065,7 +2174,7 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       const lines = [
         '【SubConverter 转换警告诊断报告】',
         '• 原始节点: ' + (data.totalRaw || 0) + ' | 筛选匹配: ' + (data.totalMatched || 0),
-        '• 转换状态: ✅ 完整 ' + (data.perfectCount || 0) + ' | ⚠️ 警告 ' + (data.warningCount || 0) + ' | ❌ 排除 ' + (data.fatalCount || 0),
+        '• 转换状态: 完整 ' + (data.perfectCount || 0) + ' | 警告 ' + (data.warningCount || 0) + ' | 排除 ' + (data.fatalCount || 0),
         ''
       ];
 
@@ -2077,7 +2186,7 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       }
 
       const reportText = lines.join(String.fromCharCode(10));
-      copyTextToClipboard(reportText, '📋 转换警告诊断报告已复制到剪贴板');
+      copyTextToClipboard(reportText, '转换警告诊断报告已复制到剪贴板');
     }
 
     function copyTextToClipboard(text, successMsg) {
@@ -2185,7 +2294,7 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       favs.unshift(item);
       localStorage.setItem(STORAGE_KEY, JSON.stringify(favs.slice(0, 30)));
       renderFavorites();
-      showToast('⭐ 已保存配置至本地收藏夹');
+      showToast('已保存配置至本地收藏夹');
     }
 
     function deleteFavorite(id) {
@@ -2193,7 +2302,7 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       const favs = getFavorites().filter(f => f.id !== id);
       localStorage.setItem(STORAGE_KEY, JSON.stringify(favs));
       renderFavorites();
-      showToast('🗑️ 已删除收藏配置');
+      showToast('已删除收藏配置');
     }
 
     function loadFavorite(id) {
@@ -2211,7 +2320,7 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       document.getElementById('enableUdp').checked = item.enableUdp !== false;
 
       generateLink();
-      showToast('⚡ 已成功加载配置: ' + item.name);
+      showToast('已成功加载配置: ' + item.name);
     }
 
     function renderFavorites() {
@@ -2219,7 +2328,7 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       const favs = getFavorites();
 
       if (!favs || favs.length === 0) {
-        list.innerHTML = '<div style="color: var(--text-dim); font-size: 0.85rem; text-align: center; padding: 1.25rem; background: var(--bg-input); border-radius: var(--radius-md); border: 1px dashed var(--border);">⭐ 暂无保存的配置<br><span style="font-size: 0.78rem; color: var(--text-muted); margin-top: 4px; display: inline-block;">在上方配置好订阅与规则后，点击「+ 收藏当前配置」即可保存</span></div>';
+        list.innerHTML = '<div style="color: var(--text-dim); font-size: 0.85rem; text-align: center; padding: 1.25rem; background: var(--bg-input); border-radius: var(--radius-md); border: 1px dashed var(--border);">暂无保存的配置<br><span style="font-size: 0.78rem; color: var(--text-muted); margin-top: 4px; display: inline-block;">在上方配置好订阅与规则后，点击「+ 收藏当前配置」即可保存</span></div>';
         return;
       }
 
@@ -2230,15 +2339,15 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
         const dateStr = f.date ? new Date(f.date).toLocaleDateString() : '';
 
         html += '<div class="fav-item">' +
-          '<div style="cursor: pointer; flex: 1;" onclick="loadFavorite(' + f.id + ')">' +
-            '<div style="font-weight: 600; color: var(--text-main);">⭐ ' + escapeHtml(f.name) + '</div>' +
-            '<div style="font-size: 0.75rem; color: var(--text-dim); margin-top: 2px;">' +
-              '<span class="badge" style="font-size: 0.65rem; padding: 1px 6px;">' + targetBadge + '</span> · ' + dateStr +
+          '<div class="fav-item-main" onclick="loadFavorite(' + f.id + ')">' +
+            '<div style="font-weight: 600; color: var(--text-main); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">' + escapeHtml(f.name) + '</div>' +
+            '<div style="font-size: 0.75rem; color: var(--text-dim); margin-top: 2px; display: flex; align-items: center; gap: 6px;">' +
+              '<span class="badge" style="font-size: 0.65rem; padding: 1px 6px;">' + targetBadge + '</span> <span>' + dateStr + '</span>' +
             '</div>' +
           '</div>' +
-          '<div style="display: flex; gap: 6px;">' +
-            '<button class="btn btn-primary btn-sm" onclick="loadFavorite(' + f.id + ')">⚡ 载入</button>' +
-            '<button class="btn btn-secondary btn-sm" style="color: var(--danger);" onclick="deleteFavorite(' + f.id + ')">🗑️</button>' +
+          '<div class="fav-actions">' +
+            '<button class="btn btn-primary btn-sm" onclick="loadFavorite(' + f.id + ')">载入</button>' +
+            '<button class="btn btn-secondary btn-sm" style="color: var(--danger);" onclick="deleteFavorite(' + f.id + ')">删除</button>' +
           '</div>' +
         '</div>';
       }
