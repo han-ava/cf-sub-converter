@@ -297,9 +297,15 @@ export default {
           }
         }));
 
-        // 地区统计
+        // 地区统计基于全量节点（确保在正则筛选时，所有地区标签始终完整保留并展示，支持即时快速切换）
+        const preFilteredNodes = processNodes(rawNodes, {
+          renameRules,
+          addEmoji: body.emoji !== false,
+          enableUdp: body.udp !== false
+        });
+
         const regionStats: Record<string, number> = {};
-        for (const n of processedNodes) {
+        for (const n of preFilteredNodes) {
           const reg = getRegionByNodeName(n.name);
           const key = reg ? `${reg.flag} ${reg.name}` : '🌐 其他';
           regionStats[key] = (regionStats[key] || 0) + 1;

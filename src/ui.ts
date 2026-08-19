@@ -1098,14 +1098,22 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
           const chip = document.createElement('div');
           chip.className = 'region-chip' + (isActive ? ' active' : '');
           chip.textContent = \`\${region}: \${count}\`;
-          chip.onclick = () => {
-            let nextTokens = [...curTokens];
-            if (isActive) {
-              // 再次点击取消该地区
-              nextTokens = nextTokens.filter(t => t !== rawReg);
+          chip.onclick = (e) => {
+            let nextTokens;
+            if (e.ctrlKey || e.metaKey || e.shiftKey) {
+              // 多选组合模式（按住 Ctrl/Shift/Command 点击）：叠加或取消该地区
+              if (isActive) {
+                nextTokens = curTokens.filter(t => t !== rawReg);
+              } else {
+                nextTokens = [...curTokens, rawReg];
+              }
             } else {
-              // 叠加选中该地区（实现 香港|日本 多选自由组合）
-              nextTokens.push(rawReg);
+              // 快速单选切换模式：若当前已是唯独选中该地区，点击则取消（显示全部）；否则直接切换到该地区
+              if (isActive && curTokens.length === 1) {
+                nextTokens = [];
+              } else {
+                nextTokens = [rawReg];
+              }
             }
             document.getElementById('includeRegex').value = nextTokens.join('|');
             inspectNodes();
