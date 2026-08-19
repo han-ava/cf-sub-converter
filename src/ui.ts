@@ -817,6 +817,7 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
           </div>
           <div style="display: flex; gap: 8px; align-items: center;">
             <span id="warningAggFilterTip" style="font-size: 0.725rem; color: var(--accent); display: none;">已按参数过滤</span>
+            <button class="btn btn-secondary btn-sm" style="padding: 2px 8px; font-size: 0.7rem; color: var(--warning); border-color: rgba(245, 158, 11, 0.4);" onclick="copyWarningReport()">📋 一键复制警告报告</button>
             <button class="btn btn-secondary btn-sm" style="padding: 2px 8px; font-size: 0.7rem;" onclick="resetWarningParamFilter()">重置过滤</button>
           </div>
         </div>
@@ -1361,15 +1362,107 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
                   </div>
                 \` : ''}
 
-                <div class="node-detail-row" style="margin-top: 4px; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 4px;">
-                  <span class="node-detail-label">处理结果:</span>
-                  <div>\${actionDesc}</div>
+                <div class="node-detail-row" style="margin-top: 6px; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 6px; justify-content: space-between; align-items: center;">
+                  <div style="display: flex; gap: 8px; align-items: center;">
+                    <span class="node-detail-label">处理结果:</span>
+                    <div>\${actionDesc}</div>
+                  </div>
+                  <button class="node-detail-btn" style="color: var(--warning); border-color: rgba(245, 158, 11, 0.4); flex-shrink: 0;" onclick="copySingleNodeWarning(\${idx}, event)">📋 复制节点诊断</button>
                 </div>
               </div>
             </div>
           </div>
         \`;
       }).join('');
+    }
+
+    function copyWarningReport() {
+      if (!currentPreviewData) return;
+      const data = currentPreviewData;
+      const aggregations = data.warningAggregations || [];
+      if (aggregations.length === 0 && (!data.warningCount || data.warningCount === 0)) {
+        showToast('当前无任何转换警告');
+        return;
+      }
+
+      const lines = [
+        '【SubConverter 转换警告诊断报告】',
+        '• 原始节点: ' + (data.totalRaw || 0) + ' | 筛选匹配: ' + (data.totalMatched || 0),
+        '• 转换状态: ✅ 完整 ' + (data.perfectCount || 0) + ' | ⚠️ 警告 ' + (data.warningCount || 0) + ' | ❌ 排除 ' + (data.fatalCount || 0) + ' | 🚀 最终输出 ' + (data.finalCount || 0),
+        ''
+      ];
+
+      if (aggregations.length > 0) {
+        lines.push('【警告类型与受影响节点数】(共 ' + aggregations.length + ' 类)');
+        aggregations.forEach(agg => {
+          lines.push('- [' + agg.protocol + '] ' + agg.param + ' (' + agg.count + ' 节点)');
+        });
+      }
+
+      // 列出部分典型 Warning 节点详情
+      const warnNodes = (data.nodes || []).filter(n => n.conversion && n.conversion.status === 'warning');
+      if (warnNodes.length > 0) {
+        lines.push('');
+        lines.push('【警告节点详情样例】(前 ' + Math.min(20, warnNodes.length) + ' 个)');
+        warnNodes.slice(0, 20).forEach((n, i) => {
+          const unmapped = (n.conversion.unsupportedParams || []).join(', ') || '无';
+          const warnMsgs = (n.conversion.warnings || []).join('; ') || '无';
+          lines.push((i + 1) + '. [' + (n.type || '').toUpperCase() + '] ' + n.name + ' (' + n.server + ':' + n.port + ')');
+          lines.push('   未映射: ' + unmapped);
+          if (warnMsgs !== '无') lines.push('   警告: ' + warnMsgs);
+        });
+      }
+
+      const reportText = lines.join('\n');
+      copyTextToClipboard(reportText, '📋 转换警告诊断报告已复制到剪贴板');
+    }
+
+    function copySingleNodeWarning(idx, event) {
+      if (event) event.stopPropagation();
+      if (!currentPreviewData || !currentPreviewData.nodes) return;
+      const node = currentPreviewData.nodes[idx];
+      if (!node) return;
+
+      const conv = node.conversion || {};
+      const lines = [
+        '节点名称: ' + node.name,
+        '协议: ' + (node.type || '').toUpperCase() + ' ➔ Mihomo',
+        '服务器: ' + node.server + ':' + node.port,
+        '转换质量: ' + (conv.status === 'perfect' ? '完整表达 (无损)' : conv.status === 'warning' ? '有损转换 (保留在原始节点)' : '无法安全转换 (Gate 拦截)'),
+        '未映射参数: ' + ((conv.unsupportedParams || []).join(', ') || '无'),
+        '警告信息: ' + ((conv.warnings || []).join('; ') || '无')
+      ];
+      if (conv.skipReason) lines.push('排除原因: ' + conv.skipReason);
+
+      copyTextToClipboard(lines.join('\n'), '📋 已复制 [' + node.name + '] 节点诊断');
+    }
+
+    function copyTextToClipboard(text, successMsg) {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(() => {
+          showToast(successMsg || '已复制到剪贴板');
+        }).catch(() => {
+          fallbackCopyText(text, successMsg);
+        });
+      } else {
+        fallbackCopyText(text, successMsg);
+      }
+    }
+
+    function fallbackCopyText(text, successMsg) {
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      textarea.style.position = 'fixed';
+      textarea.style.opacity = '0';
+      document.body.appendChild(textarea);
+      textarea.select();
+      try {
+        document.execCommand('copy');
+        showToast(successMsg || '已复制到剪贴板');
+      } catch {
+        alert('复制失败，请手动复制');
+      }
+      document.body.removeChild(textarea);
     }
 
     function escapeHtml(str) {
