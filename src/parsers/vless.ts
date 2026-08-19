@@ -80,7 +80,9 @@ export function parseVless(urlStr: string): VlessNode | null {
       headers: host ? { Host: host } : undefined,
       serviceName,
       mode,
-      extra
+      extra,
+      headerType,
+      authority
     };
 
     return {

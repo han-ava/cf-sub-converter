@@ -134,7 +134,8 @@ export function parseShadowsocks(urlStr: string): ShadowsocksNode | null {
     const udpOverTcp = q.getBool('udp-over-tcp', 'udp_over_tcp', 'uot', 'udpovertcp');
     const uotVer = q.getInt('udp-over-tcp-version', 'udp_over_tcp_version', 'uot-version', 'uot_version', 'uotversion');
     const clientFingerprint = q.get('client-fingerprint', 'client_fingerprint', 'clientfingerprint', 'fp', 'fingerprint');
-    const smuxParam = q.get('smux');
+    const smuxBool = q.getBool('smux');
+    const smux = smuxBool !== undefined ? { enabled: smuxBool } : undefined;
 
     const extras = q.getUnusedExtras();
     const invalidParams = q.getInvalidParams();
@@ -161,6 +162,7 @@ export function parseShadowsocks(urlStr: string): ShadowsocksNode | null {
         udpOverTcp,
         udpOverTcpVersion: uotVer,
         clientFingerprint,
+        smux,
         invalidParams: invalidParams.length > 0 ? invalidParams : undefined,
         extras
       },

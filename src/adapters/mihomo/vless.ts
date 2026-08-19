@@ -411,7 +411,7 @@ const HANDLED_VLESS_PROTOCOL_KEYS = new Set([
   'fingerprint', 'skipCertVerify', 'realityOpts', 'transport', 'invalidParams', 'extras'
 ]);
 const HANDLED_VLESS_TRANSPORT_KEYS = new Set([
-  'type', 'path', 'headers', 'serviceName', 'mode', 'extra'
+  'type', 'path', 'headers', 'serviceName', 'mode', 'extra', 'headerType', 'authority'
 ]);
 const HANDLED_VLESS_REALITY_KEYS = new Set([
   'publicKey', 'shortId', 'spiderX'

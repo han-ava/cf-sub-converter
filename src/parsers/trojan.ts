@@ -64,7 +64,9 @@ export function parseTrojan(urlStr: string): TrojanNode | null {
       type,
       path,
       headers: host ? { Host: host } : undefined,
-      serviceName
+      serviceName,
+      mode,
+      headerType
     };
 
     return {

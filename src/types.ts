@@ -79,6 +79,8 @@ export interface VlessNode extends BaseNode {
       serviceName?: string;
       mode?: string;
       extra?: string;
+      headerType?: string;
+      authority?: string;
     };
     invalidParams?: InvalidQueryParam[];
     extras: Record<string, unknown>;
@@ -205,6 +207,8 @@ export interface TrojanNode extends BaseNode {
       path?: string;
       headers?: Record<string, string>;
       serviceName?: string;
+      mode?: string;
+      headerType?: string;
     };
     invalidParams?: InvalidQueryParam[];
     extras: Record<string, unknown>;

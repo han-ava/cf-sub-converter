@@ -281,4 +281,43 @@ describe('QueryParamReader & Universal Alias Suite', () => {
     expect(html).toContain('存在未映射参数，可能影响连接语义，请根据警告详情确认');
     expect(html).not.toContain('已自动剔除未映射参数以确保连接不报错');
   });
+
+  test('12. Transport AST parity: Trojan H2/HTTP, Shadowsocks smux, VLESS/Trojan headerType & mode', () => {
+    // Trojan H2
+    const trojanH2 = 'trojan://trojan_pass@1.2.3.4:443?type=h2&path=%2Fh2path&host=h2.example.com#Trojan%20H2';
+    const trojanH2Node = parseSingleNode(trojanH2);
+    expect(trojanH2Node).not.toBeNull();
+    expect(trojanH2Node!.protocolData.transport?.type).toBe('h2');
+    expect(trojanH2Node!.protocolData.transport?.path).toBe('/h2path');
+    expect(trojanH2Node!.protocolData.transport?.headers?.Host).toBe('h2.example.com');
+    const trojanH2Res = adaptNodeToMihomo(trojanH2Node!);
+    expect(trojanH2Res.fatal).toBe(false);
+    expect(trojanH2Res.lossy).toBe(false);
+    expect(trojanH2Res.config!['h2-opts']).toEqual({
+      host: ['h2.example.com'],
+      path: '/h2path'
+    });
+
+    // Shadowsocks smux
+    const ssSmux = 'ss://Y2hhY2hhMjAtaWV0Zi1wb2x5MTMwNTpteXBhc3N3b3JkMTIzIQ@1.2.3.4:8388?smux=true#SS%20Smux';
+    const ssSmuxNode = parseSingleNode(ssSmux);
+    expect(ssSmuxNode).not.toBeNull();
+    expect(ssSmuxNode!.protocolData.smux).toEqual({ enabled: true });
+    const ssSmuxRes = adaptNodeToMihomo(ssSmuxNode!);
+    expect(ssSmuxRes.fatal).toBe(false);
+    expect(ssSmuxRes.lossy).toBe(false);
+    expect(ssSmuxRes.config!.smux).toEqual({ enabled: true });
+
+    // VLESS transport headerType & authority
+    const vlessProto = 'vless://b831381d-6324-4d53-ad4f-8cda48b30811@1.2.3.4:443?type=grpc&serviceName=my-service&mode=gun&authority=grpc.example.com&headerType=none#VLESS%20Transport%20Parity';
+    const vlessNode = parseSingleNode(vlessProto);
+    expect(vlessNode).not.toBeNull();
+    expect(vlessNode!.protocolData.transport?.mode).toBe('gun');
+    expect(vlessNode!.protocolData.transport?.authority).toBe('grpc.example.com');
+    expect(vlessNode!.protocolData.transport?.headerType).toBe('none');
+    const vlessRes = adaptNodeToMihomo(vlessNode!);
+    expect(vlessRes.fatal).toBe(false);
+    expect(vlessRes.lossy).toBe(false);
+    expect(vlessRes.warnings.length).toBe(0);
+  });
 });
