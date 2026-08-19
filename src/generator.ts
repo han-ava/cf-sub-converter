@@ -3,7 +3,7 @@ import yaml from 'js-yaml';
 import { NodeEnvelope } from './types';
 import { DEFAULT_CLASH_TEMPLATE, DEFAULT_SINGBOX_TEMPLATE } from './templates';
 import { getRegionByNodeName, REGIONS } from './utils';
-import { nodeToClashProxy } from './adapters/mihomo';
+import { nodeToClashProxy, adaptNodeToMihomo } from './adapters/mihomo';
 import { nodeToSingBoxOutbound } from './adapters/singbox';
 
 export { nodeToClashProxy, nodeToSingBoxOutbound };
@@ -29,7 +29,35 @@ export function toClashMeta(
     config = JSON.parse(JSON.stringify(DEFAULT_CLASH_TEMPLATE));
   }
 
-  const proxies = nodes.map(n => nodeToClashProxy(n)).filter((p): p is Record<string, any> => p !== undefined);
+  const proxies: Record<string, any>[] = [];
+  for (const node of nodes) {
+    const res = adaptNodeToMihomo(node);
+    if (res.emitted && res.config) {
+      proxies.push(res.config);
+    } else {
+      console.warn('[DEBUG][CLASH_NODE_DROPPED]', {
+        name: node.name,
+        protocol: node.protocol,
+        reason: res.skipReason || 'Adapter fatal or not emitted',
+        warnings: res.warnings,
+        node
+      });
+    }
+  }
+
+  const protocolStats = nodes.reduce((acc, node) => {
+    const proto = node.protocol || 'unknown';
+    acc[proto] = (acc[proto] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+
+  console.log('[DEBUG][CLASH_SUMMARY]', {
+    inputNodes: nodes.length,
+    outputProxies: proxies.length,
+    skipped: nodes.length - proxies.length,
+    protocols: protocolStats
+  });
+
   const proxyNames = proxies.map(p => p.name);
 
   const isMinimal = preset === 'minimal';
@@ -159,7 +187,9 @@ export function toClashMeta(
     config.rules = [...extraRules, ...config.rules];
   }
 
-  return yaml.dump(config, { indent: 2, lineWidth: -1, noRefs: true });
+  const yamlContent = yaml.dump(config, { indent: 2, lineWidth: -1, noRefs: true });
+  console.log('[DEBUG][CLASH_ALL]', yamlContent);
+  return yamlContent;
 }
 
 /**
