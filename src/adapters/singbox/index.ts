@@ -88,19 +88,20 @@ export function nodeToSingBoxOutbound(node: NodeEnvelope): Record<string, any> {
       if (p.packetEncoding || p['packet-encoding'] || p.packet_encoding) {
         ob.packet_encoding = p.packetEncoding || p['packet-encoding'] || p.packet_encoding;
       }
-      if (p.tls) {
+      const reality = p.realityOpts || (typeof p.reality === 'object' ? p.reality : undefined) || p['reality-opts'];
+      const isTls = p.tls !== undefined ? !!p.tls : (p.security === 'tls' || p.security === 'reality' || !!reality);
+      if (isTls) {
         ob.tls = {
           enabled: true,
           server_name: p.sni || p.servername || node.server,
           alpn: p.alpn
         };
-        if (p.fingerprint || p['client-fingerprint']) {
-          ob.tls.utls = { enabled: true, fingerprint: p.fingerprint || p['client-fingerprint'] };
+        if (p.fingerprint || p['client-fingerprint'] || p.fp) {
+          ob.tls.utls = { enabled: true, fingerprint: p.fingerprint || p['client-fingerprint'] || p.fp };
         }
         if (p.skipCertVerify) {
           ob.tls.insecure = true;
         }
-        const reality = p.realityOpts || (typeof p.reality === 'object' ? p.reality : undefined) || p['reality-opts'];
         if (reality && (reality.publicKey || reality['public-key'])) {
           ob.tls.reality = {
             enabled: true,

@@ -1,28 +1,62 @@
 // src/parsers/vless.ts
 import { VlessNode } from '../types';
-import { parseRawQuery, parseStrictEndpoint, QueryParamReader, tryDecodeURIComponent } from '../utils';
+import { parseRawQuery, parseStrictEndpoint, QueryParamReader, safeBase64Decode, tryDecodeURIComponent } from '../utils';
 
 export function parseVless(urlStr: string): VlessNode | null {
   try {
-    const raw = urlStr.replace(/^vless:\/\//i, '').trim();
+    let raw = urlStr.replace(/^vless:\/\//i, '').trim();
     let name = 'VLESS Node';
-    let content = raw;
+    let isAuthorityBase64 = false;
 
+    // 1. 处理 URI Hash (#节点名称)
     const hashIndex = raw.indexOf('#');
     if (hashIndex !== -1) {
       name = tryDecodeURIComponent(raw.substring(hashIndex + 1)).trim() || 'VLESS Node';
-      content = raw.substring(0, hashIndex);
+      raw = raw.substring(0, hashIndex);
     }
 
-    const atIndex = content.indexOf('@');
+    // 2. 分离 Authority 与 Query 参数
+    const questionIndex = raw.indexOf('?');
+    let authorityPart = questionIndex !== -1 ? raw.substring(0, questionIndex) : raw;
+    let queryPart = questionIndex !== -1 ? raw.substring(questionIndex + 1) : '';
+
+    // 3. 兼容 Authority 进行 Base64 编码的情况 (如 vless://BASE64(auto:UUID@server:port)?query)
+    // 或者整段 raw 进行 Base64 编码的情况 (如 vless://BASE64(UUID@server:port?query#name))
+    if (!authorityPart.includes('@')) {
+      const decoded = safeBase64Decode(authorityPart);
+      if (decoded && decoded.includes('@')) {
+        let inner = decoded.trim();
+        const innerHashIdx = inner.indexOf('#');
+        if (innerHashIdx !== -1) {
+          if (name === 'VLESS Node' || !name) {
+            name = tryDecodeURIComponent(inner.substring(innerHashIdx + 1)).trim() || name;
+          }
+          inner = inner.substring(0, innerHashIdx);
+        }
+        const innerQIdx = inner.indexOf('?');
+        if (innerQIdx !== -1) {
+          authorityPart = inner.substring(0, innerQIdx);
+          const innerQuery = inner.substring(innerQIdx + 1);
+          queryPart = queryPart ? `${queryPart}&${innerQuery}` : innerQuery;
+        } else {
+          authorityPart = inner;
+        }
+        isAuthorityBase64 = true;
+      }
+    }
+
+    const atIndex = authorityPart.lastIndexOf('@');
     if (atIndex === -1) return null;
 
-    const uuid = tryDecodeURIComponent(content.substring(0, atIndex));
-    const rest = content.substring(atIndex + 1);
+    let userInfo = tryDecodeURIComponent(authorityPart.substring(0, atIndex)).trim();
+    const serverPortStr = authorityPart.substring(atIndex + 1).trim();
 
-    const questionIndex = rest.indexOf('?');
-    const serverPortStr = questionIndex !== -1 ? rest.substring(0, questionIndex) : rest;
-    const queryPart = questionIndex !== -1 ? rest.substring(questionIndex + 1) : '';
+    // 4. 去除可能存在的 auto: / none: 等前缀 (如 auto:UUID -> UUID)
+    if (/^(?:auto|none|zero):/i.test(userInfo)) {
+      userInfo = userInfo.replace(/^(?:auto|none|zero):/i, '').trim();
+      isAuthorityBase64 = true;
+    }
+    const uuid = userInfo;
 
     const ep = parseStrictEndpoint(serverPortStr, 443);
     const server = ep.server;
@@ -33,19 +67,49 @@ export function parseVless(urlStr: string): VlessNode | null {
     const rawQuery = parseRawQuery(queryPart);
     const q = new QueryParamReader(rawQuery.entries);
 
-    const type = (q.get('type', 'net', 'network', 'transport') || 'tcp').toLowerCase();
-    const rawSecurity = q.get('security', 'tls');
+    // 5. 兼容从 Query 参数中读取节点名称 (如 remark=..., remarks=..., title=..., name=...)
+    if (name === 'VLESS Node' || !name) {
+      const nameFromQuery = q.get('remark', 'remarks', 'title', 'name');
+      if (nameFromQuery) {
+        name = tryDecodeURIComponent(nameFromQuery).trim() || name;
+      }
+    }
+    q.markRecognized('remark', 'remarks', 'title', 'name');
+
+    const type = (q.get('type', 'net', 'network', 'transport') || 'tcp').toLowerCase().trim();
+
+    // 6. 安全传输与 Reality 识别规范化 (兼容 security=..., tls=1/0/true/false/tls/reality, xtls=..., pbk=...)
+    const rawSecurity = q.get('security');
+    const rawTls = q.get('tls');
+    const rawXtls = q.get('xtls');
+
     let security = 'none';
-    if (rawSecurity) {
+    const secCandidate = (rawSecurity || rawTls || '').toLowerCase().trim();
+    if (secCandidate === 'reality') {
+      security = 'reality';
+    } else if (secCandidate === 'tls' || secCandidate === '1' || secCandidate === 'true' || secCandidate === 'xtls') {
+      security = 'tls';
+    } else if (secCandidate === 'none' || secCandidate === '0' || secCandidate === 'false') {
+      security = 'none';
+    } else if (secCandidate) {
       const parsedSec = q.getEnum(['tls', 'reality', 'none'], 'security', 'tls');
       if (parsedSec) security = parsedSec;
     }
+
+    if (rawXtls && security === 'none') {
+      security = 'tls';
+    }
+
+    // 标记已识别旧式/非标准安全参数，防止进入 invalidParams
+    q.markRecognized('tls', 'xtls', 'security');
+
     const rawFlow = q.get('flow');
     let flow: string | undefined = undefined;
     if (rawFlow) {
       flow = q.getEnum(['xtls-rprx-vision', 'xtls-rprx-vision-udp443', 'none'], 'flow');
       if (flow === 'none') flow = undefined;
     }
+
     const rawPacketEncoding = q.get('packetEncoding', 'packet-encoding', 'packet_encoding', 'packetencoding', 'packet_addr', 'packetaddr', 'packet-addr');
     let packetEncoding: string | undefined = undefined;
     if (rawPacketEncoding) {
@@ -63,7 +127,7 @@ export function parseVless(urlStr: string): VlessNode | null {
     const spx = q.get('spx', 'spider-x', 'spiderX', 'spider_x', 'spiderx');
 
     const isReality = security === 'reality' || !!pbk;
-    const isTls = security === 'tls' || security === 'reality' || !!pbk;
+    const isTls = security === 'tls' || isReality;
 
     const path = q.get('path', 'ws-path', 'ws_path', 'wspath') || (type === 'ws' || type === 'xhttp' ? '/' : undefined);
     const host = q.get('host', 'ws-host', 'ws_host', 'wshost', 'obfs-host', 'obfs_host', 'obfshost');
@@ -94,6 +158,10 @@ export function parseVless(urlStr: string): VlessNode | null {
       authority
     };
 
+    const finalRaw = isAuthorityBase64
+      ? `vless://${uuid}@${ep.server}:${ep.port}${queryPart ? '?' + queryPart : ''}#${encodeURIComponent(name)}`
+      : urlStr;
+
     return {
       name,
       protocol: 'vless',
@@ -101,7 +169,7 @@ export function parseVless(urlStr: string): VlessNode | null {
       port,
       source: {
         format: 'uri',
-        raw: urlStr
+        raw: finalRaw
       },
       rawQuery: {
         ...rawQuery,
@@ -132,3 +200,4 @@ export function parseVless(urlStr: string): VlessNode | null {
     return null;
   }
 }
+

@@ -1,7 +1,7 @@
 // src/parsers/index.ts
 import yaml from 'js-yaml';
 import { NodeEnvelope } from '../types';
-import { safeBase64Decode } from '../utils';
+import { safeBase64Decode, safeBase64Encode } from '../utils';
 
 import { parseVless } from './vless';
 import { parseVmess } from './vmess';
@@ -60,7 +60,7 @@ export function isValidNode(node: NodeEnvelope | null): boolean {
   }
 
   if (proto === 'hysteria2' || proto === 'hy2' || proto === 'hysteria') {
-    return !!p.password || !!p.uuid;
+    return !!p.password || !!p.uuid || !!p.auth;
   }
 
   if (proto === 'tuic') {
@@ -92,6 +92,28 @@ export function parseSingleNode(link: string): NodeEnvelope | null {
   else if (lower.startsWith('anytls://')) node = parseAnyTLS(trimmed);
   else if (lower.startsWith('tuic://')) node = parseTuic(trimmed);
   else {
+    // 兼容可能单行 JSON / Flow-mapping 节点 (如 - {"type":"vless", ...} 或 {"type":"vless", ...})
+    const jsonCandidate = trimmed.replace(/^-\s*/, '').trim();
+    if (jsonCandidate.startsWith('{') && jsonCandidate.endsWith('}')) {
+      try {
+        const obj = JSON.parse(jsonCandidate);
+        if (obj && typeof obj === 'object') {
+          if (obj.server && obj.port) {
+            const clashNode = parseClashProxy(obj);
+            if (isValidNode(clashNode)) return clashNode;
+          }
+          if (obj.outbounds || obj.tag) {
+            const singboxNode = parseSingboxOutbound(obj);
+            if (isValidNode(singboxNode)) return singboxNode;
+          }
+          if (obj.v === '2' || obj.aid !== undefined || (obj.add && obj.port)) {
+            const vmessNode = parseVmess('vmess://' + safeBase64Encode(jsonCandidate));
+            if (isValidNode(vmessNode)) return vmessNode;
+          }
+        }
+      } catch {}
+    }
+
     // 兼容可能未经 scheme 包装的单行 Base64 节点或 Base64(URI) 格式
     try {
       const decoded = safeBase64Decode(trimmed);
@@ -132,11 +154,8 @@ export async function parseContent(text: string, depth = 0): Promise<NodeEnvelop
   const trimmed = text.replace(/^﻿/, '').trim();
   if (!trimmed) return nodes;
 
-  // 1. 尝试解析为 Clash YAML (支持 proxies, Proxy, payload 字段)
-  if (
-    (trimmed.includes('proxies:') || trimmed.includes('Proxy:') || trimmed.includes('payload:')) &&
-    (trimmed.includes('name:') || trimmed.includes('server:') || trimmed.includes('type:'))
-  ) {
+  // 1. 尝试解析为 Clash YAML (支持 proxies, Proxy, payload 字段，包括 flow mapping inline JSON)
+  if (/(?:^|[\r\n])\s*(?:proxies|Proxy|payload)\s*:/i.test(trimmed)) {
     try {
       const doc: any = yaml.load(trimmed);
       if (doc && typeof doc === 'object') {
@@ -147,7 +166,7 @@ export async function parseContent(text: string, depth = 0): Promise<NodeEnvelop
           : Array.isArray(doc.payload)
           ? doc.payload
           : null;
-        if (proxyList) {
+        if (proxyList && proxyList.length > 0) {
           for (const p of proxyList) {
             const node = parseClashProxy(p);
             if (isValidNode(node)) {
@@ -158,6 +177,41 @@ export async function parseContent(text: string, depth = 0): Promise<NodeEnvelop
         }
       }
     } catch {}
+
+    // 容错 fallback: 若整段 YAML 解析失败（如规则段存在特殊语法），尝试逐行提取 proxies 下的 flow-mapping / JSON 节点
+    const flowObjectRegex = /^\s*-\s*(\{.*\})\s*$/;
+    const lines = trimmed.split(/[\r\n]+/);
+    let inProxySection = false;
+    for (const line of lines) {
+      const lTrim = line.trim();
+      if (/^(?:proxies|Proxy|payload)\s*:/i.test(lTrim)) {
+        inProxySection = true;
+        continue;
+      }
+      if (inProxySection && /^[a-zA-Z0-9_-]+\s*:/i.test(lTrim) && !lTrim.startsWith('-')) {
+        inProxySection = false;
+      }
+      if (inProxySection || flowObjectRegex.test(line)) {
+        const match = line.match(flowObjectRegex);
+        if (match && match[1]) {
+          try {
+            let obj: any = null;
+            try {
+              obj = JSON.parse(match[1]);
+            } catch {
+              obj = yaml.load(match[1]);
+            }
+            if (obj && typeof obj === 'object') {
+              const node = parseClashProxy(obj);
+              if (isValidNode(node)) {
+                nodes.push(node!);
+              }
+            }
+          } catch {}
+        }
+      }
+    }
+    if (nodes.length > 0) return nodes;
   }
 
   // 2. 尝试解析为 Sing-Box JSON

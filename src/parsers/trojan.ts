@@ -1,11 +1,12 @@
 // src/parsers/trojan.ts
 import { TrojanNode } from '../types';
-import { parseRawQuery, parseStrictEndpoint, QueryParamReader, tryDecodeURIComponent } from '../utils';
+import { parseRawQuery, parseStrictEndpoint, QueryParamReader, safeBase64Decode, tryDecodeURIComponent } from '../utils';
 
 export function parseTrojan(urlStr: string): TrojanNode | null {
   try {
     let raw = urlStr.replace(/^trojan:\/\//i, '').trim();
     let name = 'Trojan Node';
+    let isAuthorityBase64 = false;
 
     const hashIndex = raw.indexOf('#');
     if (hashIndex !== -1) {
@@ -13,15 +14,43 @@ export function parseTrojan(urlStr: string): TrojanNode | null {
       raw = raw.substring(0, hashIndex);
     }
 
-    const atIndex = raw.indexOf('@');
+    const questionIndex = raw.indexOf('?');
+    let authorityPart = questionIndex !== -1 ? raw.substring(0, questionIndex) : raw;
+    let queryPart = questionIndex !== -1 ? raw.substring(questionIndex + 1) : '';
+
+    if (!authorityPart.includes('@')) {
+      const decoded = safeBase64Decode(authorityPart);
+      if (decoded && decoded.includes('@')) {
+        let inner = decoded.trim();
+        const innerHashIdx = inner.indexOf('#');
+        if (innerHashIdx !== -1) {
+          if (name === 'Trojan Node' || !name) {
+            name = tryDecodeURIComponent(inner.substring(innerHashIdx + 1)).trim() || name;
+          }
+          inner = inner.substring(0, innerHashIdx);
+        }
+        const innerQIdx = inner.indexOf('?');
+        if (innerQIdx !== -1) {
+          authorityPart = inner.substring(0, innerQIdx);
+          const innerQuery = inner.substring(innerQIdx + 1);
+          queryPart = queryPart ? `${queryPart}&${innerQuery}` : innerQuery;
+        } else {
+          authorityPart = inner;
+        }
+        isAuthorityBase64 = true;
+      }
+    }
+
+    const atIndex = authorityPart.lastIndexOf('@');
     if (atIndex === -1) return null;
 
-    const password = tryDecodeURIComponent(raw.substring(0, atIndex));
-    const rest = raw.substring(atIndex + 1);
+    let password = tryDecodeURIComponent(authorityPart.substring(0, atIndex)).trim();
+    const serverPortStr = authorityPart.substring(atIndex + 1).trim();
 
-    const questionIndex = rest.indexOf('?');
-    const serverPortStr = questionIndex !== -1 ? rest.substring(0, questionIndex) : rest;
-    const queryPart = questionIndex !== -1 ? rest.substring(questionIndex + 1) : '';
+    if (/^(?:auto|none|zero):/i.test(password)) {
+      password = password.replace(/^(?:auto|none|zero):/i, '').trim();
+      isAuthorityBase64 = true;
+    }
 
     const ep = parseStrictEndpoint(serverPortStr, 443);
     const server = ep.server;
@@ -31,6 +60,14 @@ export function parseTrojan(urlStr: string): TrojanNode | null {
 
     const rawQuery = parseRawQuery(queryPart);
     const q = new QueryParamReader(rawQuery.entries);
+
+    if (name === 'Trojan Node' || !name) {
+      const nameFromQuery = q.get('remark', 'remarks', 'title', 'name');
+      if (nameFromQuery) {
+        name = tryDecodeURIComponent(nameFromQuery).trim() || name;
+      }
+    }
+    q.markRecognized('remark', 'remarks', 'title', 'name');
 
     const type = (q.get('type', 'net', 'network', 'transport') || 'tcp').toLowerCase();
     const sni = q.get('sni', 'peer', 'servername', 'serverName', 'server-name', 'server_name') || server;
@@ -60,6 +97,10 @@ export function parseTrojan(urlStr: string): TrojanNode | null {
       serviceName
     };
 
+    const finalRaw = isAuthorityBase64
+      ? `trojan://${encodeURIComponent(password)}@${ep.server}:${ep.port}${queryPart ? '?' + queryPart : ''}#${encodeURIComponent(name)}`
+      : urlStr;
+
     return {
       name,
       protocol: 'trojan',
@@ -67,7 +108,7 @@ export function parseTrojan(urlStr: string): TrojanNode | null {
       port,
       source: {
         format: 'uri',
-        raw: urlStr
+        raw: finalRaw
       },
       rawQuery: {
         ...rawQuery,
@@ -89,3 +130,4 @@ export function parseTrojan(urlStr: string): TrojanNode | null {
     return null;
   }
 }
+

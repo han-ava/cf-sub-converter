@@ -597,4 +597,82 @@ proxies:
     expect(lines[0]!.startsWith('vless://')).toBe(true);
     expect(lines[1]!.startsWith('ss://')).toBe(true);
   });
+
+  // 10. Multi-upstream 86-node combined pipeline regression (SparkCloud + NorthAmerican + xkaixin + manual + 7511111 + yuyun)
+  test('Complete multi-upstream pipeline: 35 nodes before + 23 Clash flow-mapping + 28 Yuyun Base64 authority = 86 total nodes parsed and serialized', async () => {
+    // 1. SparkCloud (24 AnyTLS)
+    const sparkCloudUris = Array.from({ length: 24 }, (_, i) =>
+      `anytls://spark_pass_${i}@spark${i}.cloud.com:8443?sni=spark${i}.cloud.com#SparkCloud%20AnyTLS%20${String(i + 1).padStart(2, '0')}`
+    ).join('\n');
+    const sparkCloudNodes = await parseContent(sparkCloudUris);
+    expect(sparkCloudNodes.length).toBe(24);
+
+    // 2. NorthAmericanAirport (8 SS)
+    const naUris = Array.from({ length: 8 }, (_, i) =>
+      `ss://${btoa('chacha20-ietf-poly1305:napass_' + i)}@na${i}.airport.com:8388#NorthAmerican%20SS%20${String(i + 1).padStart(2, '0')}`
+    ).join('\n');
+    const naNodes = await parseContent(naUris);
+    expect(naNodes.length).toBe(8);
+
+    // 3. x.kaixin.cyou (2 VLESS)
+    const kaixinUris = [
+      'vless://32c1b4d3-84be-11ef-bb6b-bc241111d95d@kaixin1.cyou:443?security=reality&pbk=f6Hq_u8bL6ZtD3yL5p1bUv8tH9zQ6wK7nJ4mP2sE5rY&sid=1a2b3c4d&fp=chrome#Kaixin%2001',
+      'vless://32c1b4d3-84be-11ef-bb6b-bc241111d95d@kaixin2.cyou:443?security=reality&pbk=f6Hq_u8bL6ZtD3yL5p1bUv8tH9zQ6wK7nJ4mP2sE5rY&sid=1a2b3c4d&fp=chrome#Kaixin%2002'
+    ].join('\n');
+    const kaixinNodes = await parseContent(kaixinUris);
+    expect(kaixinNodes.length).toBe(2);
+
+    // 4. Manual VLESS (1 VLESS)
+    const manualUri = 'vless://32c1b4d3-84be-11ef-bb6b-bc241111d95d@manual.vless.com:443?security=tls&sni=manual.vless.com#Manual%20VLESS';
+    const manualNode = parseSingleNode(manualUri);
+    expect(manualNode).not.toBeNull();
+
+    // 5. sub.7511111.xyz (23 Clash flow-mapping nodes: 17 VLESS, 4 HY2, 1 SS, 1 VMess)
+    const clash7511111Yaml = `
+proxies:
+${Array.from({ length: 17 }, (_, i) =>
+  `  - {"name":"7511111 VLESS ${i + 1}","type":"vless","server":"104.21.1.${i + 1}","port":443,"uuid":"32c1b4d3-84be-11ef-bb6b-bc241111d95d","tls":true,"reality-opts":{"public-key":"f6Hq_u8bL6ZtD3yL5p1bUv8tH9zQ6wK7nJ4mP2sE5rY"}}`
+).join('\n')}
+${Array.from({ length: 4 }, (_, i) =>
+  `  - {"name":"7511111 HY2 ${i + 1}","type":"hysteria2","server":"hy2-${i + 1}.xyz","port":443,"password":"pass-hy2-${i + 1}"}`
+).join('\n')}
+  - {"name":"7511111 SS 01","type":"ss","server":"ss-01.xyz","port":8388,"cipher":"2022-blake3-aes-128-gcm","password":"dGVzdDEyMzQ1Njc4OTAxMg=="}
+  - {"name":"7511111 VMess 01","type":"vmess","server":"vmess-01.xyz","port":443,"uuid":"32c1b4d3-84be-11ef-bb6b-bc241111d95d","alterId":0,"cipher":"auto","tls":true,"network":"ws","ws-opts":{"path":"/ws"}}
+`;
+    const clash7511111Nodes = await parseContent(clash7511111Yaml);
+    expect(clash7511111Nodes.length).toBe(23);
+
+    // 6. yuyun.mhlnf.cn (28 Base64 subscription with VLESS Base64 authority)
+    const yuyunUris = Array.from({ length: 28 }, (_, i) => {
+      const b64Auth = btoa(`auto:32c1b4d3-84be-11ef-bb6b-bc241111d95d@18.136.212.${i + 1}:${50000 + i}`);
+      return `vless://${b64Auth}?remark=${encodeURIComponent(`Yuyun HK ${i + 1}`)}&tls=1&xtls=2&sni=sni.yuyun.cn&pbk=f6Hq_u8bL6ZtD3yL5p1bUv8tH9zQ6wK7nJ4mP2sE5rY&fp=chrome`;
+    }).join('\n');
+    const yuyunBase64Sub = btoa(yuyunUris);
+    const yuyunNodes = await parseContent(yuyunBase64Sub);
+    expect(yuyunNodes.length).toBe(28);
+
+    // Combine all upstreams together
+    const allNodes = [
+      ...sparkCloudNodes,
+      ...naNodes,
+      ...kaixinNodes,
+      manualNode!,
+      ...clash7511111Nodes,
+      ...yuyunNodes
+    ];
+
+    // Verify grand total is exactly 86
+    expect(allNodes.length).toBe(86);
+
+    // Verify 100% serialized into Raw Links and Base64 subscription
+    const rawAll = toRawLinks(allNodes);
+    const rawLines = rawAll.split('\n').filter(Boolean);
+    expect(rawLines.length).toBe(86);
+
+    const base64All = toBase64(allNodes);
+    expect(base64All.length).toBeGreaterThan(1000);
+
+    const reDecodedNodes = await parseContent(base64All);
+    expect(reDecodedNodes.length).toBe(86);
+  });
 });
