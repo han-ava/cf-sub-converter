@@ -334,23 +334,31 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       font-weight: 600;
     }
     .node-list-box {
-      max-height: 280px;
+      max-height: 480px;
       overflow-y: auto;
       border: 1px solid var(--border);
       border-radius: var(--radius-md);
       background: var(--bg-input);
     }
+    .node-row-wrapper {
+      border-bottom: 1px solid rgba(51, 65, 85, 0.4);
+      transition: background 0.15s ease;
+    }
+    .node-row-wrapper:last-child {
+      border-bottom: none;
+    }
     .node-item {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding: 8px 12px;
+      padding: 9px 12px;
       font-size: 0.825rem;
-      border-bottom: 1px solid rgba(51, 65, 85, 0.5);
       font-family: 'JetBrains Mono', monospace;
+      cursor: pointer;
+      user-select: none;
     }
-    .node-item:last-child {
-      border-bottom: none;
+    .node-item:hover {
+      background: rgba(255, 255, 255, 0.025);
     }
     .node-tag {
       background: rgba(59, 130, 246, 0.15);
@@ -358,6 +366,7 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       padding: 2px 6px;
       border-radius: 4px;
       font-size: 0.7rem;
+      font-weight: 500;
     }
     .node-tag-perfect {
       background: rgba(16, 185, 129, 0.15);
@@ -365,6 +374,7 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       padding: 2px 6px;
       border-radius: 4px;
       font-size: 0.7rem;
+      font-weight: 600;
     }
     .node-tag-warn {
       background: rgba(245, 158, 11, 0.15);
@@ -372,7 +382,7 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       padding: 2px 6px;
       border-radius: 4px;
       font-size: 0.7rem;
-      cursor: help;
+      font-weight: 600;
     }
     .node-tag-fatal {
       background: rgba(239, 68, 68, 0.15);
@@ -380,7 +390,60 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       padding: 2px 6px;
       border-radius: 4px;
       font-size: 0.7rem;
-      cursor: help;
+      font-weight: 600;
+    }
+    .node-detail-btn {
+      font-size: 0.7rem;
+      color: var(--accent);
+      background: rgba(56, 189, 248, 0.08);
+      border: 1px solid rgba(56, 189, 248, 0.3);
+      border-radius: 4px;
+      padding: 2px 7px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      font-family: inherit;
+    }
+    .node-detail-btn:hover {
+      background: rgba(56, 189, 248, 0.2);
+      border-color: var(--accent);
+    }
+    .node-details {
+      display: none;
+      padding: 10px 14px;
+      background: rgba(15, 23, 42, 0.95);
+      border-top: 1px dashed rgba(51, 65, 85, 0.7);
+      font-size: 0.775rem;
+      line-height: 1.6;
+      font-family: 'JetBrains Mono', monospace;
+      animation: fadeIn 0.2s ease;
+    }
+    .node-details.open {
+      display: block;
+    }
+    .node-detail-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 6px;
+    }
+    .node-detail-row {
+      display: flex;
+      gap: 8px;
+    }
+    .node-detail-label {
+      color: var(--text-dim);
+      font-weight: 600;
+      flex-shrink: 0;
+      min-width: 70px;
+    }
+    .unmapped-pill {
+      display: inline-block;
+      background: rgba(245, 158, 11, 0.12);
+      border: 1px solid rgba(245, 158, 11, 0.35);
+      color: var(--warning);
+      padding: 1px 6px;
+      border-radius: 4px;
+      font-size: 0.725rem;
+      margin: 1px 4px 1px 0;
     }
 
     .gate-summary-grid {
@@ -398,6 +461,19 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       display: flex;
       flex-direction: column;
       gap: 2px;
+      cursor: pointer;
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      user-select: none;
+      position: relative;
+    }
+    .gate-card:hover {
+      border-color: var(--accent);
+      transform: translateY(-2px);
+    }
+    .gate-card.active {
+      border-color: var(--border-focus);
+      background: rgba(59, 130, 246, 0.15);
+      box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.35);
     }
     .gate-card-title {
       font-size: 0.7rem;
@@ -410,9 +486,96 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       color: var(--text-main);
     }
     .gate-card-perfect .gate-card-val { color: var(--success); }
+    .gate-card-perfect.active {
+      border-color: var(--success);
+      background: rgba(16, 185, 129, 0.15);
+      box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.35);
+    }
     .gate-card-warn .gate-card-val { color: var(--warning); }
+    .gate-card-warn.active {
+      border-color: var(--warning);
+      background: rgba(245, 158, 11, 0.15);
+      box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.35);
+    }
     .gate-card-fatal .gate-card-val { color: var(--danger); }
+    .gate-card-fatal.active {
+      border-color: var(--danger);
+      background: rgba(239, 68, 68, 0.15);
+      box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.35);
+    }
     .gate-card-final .gate-card-val { color: var(--primary); }
+    .gate-card-final.active {
+      border-color: var(--primary);
+      background: rgba(37, 99, 235, 0.15);
+      box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.35);
+    }
+
+    .warning-inspector-box {
+      background: rgba(245, 158, 11, 0.05);
+      border: 1px solid rgba(245, 158, 11, 0.3);
+      border-radius: var(--radius-md);
+      padding: 0.85rem 1rem;
+      margin-bottom: 0.85rem;
+      display: none;
+    }
+    .warning-inspector-box.show {
+      display: block;
+      animation: fadeIn 0.25s ease;
+    }
+    .warning-inspector-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 0.6rem;
+      font-size: 0.825rem;
+      font-weight: 600;
+      color: var(--warning);
+    }
+    .warning-inspector-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .warning-chip {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 4px 8px;
+      font-size: 0.775rem;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .warning-chip:hover {
+      border-color: var(--warning);
+      background: rgba(245, 158, 11, 0.12);
+      transform: translateY(-1px);
+    }
+    .warning-chip.active {
+      border-color: var(--warning);
+      background: rgba(245, 158, 11, 0.22);
+      box-shadow: 0 0 0 1px var(--warning);
+      font-weight: 600;
+    }
+    .warning-chip-count {
+      background: rgba(245, 158, 11, 0.25);
+      color: var(--warning);
+      padding: 1px 5px;
+      border-radius: 999px;
+      font-size: 0.7rem;
+      font-weight: 700;
+    }
+    .warning-chip-proto {
+      background: rgba(59, 130, 246, 0.2);
+      color: var(--accent);
+      padding: 1px 4px;
+      border-radius: 3px;
+      font-size: 0.675rem;
+      font-weight: 600;
+    }
     
     .toast {
       position: fixed;
@@ -619,30 +782,45 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
 
       <!-- Compatibility Gate 状态统计看板 -->
       <div id="gateSummaryGrid" class="gate-summary-grid" style="display: none;">
-        <div class="gate-card">
+        <div class="gate-card" id="cardTotalRaw" onclick="filterByGateStatus('all')" title="点击显示全部原始节点">
           <span class="gate-card-title">原始节点</span>
           <span id="gateTotalRaw" class="gate-card-val">0</span>
         </div>
-        <div class="gate-card">
+        <div class="gate-card" id="cardTotalMatched" onclick="filterByGateStatus('all')" title="点击显示全部筛选匹配节点">
           <span class="gate-card-title">筛选后</span>
           <span id="gateTotalMatched" class="gate-card-val">0</span>
         </div>
-        <div class="gate-card gate-card-perfect">
+        <div class="gate-card gate-card-perfect" id="cardPerfect" onclick="filterByGateStatus('perfect')" title="点击仅显示【完整转换】节点">
           <span class="gate-card-title">完整转换</span>
           <span id="gatePerfectCount" class="gate-card-val">0</span>
         </div>
-        <div class="gate-card gate-card-warn">
+        <div class="gate-card gate-card-warn" id="cardWarn" onclick="filterByGateStatus('warning')" title="点击仅显示【有转换警告】节点">
           <span class="gate-card-title">有警告</span>
           <span id="gateWarnCount" class="gate-card-val">0</span>
         </div>
-        <div class="gate-card gate-card-fatal">
+        <div class="gate-card gate-card-fatal" id="cardFatal" onclick="filterByGateStatus('fatal')" title="点击仅显示【无法转换】节点">
           <span class="gate-card-title">无法转换</span>
           <span id="gateFatalCount" class="gate-card-val">0</span>
         </div>
-        <div class="gate-card gate-card-final">
+        <div class="gate-card gate-card-final" id="cardFinal" onclick="filterByGateStatus('final')" title="点击仅显示【最终输出】节点">
           <span class="gate-card-title">最终输出</span>
           <span id="gateFinalCount" class="gate-card-val">0</span>
         </div>
+      </div>
+
+      <!-- Warning Inspector 警告聚合区 -->
+      <div id="warningInspectorBox" class="warning-inspector-box">
+        <div class="warning-inspector-header">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span>⚠️ 警告与未映射参数诊断 (Warning Inspector)</span>
+            <span id="warningAggBadge" class="badge" style="font-size: 0.7rem; padding: 1px 7px;">0 类警告</span>
+          </div>
+          <div style="display: flex; gap: 8px; align-items: center;">
+            <span id="warningAggFilterTip" style="font-size: 0.725rem; color: var(--accent); display: none;">已按参数过滤</span>
+            <button class="btn btn-secondary btn-sm" style="padding: 2px 8px; font-size: 0.7rem;" onclick="resetWarningParamFilter()">重置过滤</button>
+          </div>
+        </div>
+        <div id="warningAggList" class="warning-inspector-chips"></div>
       </div>
 
       <div id="trafficCard" class="traffic-bar-container" style="display: none;">
@@ -864,6 +1042,11 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
           return;
         }
 
+        currentPreviewData = data;
+        currentGateFilter = 'all';
+        currentWarningFilter = null;
+        openedNodeSet.clear();
+
         const inspectPanel = document.getElementById('inspectPanel');
         inspectPanel.classList.add('show');
 
@@ -875,8 +1058,6 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
         document.getElementById('gateFatalCount').textContent = data.fatalCount || 0;
         document.getElementById('gateFinalCount').textContent = data.finalCount || 0;
         document.getElementById('gateSummaryGrid').style.display = 'grid';
-
-        document.getElementById('inspectCount').textContent = \`输出 \${data.finalCount} / 原始 \${data.totalRaw}\`;
 
         // 流量信息
         const trafficCard = document.getElementById('trafficCard');
@@ -932,38 +1113,8 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
           chips.appendChild(chip);
         }
 
-        // 节点列表渲染 (Compatibility Gate 两段式透明呈现: 原始解析 -> 目标转换)
-        const nodeList = document.getElementById('nodeList');
-        nodeList.innerHTML = (data.nodes || []).map(n => {
-          const conv = n.conversion || {};
-          const status = conv.status || 'perfect';
-          let badge = '';
-
-          if (status === 'fatal') {
-            const skipTip = (conv.skipReason || '关键连接参数无法映射') + '&#10;[处理] 该节点已从最终配置中排除';
-            badge = \`<span class="node-tag-fatal" title="\${skipTip.replace(/"/g, '&quot;')}">❌ 无法转换 (已排除)</span>\`;
-          } else if (status === 'warning') {
-            const warnDetails = (conv.warnings || []).concat((conv.unsupportedParams || []).map(p => '未映射: ' + p)).join('&#10;');
-            badge = \`<span class="node-tag-warn" title="\${warnDetails.replace(/"/g, '&quot;')}">⚠️ 有转换警告 (\${conv.warnings?.length || 1})</span>\`;
-          } else {
-            badge = \`<span class="node-tag-perfect">✅ 完整转换</span>\`;
-          }
-
-          return \`
-            <div class="node-item" style="\${status === 'fatal' ? 'opacity: 0.7; border-color: rgba(239, 68, 68, 0.25);' : ''}">
-              <div>
-                <div style="font-weight: 500;">\${n.name}</div>
-                <div style="font-size: 0.75rem; color: var(--text-dim); margin-top: 2px;">
-                  \${n.server}:\${n.port} \${status === 'fatal' && conv.skipReason ? \`<span style="color: var(--danger); margin-left: 6px;">[原因] \${conv.skipReason}</span>\` : ''}
-                </div>
-              </div>
-              <div style="display: flex; gap: 6px; align-items: center; flex-shrink: 0;">
-                \${badge}
-                <span class="node-tag">\${(n.type || '').toUpperCase()}</span>
-              </div>
-            </div>
-          \`;
-        }).join('');
+        // 渲染过滤后的节点列表及 Warning Inspector 诊断区
+        renderFilteredNodes();
 
         inspectPanel.scrollIntoView({ behavior: 'smooth' });
       } catch (err) {
@@ -972,6 +1123,260 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
         inspectBtn.textContent = '🔍 即时解析看板';
         inspectBtn.disabled = false;
       }
+    }
+
+    let currentPreviewData = null;
+    let currentGateFilter = 'all'; // 'all' | 'perfect' | 'warning' | 'fatal' | 'final'
+    let currentWarningFilter = null; // null | string (param name)
+    const openedNodeSet = new Set();
+
+    function filterByGateStatus(status) {
+      if (currentGateFilter === status && status !== 'all') {
+        currentGateFilter = 'all';
+      } else {
+        currentGateFilter = status;
+      }
+      if (currentGateFilter !== 'warning') {
+        currentWarningFilter = null;
+      }
+      renderFilteredNodes();
+    }
+
+    function filterByWarningParam(param) {
+      if (currentWarningFilter === param) {
+        currentWarningFilter = null;
+      } else {
+        currentWarningFilter = param;
+        currentGateFilter = 'warning';
+      }
+      renderFilteredNodes();
+    }
+
+    function resetWarningParamFilter() {
+      currentWarningFilter = null;
+      currentGateFilter = 'all';
+      renderFilteredNodes();
+    }
+
+    function toggleNodeDetail(idx, evt) {
+      if (evt) evt.stopPropagation();
+      const el = document.getElementById('nodeDetail-' + idx);
+      const btn = document.getElementById('btnDetail-' + idx);
+      if (!el) return;
+      if (openedNodeSet.has(idx)) {
+        openedNodeSet.delete(idx);
+        el.classList.remove('open');
+        if (btn) btn.textContent = '查看详情 ▼';
+      } else {
+        openedNodeSet.add(idx);
+        el.classList.add('open');
+        if (btn) btn.textContent = '收起详情 ▲';
+      }
+    }
+
+    function renderFilteredNodes() {
+      if (!currentPreviewData) return;
+      const data = currentPreviewData;
+
+      // 1. 卡片高亮状态同步
+      const cardMap = {
+        'all': 'cardTotalMatched',
+        'perfect': 'cardPerfect',
+        'warning': 'cardWarn',
+        'fatal': 'cardFatal',
+        'final': 'cardFinal'
+      };
+      ['cardTotalRaw', 'cardTotalMatched', 'cardPerfect', 'cardWarn', 'cardFatal', 'cardFinal'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.classList.remove('active');
+      });
+      const activeCardId = cardMap[currentGateFilter];
+      if (activeCardId) {
+        const el = document.getElementById(activeCardId);
+        if (el) el.classList.add('active');
+      }
+
+      // 2. 渲染 Warning Inspector 聚合区
+      const warnBox = document.getElementById('warningInspectorBox');
+      const warnList = document.getElementById('warningAggList');
+      const warnBadge = document.getElementById('warningAggBadge');
+      const warnFilterTip = document.getElementById('warningAggFilterTip');
+
+      const aggregations = data.warningAggregations || [];
+      if (data.warningCount > 0 && aggregations.length > 0) {
+        warnBox.classList.add('show');
+        warnBadge.textContent = aggregations.length + ' 类警告 (' + data.warningCount + ' 节点)';
+        warnFilterTip.style.display = currentWarningFilter ? 'inline-block' : 'none';
+        if (currentWarningFilter) {
+          warnFilterTip.textContent = '已过滤: ' + currentWarningFilter;
+        }
+
+        warnList.innerHTML = aggregations.map(agg => {
+          const isActive = currentWarningFilter === agg.param;
+          return \`
+            <div class="warning-chip \${isActive ? 'active' : ''}" onclick="filterByWarningParam('\${escapeJsParam(agg.param)}')" title="点击过滤包含此参数的节点">
+              <span class="warning-chip-proto">\${agg.protocol}</span>
+              <span style="color: var(--text-main);">\${escapeHtml(agg.param)}</span>
+              <span class="warning-chip-count">\${agg.count}</span>
+            </div>
+          \`;
+        }).join('');
+      } else {
+        warnBox.classList.remove('show');
+      }
+
+      // 3. 过滤节点列表
+      const nodes = data.nodes || [];
+      const filtered = nodes.filter(n => {
+        const conv = n.conversion || {};
+        const status = conv.status || 'perfect';
+
+        // 状态卡片筛选
+        if (currentGateFilter === 'perfect' && status !== 'perfect') return false;
+        if (currentGateFilter === 'warning' && status !== 'warning') return false;
+        if (currentGateFilter === 'fatal' && status !== 'fatal') return false;
+        if (currentGateFilter === 'final' && conv.emitted === false) return false;
+
+        // 特定警告参数筛选
+        if (currentWarningFilter) {
+          const hasUnmapped = conv.unsupportedParams && conv.unsupportedParams.includes(currentWarningFilter);
+          const hasWarningMsg = conv.warnings && conv.warnings.some(w => w.includes(currentWarningFilter));
+          if (!hasUnmapped && !hasWarningMsg) return false;
+        }
+
+        return true;
+      });
+
+      // 4. 更新看板计数
+      let filterLabel = '';
+      if (currentGateFilter === 'warning') filterLabel = '有警告';
+      else if (currentGateFilter === 'fatal') filterLabel = '无法转换';
+      else if (currentGateFilter === 'perfect') filterLabel = '完整转换';
+      else if (currentGateFilter === 'final') filterLabel = '最终输出';
+
+      if (currentWarningFilter) {
+        document.getElementById('inspectCount').textContent = '筛选 [' + currentWarningFilter + ']: ' + filtered.length + ' 节点';
+      } else if (currentGateFilter !== 'all') {
+        document.getElementById('inspectCount').textContent = '筛选 [' + filterLabel + ']: ' + filtered.length + ' / ' + data.totalMatched + ' 节点';
+      } else {
+        document.getElementById('inspectCount').textContent = '输出 ' + data.finalCount + ' / 原始 ' + data.totalRaw;
+      }
+
+      // 5. 渲染节点列表
+      const nodeList = document.getElementById('nodeList');
+      if (filtered.length === 0) {
+        nodeList.innerHTML = \`
+          <div style="padding: 2rem; text-align: center; color: var(--text-dim); font-size: 0.85rem;">
+            🔍 当前筛选条件下无匹配节点
+          </div>
+        \`;
+        return;
+      }
+
+      nodeList.innerHTML = filtered.map((n, idx) => {
+        const conv = n.conversion || {};
+        const status = conv.status || 'perfect';
+        const isOpen = openedNodeSet.has(idx);
+        let badge = '';
+        let actionDesc = '';
+
+        if (status === 'fatal') {
+          badge = \`<span class="node-tag-fatal">❌ 无法转换 (已排除)</span>\`;
+          actionDesc = \`<span style="color: var(--danger);">[处理] 该节点未加入最终配置，策略组已自动剔除。</span>\`;
+        } else if (status === 'warning') {
+          const count = (conv.unsupportedParams?.length || 0) + (conv.warnings?.length || 0);
+          badge = \`<span class="node-tag-warn">⚠️ 有转换警告 (\${count})</span>\`;
+          actionDesc = \`<span style="color: var(--warning);">[处理] 节点仍然输出到最终配置中。已自动剔除未映射参数以确保连接不报错。建议检查这些参数是否影响连接。</span>\`;
+        } else {
+          badge = \`<span class="node-tag-perfect">✅ 完整转换</span>\`;
+          actionDesc = \`<span style="color: var(--success);">[处理] 所有参数均已忠实映射到 Mihomo，无任何丢失。</span>\`;
+        }
+
+        const unmappedList = (conv.unsupportedParams || []);
+        const warningList = (conv.warnings || []);
+
+        return \`
+          <div class="node-row-wrapper">
+            <div class="node-item" onclick="toggleNodeDetail(\${idx})">
+              <div style="overflow: hidden; text-overflow: ellipsis; padding-right: 8px;">
+                <div style="font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">\${escapeHtml(n.name)}</div>
+                <div style="font-size: 0.725rem; color: var(--text-dim); margin-top: 2px;">
+                  \${n.server}:\${n.port}
+                  \${status === 'fatal' && conv.skipReason ? \`<span style="color: var(--danger); margin-left: 6px;">[原因] \${escapeHtml(conv.skipReason)}</span>\` : ''}
+                </div>
+              </div>
+              <div style="display: flex; gap: 6px; align-items: center; flex-shrink: 0;">
+                \${badge}
+                <span class="node-tag">\${(n.type || '').toUpperCase()}</span>
+                <button class="node-detail-btn" id="btnDetail-\${idx}" onclick="toggleNodeDetail(\${idx}, event)">
+                  \${isOpen ? '收起详情 ▲' : '查看详情 ▼'}
+                </button>
+              </div>
+            </div>
+            <div class="node-details \${isOpen ? 'open' : ''}" id="nodeDetail-\${idx}">
+              <div class="node-detail-grid">
+                <div class="node-detail-row">
+                  <span class="node-detail-label">节点名称:</span>
+                  <span style="color: var(--text-main); font-weight: 500;">\${escapeHtml(n.name)}</span>
+                </div>
+                <div class="node-detail-row">
+                  <span class="node-detail-label">协议转换:</span>
+                  <span>\${(n.type || '').toUpperCase()} ➔ Mihomo (Clash Meta)</span>
+                </div>
+                <div class="node-detail-row">
+                  <span class="node-detail-label">转换质量:</span>
+                  <span>\${status === 'perfect' ? '✅ 完整表达 (无损)' : status === 'warning' ? '⚠️ 有损转换 (保留在原始节点)' : '❌ 无法安全转换 (Gate 拦截)'}</span>
+                </div>
+
+                \${status === 'fatal' && conv.skipReason ? \`
+                  <div class="node-detail-row">
+                    <span class="node-detail-label" style="color: var(--danger);">排除原因:</span>
+                    <span style="color: var(--danger);">\${escapeHtml(conv.skipReason)}</span>
+                  </div>
+                \` : ''}
+
+                \${warningList.length > 0 ? \`
+                  <div class="node-detail-row" style="flex-direction: column; gap: 2px;">
+                    <span class="node-detail-label">警告详情:</span>
+                    <div style="background: rgba(0,0,0,0.25); padding: 6px 8px; border-radius: 4px; border: 1px solid rgba(245, 158, 11, 0.2);">
+                      \${warningList.map(w => \`<div style="color: var(--warning); margin-bottom: 2px;">• \${escapeHtml(w)}</div>\`).join('')}
+                    </div>
+                  </div>
+                \` : ''}
+
+                \${unmappedList.length > 0 ? \`
+                  <div class="node-detail-row" style="flex-direction: column; gap: 2px;">
+                    <span class="node-detail-label">未映射参数:</span>
+                    <div>
+                      \${unmappedList.map(p => \`<span class="unmapped-pill">\${escapeHtml(p)}</span>\`).join('')}
+                    </div>
+                  </div>
+                \` : ''}
+
+                <div class="node-detail-row" style="margin-top: 4px; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 4px;">
+                  <span class="node-detail-label">处理结果:</span>
+                  <div>\${actionDesc}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        \`;
+      }).join('');
+    }
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    function escapeJsParam(str) {
+      if (!str) return '';
+      return String(str).replace(/\\\\/g, '\\\\\\\\').replace(/'/g, "\\\\'");
     }
 
     let inspectTimer = null;

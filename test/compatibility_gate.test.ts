@@ -7,6 +7,7 @@ import { FIXTURES } from './fixtures/nodes';
 import { writeFileSync, unlinkSync } from 'fs';
 import { spawnSync } from 'child_process';
 import yaml from 'js-yaml';
+import app from '../src/index';
 
 describe('Tower-Inspired Compatibility Gate Suite', () => {
   test('1. Valid VLESS Reality node passes Compatibility Gate (perfect/warning, emitted=true)', () => {
@@ -589,5 +590,45 @@ describe('Tower-Inspired Compatibility Gate Suite', () => {
     expect(res.lossy).toBe(true);
     expect(res.unsupportedParams).toContain('unmodeledFieldFoo');
     expect(res.warnings.some(w => w.field === 'unmodeledFieldFoo' && w.message.includes('known-but-unmapped'))).toBe(true);
+  });
+
+  // ── Warning Inspector 聚合诊断接口测试 ────────────────────────────────────
+
+  test('17. /api/preview returns warningAggregations with counts sorted descending', async () => {
+    const rawNodesStr = [
+      // 2 个包含 x-padding-bytes 未知 extra 的 VLESS 节点
+      'vless://b831381d-6324-4d53-ad4f-8cda48b30811@1.1.1.1:443?type=xhttp&security=tls&sni=a.com&extra=%7B%22customExtraA%22%3A1%7D#Node1',
+      'vless://b831381d-6324-4d53-ad4f-8cda48b30811@1.1.1.2:443?type=xhttp&security=tls&sni=a.com&extra=%7B%22customExtraA%22%3A2%7D#Node2',
+      // 1 个包含 customExtraB 的 VLESS 节点
+      'vless://b831381d-6324-4d53-ad4f-8cda48b30811@1.1.1.3:443?type=xhttp&security=tls&sni=a.com&extra=%7B%22customExtraB%22%3A3%7D#Node3',
+      // 1 个完美的 Hysteria 2 节点
+      FIXTURES.hysteria2
+    ].join('\n');
+
+    const req = new Request('http://localhost/api/preview', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: rawNodesStr, token: 'test-secret-token' })
+    });
+
+    const env = { AUTH_TOKEN: 'test-secret-token' };
+    const res = await app.fetch(req, env as any, {} as any);
+    expect(res.status).toBe(200);
+
+    const json: any = await res.json();
+    expect(json.ok).toBe(true);
+    expect(json.warningCount).toBe(3);
+    expect(json.warningAggregations).toBeDefined();
+    expect(Array.isArray(json.warningAggregations)).toBe(true);
+
+    // 验证聚合与排序：customExtraA (2 个节点) 排在 customExtraB (1 个节点) 前面
+    const aggA = json.warningAggregations.find((a: any) => a.param.includes('customExtraA'));
+    const aggB = json.warningAggregations.find((a: any) => a.param.includes('customExtraB'));
+    expect(aggA).toBeDefined();
+    expect(aggA.count).toBe(2);
+    expect(aggA.protocol).toBe('VLESS');
+    expect(aggB).toBeDefined();
+    expect(aggB.count).toBe(1);
+    expect(json.warningAggregations[0].count).toBeGreaterThanOrEqual(json.warningAggregations[1].count);
   });
 });

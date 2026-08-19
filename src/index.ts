@@ -253,6 +253,33 @@ export default {
 
         const finalCount = perfectCount + warningCount;
 
+        // 计算全量 warning / unsupportedParams 聚合诊断数据
+        const warningAggMap: Record<string, { protocol: string; param: string; sampleMessage?: string; count: number }> = {};
+        for (const { n, adaptRes, status } of allConvResults) {
+          if (status === 'warning') {
+            const proto = n.protocol.toUpperCase();
+            if (adaptRes.unsupportedParams && adaptRes.unsupportedParams.length > 0) {
+              for (const p of adaptRes.unsupportedParams) {
+                const key = `${proto}::${p}`;
+                if (!warningAggMap[key]) {
+                  warningAggMap[key] = { protocol: proto, param: p, count: 0 };
+                }
+                warningAggMap[key].count++;
+              }
+            } else if (adaptRes.warnings && adaptRes.warnings.length > 0) {
+              for (const w of adaptRes.warnings) {
+                const p = w.field || w.message;
+                const key = `${proto}::${p}`;
+                if (!warningAggMap[key]) {
+                  warningAggMap[key] = { protocol: proto, param: p, sampleMessage: w.message, count: 0 };
+                }
+                warningAggMap[key].count++;
+              }
+            }
+          }
+        }
+        const warningAggregations = Object.values(warningAggMap).sort((a, b) => b.count - a.count);
+
         // UI 展示截取前 1000 条（统计已在全量计算完毕）
         const nodeItems = allConvResults.slice(0, 1000).map(({ n, adaptRes, status }) => ({
           name: n.name,
@@ -291,6 +318,7 @@ export default {
             finalCount,
             userinfo: userinfoObj,
             regions: regionStats,
+            warningAggregations,
             nodes: nodeItems
           }),
           {
