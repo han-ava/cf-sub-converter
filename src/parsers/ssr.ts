@@ -16,13 +16,24 @@ export function parseShadowsocksR(urlStr: string): ShadowsocksRNode | null {
     if (parts.length < 6) return null;
 
     const server = parts[0] || '';
-    const port = parseInt(parts[1] || '0', 10);
+    const rawPort = parts[1] || '';
+    let port = 0;
+    let portError: string | undefined;
+    if (!/^\d+$/.test(rawPort.trim())) {
+      portError = `端口 [${rawPort}] 不是合法的纯数字整数`;
+      port = 8388;
+    } else {
+      port = parseInt(rawPort.trim(), 10);
+      if (port < 1 || port > 65535) {
+        portError = `端口 [${port}] 超出合法范围 (1-65535)`;
+      }
+    }
     const protocol = parts[2] || 'origin';
     const cipher = parts[3] || '';
     const obfs = parts[4] || 'plain';
     const password = safeBase64Decode(parts.slice(5).join(':'));
 
-    if (!server || !port || !cipher || !password) return null;
+    if (!server || !cipher || !password) return null;
 
     let name = 'ShadowsocksR Node';
     let obfsParam = '';
@@ -47,6 +58,13 @@ export function parseShadowsocksR(urlStr: string): ShadowsocksRNode | null {
 
     const extras = q.getUnusedExtras();
     const invalidParams = q.getInvalidParams();
+    if (portError) {
+      invalidParams.push({
+        key: 'port',
+        value: rawPort,
+        reason: portError
+      });
+    }
 
     return {
       name,

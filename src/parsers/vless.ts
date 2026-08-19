@@ -1,6 +1,6 @@
 // src/parsers/vless.ts
 import { VlessNode } from '../types';
-import { parseRawQuery, QueryParamReader, tryDecodeURIComponent } from '../utils';
+import { parseRawQuery, parseStrictEndpoint, QueryParamReader, tryDecodeURIComponent } from '../utils';
 
 export function parseVless(urlStr: string): VlessNode | null {
   try {
@@ -24,21 +24,9 @@ export function parseVless(urlStr: string): VlessNode | null {
     const serverPortStr = questionIndex !== -1 ? rest.substring(0, questionIndex) : rest;
     const queryPart = questionIndex !== -1 ? rest.substring(questionIndex + 1) : '';
 
-    let server = '';
-    let port = 443;
-
-    if (serverPortStr.startsWith('[')) {
-      const closingBracket = serverPortStr.indexOf(']');
-      if (closingBracket !== -1) {
-        server = serverPortStr.substring(1, closingBracket);
-        const portPart = serverPortStr.substring(closingBracket + 1);
-        port = parseInt(portPart.startsWith(':') ? portPart.substring(1) : portPart, 10) || 443;
-      }
-    } else {
-      const parts = serverPortStr.split(':');
-      server = parts[0] || '';
-      port = parseInt(parts[1] || '443', 10) || 443;
-    }
+    const ep = parseStrictEndpoint(serverPortStr, 443);
+    const server = ep.server;
+    const port = ep.port;
 
     if (!server || !uuid) return null;
 
@@ -73,6 +61,13 @@ export function parseVless(urlStr: string): VlessNode | null {
 
     const extras = q.getUnusedExtras();
     const invalidParams = q.getInvalidParams();
+    if (ep.error) {
+      invalidParams.push({
+        key: 'port',
+        value: ep.rawPort || '',
+        reason: ep.error
+      });
+    }
 
     const transport: VlessNode['protocolData']['transport'] = {
       type,

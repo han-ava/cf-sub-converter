@@ -207,8 +207,6 @@ export interface TrojanNode extends BaseNode {
       path?: string;
       headers?: Record<string, string>;
       serviceName?: string;
-      mode?: string;
-      headerType?: string;
     };
     invalidParams?: InvalidQueryParam[];
     extras: Record<string, unknown>;
@@ -220,13 +218,21 @@ export interface TuicNode extends BaseNode {
   protocolData: {
     uuid?: string;
     password?: string;
-    sni?: string;
-    alpn?: string[];
-    congestionControl?: string;
+    token?: string;
+    version?: 4 | 5;
+    ip?: string;
+    heartbeatInterval?: string | number;
+    reduceRtt?: boolean;
+    requestTimeout?: string | number;
+    disableSni?: boolean;
+    fastOpen?: boolean;
+    maxOpenStreams?: number;
+    maxUdpRelayPacketSize?: number;
+    congestionController?: string;
     udpRelayMode?: string;
+    alpn?: string[];
+    sni?: string;
     skipCertVerify?: boolean;
-    zeroRttHandshake?: boolean;
-    heartbeat?: string;
     invalidParams?: InvalidQueryParam[];
     extras: Record<string, unknown>;
   };

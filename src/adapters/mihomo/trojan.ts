@@ -2,6 +2,10 @@
 import { AdapterResult, ConversionWarning, TrojanNode } from '../../types';
 import { parseALPN, detectUnmappedFields, processInvalidParams } from '../../utils';
 
+const SUPPORTED_TROJAN_TRANSPORTS = new Set([
+  'tcp', 'ws', 'grpc'
+]);
+
 export function adaptTrojanToMihomo(node: TrojanNode): AdapterResult {
   const warnings: ConversionWarning[] = [];
   const unsupportedParams: string[] = [];
@@ -19,8 +23,21 @@ export function adaptTrojanToMihomo(node: TrojanNode): AdapterResult {
     };
   }
 
+  // Compatibility Gate: 传输协议白名单校验 (Mihomo 官方 Trojan 仅支持 tcp, ws, grpc)
+  const rawTransportType = (p.transport?.type || 'tcp').toLowerCase();
+  if (!SUPPORTED_TROJAN_TRANSPORTS.has(rawTransportType)) {
+    return {
+      fatal: true,
+      lossy: true,
+      emitted: false,
+      skipReason: `Mihomo 不支持的 Trojan 传输协议: [${rawTransportType}] (仅支持 tcp, ws, grpc)`,
+      warnings: [{ level: 'fatal', field: 'transport.type', message: `不支持的 Trojan 传输协议: [${rawTransportType}] (仅支持 tcp, ws, grpc)` }],
+      unsupportedParams: ['transport.type']
+    };
+  }
+
   // Compatibility Gate: 非法参数 (invalidParams) 分类拦截与警告
-  const invRes = processInvalidParams(p.invalidParams, new Set(['password', 'server', 'port']));
+  const invRes = processInvalidParams(p.invalidParams, new Set(['password', 'server', 'port', 'type']));
   if (invRes.fatal) {
     return {
       fatal: true,
@@ -42,7 +59,7 @@ export function adaptTrojanToMihomo(node: TrojanNode): AdapterResult {
     password: p.password.trim(),
     sni: p.sni || node.server,
     'skip-cert-verify': !!p.skipCertVerify,
-    network: p.transport?.type || 'tcp',
+    network: rawTransportType,
     udp: node.udp !== false
   };
 
@@ -55,7 +72,7 @@ export function adaptTrojanToMihomo(node: TrojanNode): AdapterResult {
 
   const t = p.transport;
   if (t) {
-    const net = String(t.type || 'tcp').toLowerCase();
+    const net = rawTransportType;
     if (net === 'ws') {
       config['ws-opts'] = {
         path: t.path || '/',
@@ -65,16 +82,6 @@ export function adaptTrojanToMihomo(node: TrojanNode): AdapterResult {
       config['grpc-opts'] = {
         'grpc-service-name': t.serviceName || ''
       };
-    } else if (net === 'http') {
-      config['http-opts'] = {
-        path: [t.path || '/'],
-        headers: t.headers?.Host ? { Host: [t.headers.Host] } : undefined
-      };
-    } else if (net === 'h2') {
-      config['h2-opts'] = {
-        host: t.headers?.Host ? [t.headers.Host] : [node.server],
-        path: t.path || '/'
-      };
     }
   }
 
@@ -83,7 +90,7 @@ export function adaptTrojanToMihomo(node: TrojanNode): AdapterResult {
     'password', 'sni', 'alpn', 'skipCertVerify', 'fingerprint', 'transport', 'invalidParams', 'extras'
   ]);
   const HANDLED_TROJAN_TRANSPORT_KEYS = new Set([
-    'type', 'path', 'headers', 'serviceName', 'mode', 'headerType'
+    'type', 'path', 'headers', 'serviceName'
   ]);
   const unmappedProto = detectUnmappedFields(p as Record<string, unknown>, HANDLED_TROJAN_PROTOCOL_KEYS);
   const unmappedTrans = p.transport ? detectUnmappedFields(p.transport as Record<string, unknown>, HANDLED_TROJAN_TRANSPORT_KEYS, 'transport') : [];

@@ -3,13 +3,13 @@ import { AdapterResult, ConversionWarning, ShadowsocksNode } from '../../types';
 import { strictBase64Decode, detectUnmappedFields, processInvalidParams } from '../../utils';
 
 const SUPPORTED_SS_PLUGINS = new Set([
-  'v2ray-plugin',
   'obfs',
-  'obfs-local',
-  'simple-obfs',
+  'v2ray-plugin',
+  'gost-plugin',
   'shadow-tls',
   'restls',
-  'kcptun'
+  'kcptun',
+  'jls'
 ]);
 
 export function adaptShadowsocksToMihomo(node: ShadowsocksNode): AdapterResult {
@@ -81,10 +81,19 @@ export function adaptShadowsocksToMihomo(node: ShadowsocksNode): AdapterResult {
     }
   }
 
-  // Compatibility Gate: 插件协议支持检查
+  // Compatibility Gate: 插件协议规范化与支持检查
+  let normalizedPlugin: string | undefined;
   if (p.plugin) {
-    const pluginLower = p.plugin.toLowerCase();
-    if (!SUPPORTED_SS_PLUGINS.has(pluginLower)) {
+    const pluginLower = p.plugin.toLowerCase().trim();
+    if (pluginLower === 'obfs-local' || pluginLower === 'simple-obfs') {
+      normalizedPlugin = 'obfs';
+    } else if (pluginLower === 'v2ray') {
+      normalizedPlugin = 'v2ray-plugin';
+    } else {
+      normalizedPlugin = pluginLower;
+    }
+
+    if (!SUPPORTED_SS_PLUGINS.has(normalizedPlugin)) {
       return {
         fatal: true,
         lossy: true,
@@ -106,8 +115,8 @@ export function adaptShadowsocksToMihomo(node: ShadowsocksNode): AdapterResult {
     udp: node.udp !== false
   };
 
-  if (p.plugin) {
-    config.plugin = p.plugin;
+  if (normalizedPlugin) {
+    config.plugin = normalizedPlugin;
     if (p.pluginOpts) {
       config['plugin-opts'] = p.pluginOpts;
     }

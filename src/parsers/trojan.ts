@@ -1,6 +1,6 @@
 // src/parsers/trojan.ts
 import { TrojanNode } from '../types';
-import { parseRawQuery, QueryParamReader, tryDecodeURIComponent } from '../utils';
+import { parseRawQuery, parseStrictEndpoint, QueryParamReader, tryDecodeURIComponent } from '../utils';
 
 export function parseTrojan(urlStr: string): TrojanNode | null {
   try {
@@ -23,21 +23,9 @@ export function parseTrojan(urlStr: string): TrojanNode | null {
     const serverPortStr = questionIndex !== -1 ? rest.substring(0, questionIndex) : rest;
     const queryPart = questionIndex !== -1 ? rest.substring(questionIndex + 1) : '';
 
-    let server = '';
-    let port = 443;
-
-    if (serverPortStr.startsWith('[')) {
-      const closingBracket = serverPortStr.indexOf(']');
-      if (closingBracket !== -1) {
-        server = serverPortStr.substring(1, closingBracket);
-        const portPart = serverPortStr.substring(closingBracket + 1);
-        port = parseInt(portPart.startsWith(':') ? portPart.substring(1) : portPart, 10) || 443;
-      }
-    } else {
-      const parts = serverPortStr.split(':');
-      server = parts[0] || '';
-      port = parseInt(parts[1] || '443', 10) || 443;
-    }
+    const ep = parseStrictEndpoint(serverPortStr, 443);
+    const server = ep.server;
+    const port = ep.port;
 
     if (!server || !password) return null;
 
@@ -54,19 +42,22 @@ export function parseTrojan(urlStr: string): TrojanNode | null {
     const path = q.get('path', 'ws-path', 'ws_path', 'wspath') || (type === 'ws' ? '/' : undefined);
     const host = q.get('host', 'ws-host', 'ws_host', 'wshost', 'obfs-host', 'obfs_host', 'obfshost');
     const serviceName = q.get('serviceName', 'servicename', 'service-name', 'service_name', 'grpc-service-name', 'grpc_service_name', 'grpcservicename') || (type === 'grpc' ? q.get('path', 'ws-path', 'ws_path', 'wspath') : undefined);
-    const mode = q.get('mode', 'grpc-mode', 'grpc_mode', 'grpcmode');
-    const headerType = q.get('headerType', 'headertype', 'header-type', 'header_type');
 
     const extras = q.getUnusedExtras();
     const invalidParams = q.getInvalidParams();
+    if (ep.error) {
+      invalidParams.push({
+        key: 'port',
+        value: ep.rawPort || '',
+        reason: ep.error
+      });
+    }
 
     const transport: TrojanNode['protocolData']['transport'] = {
       type,
       path,
       headers: host ? { Host: host } : undefined,
-      serviceName,
-      mode,
-      headerType
+      serviceName
     };
 
     return {

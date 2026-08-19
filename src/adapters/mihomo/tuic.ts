@@ -7,20 +7,58 @@ export function adaptTuicToMihomo(node: TuicNode): AdapterResult {
   const unsupportedParams: string[] = [];
   const p = node.protocolData;
 
-  // Compatibility Gate: 必需凭据校验
-  if (!p.uuid && !p.password) {
+  // Compatibility Gate: 凭据与版本校验 (TUIC V4: token; TUIC V5: uuid + password)
+  const hasToken = !!(p.token && p.token.trim());
+  const hasUuid = !!(p.uuid && p.uuid.trim());
+  const hasPassword = !!(p.password && p.password.trim());
+
+  if (hasToken && (hasUuid || hasPassword)) {
     return {
       fatal: true,
       lossy: true,
       emitted: false,
-      skipReason: `节点 [${node.name}] 缺少必需的 TUIC UUID 或密码`,
-      warnings: [{ level: 'fatal', field: 'uuid', message: `节点 [${node.name}] 缺少必需的 TUIC UUID 或密码` }],
-      unsupportedParams: ['uuid']
+      skipReason: `节点 [${node.name}] TUIC 凭据冲突：TUIC V4 (token) 与 V5 (uuid/password) 不可混用`,
+      warnings: [{ level: 'fatal', field: 'token', message: 'TUIC V4 (token) 与 V5 (uuid/password) 凭据冲突' }],
+      unsupportedParams: ['token', 'uuid', 'password']
     };
   }
 
+  if (!hasToken && !hasUuid && !hasPassword) {
+    return {
+      fatal: true,
+      lossy: true,
+      emitted: false,
+      skipReason: `节点 [${node.name}] 缺少必需的 TUIC 凭据 (V4 需要 token，V5 需要 uuid 与 password)`,
+      warnings: [{ level: 'fatal', field: 'uuid', message: `节点 [${node.name}] 缺少必需的 TUIC 凭据` }],
+      unsupportedParams: ['uuid', 'password', 'token']
+    };
+  }
+
+  if (!hasToken) {
+    if (hasUuid && !hasPassword) {
+      return {
+        fatal: true,
+        lossy: true,
+        emitted: false,
+        skipReason: `节点 [${node.name}] TUIC V5 缺少必需的 password`,
+        warnings: [{ level: 'fatal', field: 'password', message: 'TUIC V5 缺少必需的 password' }],
+        unsupportedParams: ['password']
+      };
+    }
+    if (!hasUuid && hasPassword) {
+      return {
+        fatal: true,
+        lossy: true,
+        emitted: false,
+        skipReason: `节点 [${node.name}] TUIC V5 缺少必需的 uuid`,
+        warnings: [{ level: 'fatal', field: 'uuid', message: 'TUIC V5 缺少必需的 uuid' }],
+        unsupportedParams: ['uuid']
+      };
+    }
+  }
+
   // Compatibility Gate: 非法参数 (invalidParams) 分类拦截与警告
-  const invRes = processInvalidParams(p.invalidParams, new Set(['uuid', 'password', 'server', 'port']));
+  const invRes = processInvalidParams(p.invalidParams, new Set(['uuid', 'password', 'token', 'server', 'port']));
   if (invRes.fatal) {
     return {
       fatal: true,
@@ -41,28 +79,62 @@ export function adaptTuicToMihomo(node: TuicNode): AdapterResult {
     type: 'tuic',
     server: node.server,
     port: node.port,
-    uuid: p.uuid || '',
-    password: p.password || '',
-    sni: p.sni || node.server,
-    'congestion-controller': p.congestionControl || 'bbr',
+    'congestion-controller': p.congestionController || 'bbr',
     'udp-relay-mode': p.udpRelayMode || 'native',
     alpn: alpn && alpn.length > 0 ? alpn : ['h3'],
     'skip-cert-verify': !!p.skipCertVerify,
     udp: node.udp !== false
   };
 
-  if (p.zeroRttHandshake !== undefined) {
-    config['zero-rtt-handshake'] = p.zeroRttHandshake;
+  if (hasToken) {
+    config.token = p.token!.trim();
+  } else {
+    config.uuid = p.uuid!.trim();
+    config.password = p.password!.trim();
   }
 
-  if (p.heartbeat !== undefined) {
-    config.heartbeat = p.heartbeat;
+  if (p.ip) {
+    config.ip = p.ip;
+  }
+
+  if (p.heartbeatInterval !== undefined) {
+    config['heartbeat-interval'] = p.heartbeatInterval;
+  }
+
+  if (p.reduceRtt !== undefined) {
+    config['reduce-rtt'] = p.reduceRtt;
+  }
+
+  if (p.requestTimeout !== undefined) {
+    config['request-timeout'] = p.requestTimeout;
+  }
+
+  if (p.disableSni !== undefined) {
+    config['disable-sni'] = p.disableSni;
+  }
+
+  if (!p.disableSni) {
+    config.sni = p.sni || node.server;
+  }
+
+  if (p.fastOpen !== undefined) {
+    config['fast-open'] = p.fastOpen;
+  }
+
+  if (p.maxOpenStreams !== undefined) {
+    config['max-open-streams'] = p.maxOpenStreams;
+  }
+
+  if (p.maxUdpRelayPacketSize !== undefined) {
+    config['max-udp-relay-packet-size'] = p.maxUdpRelayPacketSize;
   }
 
   // 自动检测 known-but-unmapped：对比已解析字段集与适配器建模字段集
   const HANDLED_TUIC_PROTOCOL_KEYS = new Set([
-    'uuid', 'password', 'sni', 'alpn', 'skipCertVerify', 'congestionControl',
-    'udpRelayMode', 'zeroRttHandshake', 'heartbeat', 'invalidParams', 'extras'
+    'uuid', 'password', 'token', 'version', 'ip', 'heartbeatInterval',
+    'reduceRtt', 'requestTimeout', 'disableSni', 'fastOpen', 'maxOpenStreams',
+    'maxUdpRelayPacketSize', 'congestionController', 'udpRelayMode', 'alpn',
+    'sni', 'skipCertVerify', 'invalidParams', 'extras'
   ]);
   const unmapped = detectUnmappedFields(p as Record<string, unknown>, HANDLED_TUIC_PROTOCOL_KEYS);
   for (const item of unmapped) {

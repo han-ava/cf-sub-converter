@@ -311,6 +311,189 @@ export class QueryParamReader {
   }
 }
 
+export interface ParsedEndpoint {
+  server: string;
+  port: number;
+  error?: string;
+  rawPort?: string;
+}
+
+/**
+ * 严格解析 URI Endpoint (IPv4 / IPv6 / Domain + Port)
+ * 杜绝 443abc -> 443 猜测截断或宽松容错
+ */
+export function parseStrictEndpoint(serverPortStr: string, defaultPort: number = 443): ParsedEndpoint {
+  if (!serverPortStr) {
+    return { server: '', port: defaultPort, error: 'Endpoint 不能为空' };
+  }
+
+  let cleanStr = serverPortStr.trim();
+  if (cleanStr.endsWith('/')) {
+    cleanStr = cleanStr.replace(/\/+$/, '');
+  }
+
+  let server = '';
+  let rawPort: string | undefined = undefined;
+
+  if (cleanStr.startsWith('[')) {
+    const closingBracket = cleanStr.indexOf(']');
+    if (closingBracket === -1) {
+      return { server: '', port: defaultPort, error: 'IPv6 地址格式错误: 缺少闭合括号 ]' };
+    }
+    server = cleanStr.substring(1, closingBracket);
+    const afterBracket = cleanStr.substring(closingBracket + 1);
+    if (afterBracket.startsWith(':')) {
+      rawPort = afterBracket.substring(1);
+    } else if (afterBracket.length > 0) {
+      return { server, port: defaultPort, error: `IPv6 地址后包含非法字符: ${afterBracket}`, rawPort: afterBracket };
+    }
+  } else {
+    const colonIndex = cleanStr.lastIndexOf(':');
+    if (colonIndex !== -1) {
+      server = cleanStr.substring(0, colonIndex);
+      rawPort = cleanStr.substring(colonIndex + 1);
+    } else {
+      server = cleanStr;
+    }
+  }
+
+  server = server.trim();
+  if (!server) {
+    return { server: '', port: defaultPort, error: '服务器地址不能为空' };
+  }
+
+  if (rawPort === undefined || rawPort === '') {
+    return { server, port: defaultPort };
+  }
+
+  const cleanPort = rawPort.trim();
+  if (!/^\d+$/.test(cleanPort)) {
+    return { server, port: defaultPort, error: `端口 [${rawPort}] 不是合法的纯数字整数`, rawPort };
+  }
+
+  const parsedPort = parseInt(cleanPort, 10);
+  if (parsedPort < 1 || parsedPort > 65535) {
+    return { server, port: defaultPort, error: `端口 [${parsedPort}] 超出合法范围 (1-65535)`, rawPort };
+  }
+
+  return { server, port: parsedPort, rawPort };
+}
+
+/**
+ * 结构化 JSON 字段严格读取器 (VMess 等 JSON 载荷解析专用)
+ * 提供严格类型转换、别名回退与 invalidFields 追踪
+ */
+export class JsonFieldReader {
+  private json: Record<string, any>;
+  private usedKeys: Set<string> = new Set();
+  private invalidFields: InvalidQueryParam[] = [];
+
+  constructor(json: Record<string, any>) {
+    this.json = json && typeof json === 'object' ? json : {};
+  }
+
+  getString(...aliases: string[]): string | undefined {
+    const aliasSet = new Set(aliases.map(x => x.toLowerCase()));
+    for (const [k, v] of Object.entries(this.json)) {
+      if (aliasSet.has(k.toLowerCase())) {
+        this.usedKeys.add(k.toLowerCase());
+        if (v !== undefined && v !== null && v !== '') {
+          return String(v).trim();
+        }
+        return undefined;
+      }
+    }
+    return undefined;
+  }
+
+  getStrictInt(...aliases: string[]): number | undefined {
+    const aliasSet = new Set(aliases.map(x => x.toLowerCase()));
+    for (const [k, v] of Object.entries(this.json)) {
+      if (aliasSet.has(k.toLowerCase())) {
+        this.usedKeys.add(k.toLowerCase());
+        if (v === undefined || v === null || v === '') return undefined;
+        if (typeof v === 'number') {
+          if (Number.isInteger(v)) return v;
+          this.invalidFields.push({
+            key: k,
+            value: String(v),
+            reason: `字段值 "${v}" 是浮点数而非合法整数`
+          });
+          return undefined;
+        }
+        const str = String(v).trim();
+        if (/^-?\d+$/.test(str)) {
+          const parsed = parseInt(str, 10);
+          if (!isNaN(parsed)) return parsed;
+        }
+        this.invalidFields.push({
+          key: k,
+          value: String(v),
+          reason: `字段值 "${v}" 不是合法的整数 (包含非数字字符或格式错误)`
+        });
+        return undefined;
+      }
+    }
+    return undefined;
+  }
+
+  getStrictBool(...aliases: string[]): boolean | undefined {
+    const aliasSet = new Set(aliases.map(x => x.toLowerCase()));
+    for (const [k, v] of Object.entries(this.json)) {
+      if (aliasSet.has(k.toLowerCase())) {
+        this.usedKeys.add(k.toLowerCase());
+        if (v === undefined || v === null || v === '') return undefined;
+        if (typeof v === 'boolean') return v;
+        const str = String(v).toLowerCase().trim();
+        if (str === '1' || str === 'true') return true;
+        if (str === '0' || str === 'false') return false;
+        this.invalidFields.push({
+          key: k,
+          value: String(v),
+          reason: `字段值 "${v}" 不是合法的布尔值 (仅允许 true/false/1/0)`
+        });
+        return undefined;
+      }
+    }
+    return undefined;
+  }
+
+  getRaw(...aliases: string[]): any {
+    const aliasSet = new Set(aliases.map(x => x.toLowerCase()));
+    for (const [k, v] of Object.entries(this.json)) {
+      if (aliasSet.has(k.toLowerCase())) {
+        this.usedKeys.add(k.toLowerCase());
+        return v;
+      }
+    }
+    return undefined;
+  }
+
+  markRecognized(...aliases: string[]): void {
+    const aliasSet = new Set(aliases.map(x => x.toLowerCase()));
+    for (const k of Object.keys(this.json)) {
+      if (aliasSet.has(k.toLowerCase())) {
+        this.usedKeys.add(k.toLowerCase());
+      }
+    }
+  }
+
+  getInvalidFields(): InvalidQueryParam[] {
+    return [...this.invalidFields];
+  }
+
+  getUnusedExtras(ignoreKeys: string[] = []): Record<string, unknown> {
+    const ignored = new Set(ignoreKeys.map(k => k.toLowerCase()));
+    const extras: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(this.json)) {
+      if (!this.usedKeys.has(k.toLowerCase()) && !ignored.has(k.toLowerCase())) {
+        extras[k] = v;
+      }
+    }
+    return extras;
+  }
+}
+
 /**
  * 校验并分类 invalidParams：
  * 关键参数（如 uuid, password, cipher, pbk, port, server）非法直接致命拦截 (fatal: true)

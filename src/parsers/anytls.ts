@@ -1,6 +1,6 @@
 // src/parsers/anytls.ts
 import { AnyTLSNode } from '../types';
-import { parseRawQuery, QueryParamReader, safeBase64Decode, tryDecodeURIComponent } from '../utils';
+import { parseRawQuery, parseStrictEndpoint, QueryParamReader, safeBase64Decode, tryDecodeURIComponent } from '../utils';
 
 export function parseAnyTLS(urlStr: string): AnyTLSNode | null {
   try {
@@ -24,47 +24,24 @@ export function parseAnyTLS(urlStr: string): AnyTLSNode | null {
     const q = new QueryParamReader(rawQuery.entries);
 
     let password = '';
-    let server = '';
-    let port = 443;
+    let serverPortStr = '';
 
     if (raw.includes('@')) {
       const atIndex = raw.indexOf('@');
       password = tryDecodeURIComponent(raw.substring(0, atIndex));
-      const rest = raw.substring(atIndex + 1);
-
-      if (rest.startsWith('[')) {
-        const closingBracket = rest.indexOf(']');
-        if (closingBracket !== -1) {
-          server = rest.substring(1, closingBracket);
-          const portPart = rest.substring(closingBracket + 1);
-          port = parseInt(portPart.startsWith(':') ? portPart.substring(1) : portPart, 10) || 443;
-        }
-      } else {
-        const parts = rest.split(':');
-        server = parts[0] || '';
-        port = parseInt(parts[1] || '443', 10) || 443;
-      }
+      serverPortStr = raw.substring(atIndex + 1);
     } else {
       const decoded = safeBase64Decode(raw);
       if (decoded && decoded.includes('@')) {
         const atIndex = decoded.indexOf('@');
         password = decoded.substring(0, atIndex);
-        const rest = decoded.substring(atIndex + 1);
-
-        if (rest.startsWith('[')) {
-          const closingBracket = rest.indexOf(']');
-          if (closingBracket !== -1) {
-            server = rest.substring(1, closingBracket);
-            const portPart = rest.substring(closingBracket + 1);
-            port = parseInt(portPart.startsWith(':') ? portPart.substring(1) : portPart, 10) || 443;
-          }
-        } else {
-          const parts = rest.split(':');
-          server = parts[0] || '';
-          port = parseInt(parts[1] || '443', 10) || 443;
-        }
+        serverPortStr = decoded.substring(atIndex + 1);
       }
     }
+
+    const ep = parseStrictEndpoint(serverPortStr, 443);
+    const server = ep.server;
+    const port = ep.port;
 
     if (!server || !password) return null;
 
@@ -81,6 +58,13 @@ export function parseAnyTLS(urlStr: string): AnyTLSNode | null {
 
     const extras = q.getUnusedExtras();
     const invalidParams = q.getInvalidParams();
+    if (ep.error) {
+      invalidParams.push({
+        key: 'port',
+        value: ep.rawPort || '',
+        reason: ep.error
+      });
+    }
 
     return {
       name,

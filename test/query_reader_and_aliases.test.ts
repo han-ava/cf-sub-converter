@@ -133,14 +133,15 @@ describe('QueryParamReader & Universal Alias Suite', () => {
     expect(resValid.emitted).toBe(true);
     expect(resValid.config!.fingerprint).toBe(validSha);
 
-    // Invalid SHA-256 (e.g. not 64 hex characters)
+    // Invalid SHA-256 (e.g. not 64 hex characters) must be fatal (certificate pinning failure)
     const hy2BadPin = 'hysteria2://pass@1.2.3.4:443?sni=example.com&pinSHA256=not_a_valid_sha256#HY2%20Bad%20Pin';
     const nodeBad = parseSingleNode(hy2BadPin);
     expect(nodeBad).not.toBeNull();
 
     const resBad = adaptNodeToMihomo(nodeBad!);
-    expect(resBad.fatal).toBe(false);
+    expect(resBad.fatal).toBe(true);
     expect(resBad.lossy).toBe(true);
+    expect(resBad.emitted).toBe(false);
     expect(resBad.unsupportedParams).toContain('pinSHA256');
     expect(resBad.warnings.some(w => w.field === 'pinSHA256' && w.message.includes('64 位十六进制'))).toBe(true);
   });
@@ -218,22 +219,37 @@ describe('QueryParamReader & Universal Alias Suite', () => {
     expect(res.config!['udp-over-tcp-version']).toBe(2);
     expect(res.config!['client-fingerprint']).toBe('chrome');
 
-    const tuicUri = 'tuic://my_uuid:my_pass@1.2.3.4:8443?congestion_control=cubic&udp_relay_mode=quic&zero_rtt_handshake=1&server_name=tuic.example.com#TUIC%20Aliases';
+    // TUIC V5
+    const tuicUri = 'tuic://my_uuid:my_pass@1.2.3.4:8443?congestion_control=cubic&udp_relay_mode=quic&zero_rtt_handshake=1&server_name=tuic.example.com#TUIC%20V5%20Aliases';
     const tuicNode = parseSingleNode(tuicUri);
     expect(tuicNode).not.toBeNull();
-    expect(tuicNode!.protocolData.congestionControl).toBe('cubic');
+    expect(tuicNode!.protocolData.uuid).toBe('my_uuid');
+    expect(tuicNode!.protocolData.password).toBe('my_pass');
+    expect(tuicNode!.protocolData.congestionController).toBe('cubic');
     expect(tuicNode!.protocolData.udpRelayMode).toBe('quic');
-    expect(tuicNode!.protocolData.zeroRttHandshake).toBe(true);
+    expect(tuicNode!.protocolData.reduceRtt).toBe(true);
     expect(tuicNode!.protocolData.sni).toBe('tuic.example.com');
     expect(Object.keys(tuicNode!.protocolData.extras).length).toBe(0);
 
     const tuicRes = adaptNodeToMihomo(tuicNode!);
     expect(tuicRes.fatal).toBe(false);
     expect(tuicRes.lossy).toBe(false);
+    expect(tuicRes.config!.uuid).toBe('my_uuid');
+    expect(tuicRes.config!.password).toBe('my_pass');
     expect(tuicRes.config!['congestion-controller']).toBe('cubic');
     expect(tuicRes.config!['udp-relay-mode']).toBe('quic');
-    expect(tuicRes.config!['zero-rtt-handshake']).toBe(true);
+    expect(tuicRes.config!['reduce-rtt']).toBe(true);
     expect(tuicRes.config!.sni).toBe('tuic.example.com');
+
+    // TUIC V4
+    const tuicV4Uri = 'tuic://my_token@1.2.3.4:8443?congestion_controller=bbr#TUIC%20V4';
+    const tuicV4Node = parseSingleNode(tuicV4Uri);
+    expect(tuicV4Node).not.toBeNull();
+    const tuicV4Res = adaptNodeToMihomo(tuicV4Node!);
+    expect(tuicV4Res.fatal).toBe(false);
+    expect(tuicV4Res.config!.token).toBe('my_token');
+    expect(tuicV4Res.config!.uuid).toBeUndefined();
+    expect(tuicV4Res.config!.password).toBeUndefined();
   });
 
   test('10. Multi-protocol invalid parameter behavior: Shadowsocks, TUIC, Trojan, AnyTLS', () => {
@@ -282,21 +298,15 @@ describe('QueryParamReader & Universal Alias Suite', () => {
     expect(html).not.toContain('已自动剔除未映射参数以确保连接不报错');
   });
 
-  test('12. Transport AST parity: Trojan H2/HTTP, Shadowsocks smux, VLESS/Trojan headerType & mode', () => {
-    // Trojan H2
+  test('12. Transport Gate: Trojan H2/HTTP is fatal, Shadowsocks smux & plugins, VLESS transport parity', () => {
+    // Trojan H2 is NOT supported by Mihomo Trojan (must be fatal)
     const trojanH2 = 'trojan://trojan_pass@1.2.3.4:443?type=h2&path=%2Fh2path&host=h2.example.com#Trojan%20H2';
     const trojanH2Node = parseSingleNode(trojanH2);
     expect(trojanH2Node).not.toBeNull();
-    expect(trojanH2Node!.protocolData.transport?.type).toBe('h2');
-    expect(trojanH2Node!.protocolData.transport?.path).toBe('/h2path');
-    expect(trojanH2Node!.protocolData.transport?.headers?.Host).toBe('h2.example.com');
     const trojanH2Res = adaptNodeToMihomo(trojanH2Node!);
-    expect(trojanH2Res.fatal).toBe(false);
-    expect(trojanH2Res.lossy).toBe(false);
-    expect(trojanH2Res.config!['h2-opts']).toEqual({
-      host: ['h2.example.com'],
-      path: '/h2path'
-    });
+    expect(trojanH2Res.fatal).toBe(true);
+    expect(trojanH2Res.emitted).toBe(false);
+    expect(trojanH2Res.unsupportedParams).toContain('transport.type');
 
     // Shadowsocks smux
     const ssSmux = 'ss://Y2hhY2hhMjAtaWV0Zi1wb2x5MTMwNTpteXBhc3N3b3JkMTIzIQ@1.2.3.4:8388?smux=true#SS%20Smux';
@@ -307,6 +317,21 @@ describe('QueryParamReader & Universal Alias Suite', () => {
     expect(ssSmuxRes.fatal).toBe(false);
     expect(ssSmuxRes.lossy).toBe(false);
     expect(ssSmuxRes.config!.smux).toEqual({ enabled: true });
+
+    // Shadowsocks plugin normalization: obfs-local -> obfs
+    const ssObfsLocal = 'ss://Y2hhY2hhMjAtaWV0Zi1wb2x5MTMwNTpteXBhc3N3b3JkMTIzIQ@1.2.3.4:8388?plugin=obfs-local%3Bobfs%3Dhttp#SS%20ObfsLocal';
+    const ssObfsLocalNode = parseSingleNode(ssObfsLocal);
+    expect(ssObfsLocalNode).not.toBeNull();
+    const ssObfsRes = adaptNodeToMihomo(ssObfsLocalNode!);
+    expect(ssObfsRes.fatal).toBe(false);
+    expect(ssObfsRes.config!.plugin).toBe('obfs');
+
+    // Shadowsocks plugin: gost-plugin & jls
+    const ssGost = 'ss://Y2hhY2hhMjAtaWV0Zi1wb2x5MTMwNTpteXBhc3N3b3JkMTIzIQ@1.2.3.4:8388?plugin=gost-plugin#SS%20Gost';
+    const ssGostNode = parseSingleNode(ssGost);
+    const ssGostRes = adaptNodeToMihomo(ssGostNode!);
+    expect(ssGostRes.fatal).toBe(false);
+    expect(ssGostRes.config!.plugin).toBe('gost-plugin');
 
     // VLESS transport headerType & authority
     const vlessProto = 'vless://b831381d-6324-4d53-ad4f-8cda48b30811@1.2.3.4:443?type=grpc&serviceName=my-service&mode=gun&authority=grpc.example.com&headerType=none#VLESS%20Transport%20Parity';
@@ -319,5 +344,80 @@ describe('QueryParamReader & Universal Alias Suite', () => {
     expect(vlessRes.fatal).toBe(false);
     expect(vlessRes.lossy).toBe(false);
     expect(vlessRes.warnings.length).toBe(0);
+  });
+
+  test('13. Strict URI Endpoint & Port validation: 443abc must fail and trigger fatal gate', () => {
+    const badPortUri = 'vless://b831381d-6324-4d53-ad4f-8cda48b30811@1.2.3.4:443abc?security=tls#Bad%20Port';
+    const node = parseSingleNode(badPortUri);
+    expect(node).not.toBeNull();
+    expect(node!.protocolData.invalidParams?.some(p => p.key === 'port')).toBe(true);
+
+    const res = adaptNodeToMihomo(node!);
+    expect(res.fatal).toBe(true);
+    expect(res.emitted).toBe(false);
+    expect(res.warnings.some(w => w.field === 'port' && w.level === 'fatal')).toBe(true);
+  });
+
+  test('14. VMess JsonFieldReader strictness: malformed alterId & boolean flags trigger gate invalidParams', () => {
+    // Malformed alterId "1abc" in VMess JSON
+    const vmessObj = {
+      v: '2',
+      ps: 'VMess Strict Test',
+      add: '1.2.3.4',
+      port: '443',
+      id: 'b831381d-6324-4d53-ad4f-8cda48b30811',
+      aid: '1abc',
+      net: 'ws',
+      globalPadding: 'notABool'
+    };
+    const b64 = btoa(JSON.stringify(vmessObj));
+    const uri = `vmess://${b64}`;
+    const node = parseSingleNode(uri);
+    expect(node).not.toBeNull();
+    expect(node!.protocolData.invalidParams?.some(p => p.key === 'aid')).toBe(true);
+    expect(node!.protocolData.invalidParams?.some(p => p.key === 'globalPadding')).toBe(true);
+
+    const res = adaptNodeToMihomo(node!);
+    // aid is a critical key in VMess -> triggers fatal
+    expect(res.fatal).toBe(true);
+    expect(res.emitted).toBe(false);
+  });
+
+  test('15. Hysteria 2 invalid pinSHA256 triggers fatal gate', () => {
+    // Non-64 hex pinSHA256
+    const invalidFpUri = 'hysteria2://my_password@1.2.3.4:443?pinSHA256=invalid-fingerprint-not-64-hex#HY2%20Bad%20Pin';
+    const node = parseSingleNode(invalidFpUri);
+    expect(node).not.toBeNull();
+    const res = adaptNodeToMihomo(node!);
+    expect(res.fatal).toBe(true);
+    expect(res.emitted).toBe(false);
+    expect(res.unsupportedParams).toContain('pinSHA256');
+
+    // Valid 64-hex pinSHA256 passes
+    const validFpUri = 'hysteria2://my_password@1.2.3.4:443?pinSHA256=f451ad6bd9404ff81fde262cc8bdf9b9da1e4a357edec4c17555c6f8bf1c3e2f#HY2%20Good%20Pin';
+    const validNode = parseSingleNode(validFpUri);
+    expect(validNode).not.toBeNull();
+    const validRes = adaptNodeToMihomo(validNode!);
+    expect(validRes.fatal).toBe(false);
+    expect(validRes.emitted).toBe(true);
+    expect(validRes.config!.fingerprint).toBe('f451ad6bd9404ff81fde262cc8bdf9b9da1e4a357edec4c17555c6f8bf1c3e2f');
+  });
+
+  test('16. TUIC V4 vs V5 credential mutual exclusion and completeness gate', () => {
+    // V5 with only UUID (missing password) -> fatal
+    const tuicOnlyUuidUri = 'tuic://my_uuid@1.2.3.4:8443?uuid=my_uuid#TUIC%20Only%20UUID';
+    const node1 = parseSingleNode(tuicOnlyUuidUri);
+    expect(node1).not.toBeNull();
+    const res1 = adaptNodeToMihomo(node1!);
+    expect(res1.fatal).toBe(true);
+    expect(res1.emitted).toBe(false);
+
+    // V4 and V5 conflict (token + password) -> fatal
+    const tuicConflictUri = 'tuic://my_token:my_pass@1.2.3.4:8443?token=my_token&password=my_pass#TUIC%20Conflict';
+    const node2 = parseSingleNode(tuicConflictUri);
+    expect(node2).not.toBeNull();
+    const res2 = adaptNodeToMihomo(node2!);
+    expect(res2.fatal).toBe(true);
+    expect(res2.emitted).toBe(false);
   });
 });

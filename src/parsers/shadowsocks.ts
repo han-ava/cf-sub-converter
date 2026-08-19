@@ -1,6 +1,6 @@
 // src/parsers/shadowsocks.ts
 import { ShadowsocksNode } from '../types';
-import { parseRawQuery, QueryParamReader, safeBase64Decode, tryDecodeURIComponent } from '../utils';
+import { parseRawQuery, parseStrictEndpoint, QueryParamReader, safeBase64Decode, tryDecodeURIComponent } from '../utils';
 
 export function parsePlugin(pluginParam: string): { plugin: string; pluginOpts: Record<string, any> } {
   if (!pluginParam) return { plugin: '', pluginOpts: {} };
@@ -51,28 +51,12 @@ export function parseShadowsocks(urlStr: string): ShadowsocksNode | null {
 
     let method = '';
     let password = '';
-    let server = '';
-    let port = 0;
+    let serverPortStr = '';
 
     if (raw.includes('@')) {
       const atIndex = raw.lastIndexOf('@');
       const userPart = raw.substring(0, atIndex);
-      const serverPart = raw.substring(atIndex + 1);
-
-      if (serverPart.startsWith('[')) {
-        const closingBracket = serverPart.indexOf(']');
-        if (closingBracket !== -1) {
-          server = serverPart.substring(1, closingBracket);
-          const portPart = serverPart.substring(closingBracket + 1);
-          port = parseInt(portPart.startsWith(':') ? portPart.substring(1) : portPart, 10) || 0;
-        }
-      } else {
-        const colonIndex = serverPart.lastIndexOf(':');
-        if (colonIndex !== -1) {
-          server = serverPart.substring(0, colonIndex);
-          port = parseInt(serverPart.substring(colonIndex + 1), 10) || 0;
-        }
-      }
+      serverPortStr = raw.substring(atIndex + 1);
 
       let decodedUser = safeBase64Decode(userPart);
       if (!decodedUser || !decodedUser.includes(':')) {
@@ -92,33 +76,18 @@ export function parseShadowsocks(urlStr: string): ShadowsocksNode | null {
       if (atIndex === -1) return null;
 
       const userPart = decoded.substring(0, atIndex);
-      const serverPart = decoded.substring(atIndex + 1);
-
-      if (serverPart.startsWith('[')) {
-        const closingBracket = serverPart.indexOf(']');
-        if (closingBracket !== -1) {
-          server = serverPart.substring(1, closingBracket);
-          const portPart = serverPart.substring(closingBracket + 1);
-          port = parseInt(portPart.startsWith(':') ? portPart.substring(1) : portPart, 10) || 0;
-        }
-      } else {
-        const colonIndex = serverPart.lastIndexOf(':');
-        if (colonIndex !== -1) {
-          server = serverPart.substring(0, colonIndex);
-          port = parseInt(serverPart.substring(colonIndex + 1), 10) || 0;
-        }
-      }
+      serverPortStr = decoded.substring(atIndex + 1);
 
       const uParts = userPart.split(':');
       method = uParts[0] || '';
       password = uParts.slice(1).join(':');
     }
 
-    if (!server || !port || !method || !password) return null;
+    const ep = parseStrictEndpoint(serverPortStr, 8388);
+    const server = ep.server;
+    const port = ep.port;
 
-    if (server.startsWith('[') && server.endsWith(']')) {
-      server = server.slice(1, -1);
-    }
+    if (!server || !port || !method || !password) return null;
 
     const pluginParam = q.get('plugin');
     let pluginName: string | undefined;
@@ -139,6 +108,13 @@ export function parseShadowsocks(urlStr: string): ShadowsocksNode | null {
 
     const extras = q.getUnusedExtras();
     const invalidParams = q.getInvalidParams();
+    if (ep.error) {
+      invalidParams.push({
+        key: 'port',
+        value: ep.rawPort || '',
+        reason: ep.error
+      });
+    }
 
     return {
       name,

@@ -64,7 +64,7 @@ export function isValidNode(node: NodeEnvelope | null): boolean {
   }
 
   if (proto === 'tuic') {
-    return !!p.uuid || !!p.password;
+    return !!p.uuid || !!p.password || !!p.token;
   }
 
   return true;

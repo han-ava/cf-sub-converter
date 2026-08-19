@@ -1,6 +1,6 @@
 // src/adapters/mihomo/vmess.ts
 import { AdapterResult, ConversionWarning, VmessNode } from '../../types';
-import { parseALPN, detectUnmappedFields } from '../../utils';
+import { parseALPN, detectUnmappedFields, processInvalidParams } from '../../utils';
 
 // Mihomo 官方支持的 VMess 传输协议（metacubex.one/en/config/proxies/vmess）
 const SUPPORTED_VMESS_TRANSPORTS = new Set([
@@ -19,6 +19,21 @@ export function adaptVmessToMihomo(node: VmessNode): AdapterResult {
       warnings: [{ level: 'fatal', field: 'uuid', message: '缺少必需的 VMess UUID' }],
       unsupportedParams: ['uuid'] };
   }
+
+  // Compatibility Gate: 非法参数 (invalidParams) 分类拦截与警告
+  const invRes = processInvalidParams(p.invalidParams, new Set(['uuid', 'server', 'port', 'cipher', 'alterid', 'aid']));
+  if (invRes.fatal) {
+    return {
+      fatal: true,
+      lossy: true,
+      emitted: false,
+      skipReason: invRes.fatalReason,
+      warnings: invRes.warnings,
+      unsupportedParams: invRes.unsupportedParams
+    };
+  }
+  warnings.push(...invRes.warnings);
+  unsupportedParams.push(...invRes.unsupportedParams);
 
   // Gate: 传输协议白名单
   const transportType = (p.transport?.type || 'tcp').toLowerCase();

@@ -130,7 +130,7 @@ describe('Lossless Parser Suite', () => {
     expect(tuic.protocol).toBe('tuic');
     expect(tuic.protocolData.uuid).toBe('tuic-uuid-123');
     expect(tuic.protocolData.password).toBe('tuic_pass_456');
-    expect(tuic.protocolData.congestionControl).toBe('bbr');
+    expect(tuic.protocolData.congestionController).toBe('bbr');
     expect(tuic.protocolData.udpRelayMode).toBe('native');
   });
 

@@ -82,12 +82,18 @@ export function adaptHysteria2ToMihomo(node: Hysteria2Node): AdapterResult {
     if (norm) {
       config.fingerprint = norm;
     } else {
-      unsupportedParams.push('pinSHA256');
-      warnings.push({
-        level: 'warn',
-        field: 'pinSHA256',
-        message: `Hysteria 2 证书指纹 [${certFp}] 格式非法，必须为 64 位十六进制 SHA-256 哈希值`
-      });
+      return {
+        fatal: true,
+        lossy: true,
+        emitted: false,
+        skipReason: `节点 [${node.name}] Hysteria 2 证书指纹 [${certFp}] 格式非法，必须为 64 位十六进制 SHA-256 哈希值`,
+        warnings: [{
+          level: 'fatal',
+          field: 'pinSHA256',
+          message: `Hysteria 2 证书指纹 [${certFp}] 格式非法，必须为 64 位十六进制 SHA-256 哈希值`
+        }],
+        unsupportedParams: ['pinSHA256']
+      };
     }
   }
   if (p.nameCertVerify) config['name-cert-verify'] = p.nameCertVerify;
