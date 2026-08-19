@@ -152,6 +152,7 @@ export interface Hysteria2Node extends BaseNode {
     obfsMinPacketSize?: number;
     obfsMaxPacketSize?: number;
     alpn?: string[];
+    certificateFingerprint?: string;
     fingerprint?: string;
     nameCertVerify?: string;
     handshakeTimeout?: string;

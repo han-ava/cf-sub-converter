@@ -92,7 +92,7 @@ export function toRawLinks(nodes: NodeEnvelope[]): string {
         }
         if (p.skipCertVerify || p['skip-cert-verify']) params.set('insecure', '1');
         if (p.alpn) params.set('alpn', Array.isArray(p.alpn) ? p.alpn.join(',') : String(p.alpn));
-        if (p['client-fingerprint'] || p.fingerprint) params.set('fp', p['client-fingerprint'] || p.fingerprint);
+        if (p.certificateFingerprint || p.fingerprint) params.set('pinSHA256', p.certificateFingerprint || p.fingerprint);
 
         const extras = p.extras || (node as any).unknownParams;
         if (extras) {

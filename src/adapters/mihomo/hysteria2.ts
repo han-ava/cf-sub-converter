@@ -1,6 +1,6 @@
 // src/adapters/mihomo/hysteria2.ts
 import { AdapterResult, ConversionWarning, Hysteria2Node } from '../../types';
-import { parseALPN, detectUnmappedFields } from '../../utils';
+import { parseALPN, detectUnmappedFields, normalizeSha256Fingerprint } from '../../utils';
 
 const SUPPORTED_HY2_OBFS = new Set(['salamander']);
 
@@ -61,13 +61,17 @@ export function adaptHysteria2ToMihomo(node: Hysteria2Node): AdapterResult {
     config.alpn = alpn;
   }
 
-  if (p.fingerprint) config['client-fingerprint'] = p.fingerprint;
+  const certFp = p.certificateFingerprint || p.fingerprint;
+  if (certFp) {
+    const norm = normalizeSha256Fingerprint(certFp);
+    if (norm) config.fingerprint = norm;
+  }
   if (p.nameCertVerify) config['name-cert-verify'] = p.nameCertVerify;
   if (p.handshakeTimeout) config['handshake-timeout'] = p.handshakeTimeout;
 
   // 自动检测 known-but-unmapped：对比已解析字段集与适配器建模字段集
   const HANDLED_HY2_PROTOCOL_KEYS = new Set([
-    'password', 'ports', 'sni', 'alpn', 'skipCertVerify', 'fingerprint',
+    'password', 'ports', 'sni', 'alpn', 'skipCertVerify', 'certificateFingerprint', 'fingerprint',
     'obfs', 'obfsPassword', 'obfsMinPacketSize', 'obfsMaxPacketSize',
     'up', 'down', 'hopInterval', 'nameCertVerify', 'handshakeTimeout', 'extras'
   ]);

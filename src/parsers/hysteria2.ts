@@ -55,7 +55,7 @@ export function parseHysteria2(urlStr: string): Hysteria2Node | null {
     const down = qMap.down || qMap.down_mbps || qMap.downMbps;
     const alpnStr = qMap.alpn;
     const alpn = alpnStr ? alpnStr.split(',').map(s => s.trim()).filter(Boolean) : undefined;
-    const fp = qMap.fp || qMap.fingerprint || qMap['client-fingerprint'];
+    const certificateFingerprint = qMap.pinSHA256 || qMap.pinsha256 || qMap['pin-sha256'] || qMap.fingerprint;
     const insecure = qMap.insecure === '1' || qMap.allowInsecure === '1' || qMap['skip-cert-verify'] === 'true';
     const nameCertVerify = qMap['name-cert-verify'] || qMap.name_cert_verify;
     const handshakeTimeout = qMap['handshake-timeout'] || qMap.handshake_timeout;
@@ -65,6 +65,7 @@ export function parseHysteria2(urlStr: string): Hysteria2Node | null {
       'obfs-min-packet-size', 'obfs_min_packet_size', 'obfs-max-packet-size', 'obfs_max_packet_size',
       'ports', 'mport', 'hop-interval', 'hop_interval', 'up', 'up_mbps', 'upmbps',
       'down', 'down_mbps', 'downmbps', 'alpn', 'fp', 'fingerprint', 'client-fingerprint',
+      'pinsha256', 'pin-sha256', 'pin_sha256',
       'insecure', 'allowinsecure', 'skip-cert-verify', 'name-cert-verify', 'name_cert_verify',
       'handshake-timeout', 'handshake_timeout'
     ]);
@@ -99,7 +100,8 @@ export function parseHysteria2(urlStr: string): Hysteria2Node | null {
         obfsMinPacketSize: obfsMinPacketSize ? parseInt(obfsMinPacketSize, 10) : undefined,
         obfsMaxPacketSize: obfsMaxPacketSize ? parseInt(obfsMaxPacketSize, 10) : undefined,
         alpn,
-        fingerprint: fp,
+        certificateFingerprint: certificateFingerprint ? String(certificateFingerprint).trim() : undefined,
+        fingerprint: certificateFingerprint ? String(certificateFingerprint).trim() : undefined,
         nameCertVerify,
         handshakeTimeout,
         extras

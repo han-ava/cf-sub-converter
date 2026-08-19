@@ -558,3 +558,15 @@ export function createUserinfoNodes(userinfoStr?: string): ShadowsocksNode[] {
 
   return [trafficNode, expireNode];
 }
+
+/**
+ * 规范化 SHA-256 证书指纹（去除 sha256: 前缀、冒号、空格等，仅当为有效 64 位十六进制 SHA-256 时返回）
+ */
+export function normalizeSha256Fingerprint(raw?: string): string | undefined {
+  if (!raw || typeof raw !== 'string') return undefined;
+  const clean = raw.trim().replace(/^sha256[:/]/i, '').replace(/[:\s-]/g, '').toLowerCase();
+  if (/^[0-9a-f]{64}$/.test(clean)) {
+    return clean;
+  }
+  return undefined;
+}

@@ -631,4 +631,58 @@ describe('Tower-Inspired Compatibility Gate Suite', () => {
     expect(aggB.count).toBe(1);
     expect(json.warningAggregations[0].count).toBeGreaterThanOrEqual(json.warningAggregations[1].count);
   });
+
+  // ── HY2 pinSHA256 官方证书指纹映射测试 ─────────────────────────────────────
+
+  test('18. Hysteria 2 pinSHA256 maps cleanly to Mihomo fingerprint (perfect, no warnings, no client-fingerprint)', () => {
+    const hy2PinUri = 'hysteria2://my_pass_123@hy2.example.com:443?sni=hy2.example.com&pinSHA256=f451ad6bd9404ff81fde262cc8bdf9b9da1e4a357edec4c17555c6f8bf1c3e2f#HY2%20PinSHA256';
+    const node = parseSingleNode(hy2PinUri);
+    expect(node).not.toBeNull();
+    expect(node!.protocolData.certificateFingerprint).toBe('f451ad6bd9404ff81fde262cc8bdf9b9da1e4a357edec4c17555c6f8bf1c3e2f');
+
+    const res = adaptNodeToMihomo(node!);
+    expect(res.fatal).toBe(false);
+    expect(res.lossy).toBe(false);
+    expect(res.emitted).toBe(true);
+    expect(res.warnings.length).toBe(0);
+    expect(res.unsupportedParams.length).toBe(0);
+    expect(res.config!.fingerprint).toBe('f451ad6bd9404ff81fde262cc8bdf9b9da1e4a357edec4c17555c6f8bf1c3e2f');
+    expect(res.config!['client-fingerprint']).toBeUndefined();
+
+    // 格式化测试（带 sha256: 前缀与冒号）
+    const hy2FormattedPin = 'hysteria2://my_pass_123@hy2.example.com:443?sni=hy2.example.com&pin-sha256=sha256:F4:51:AD:6B:D9:40:4F:F8:1F:DE:26:2C:C8:BD:F9:B9:DA:1E:4A:35:7E:DE:C4:C1:75:55:C6:F8:BF:1C:3E:2F#HY2%20Formatted';
+    const nodeFmt = parseSingleNode(hy2FormattedPin);
+    const resFmt = adaptNodeToMihomo(nodeFmt!);
+    expect(resFmt.lossy).toBe(false);
+    expect(resFmt.config!.fingerprint).toBe('f451ad6bd9404ff81fde262cc8bdf9b9da1e4a357edec4c17555c6f8bf1c3e2f');
+  });
+
+  // ── VLESS servername 别名映射与 Host 分离测试 ──────────────────────────────
+
+  test('19. VLESS servername alias maps to Mihomo servername (perfect, host strictly separated)', () => {
+    const vlessServernameUri = 'vless://b831381d-6324-4d53-ad4f-8cda48b30811@1.2.3.4:443?security=tls&servername=www.tue.nl&type=ws&host=cdn.example.com#VLESS%20Servername%20Alias';
+    const node = parseSingleNode(vlessServernameUri);
+    expect(node).not.toBeNull();
+    expect(node!.protocolData.sni).toBe('www.tue.nl');
+    expect(node!.protocolData.transport?.headers?.Host).toBe('cdn.example.com');
+
+    const res = adaptNodeToMihomo(node!);
+    expect(res.fatal).toBe(false);
+    expect(res.lossy).toBe(false);
+    expect(res.emitted).toBe(true);
+    expect(res.warnings.length).toBe(0);
+    expect(res.unsupportedParams.length).toBe(0);
+    expect(res.config!.servername).toBe('www.tue.nl');
+    expect(res.config!['ws-opts']).toEqual({
+      path: '/',
+      headers: { Host: 'cdn.example.com' }
+    });
+
+    // 验证 host 不再作为 SNI 的回退（当未配置 sni/servername 时，SNI 回退为 server 1.2.3.4）
+    const vlessNoSniUri = 'vless://b831381d-6324-4d53-ad4f-8cda48b30811@1.2.3.4:443?security=tls&type=ws&host=cdn.example.com#No%20SNI';
+    const nodeNoSni = parseSingleNode(vlessNoSniUri);
+    expect(nodeNoSni!.protocolData.sni).toBe('1.2.3.4');
+    const resNoSni = adaptNodeToMihomo(nodeNoSni!);
+    expect(resNoSni.config!.servername).toBe('1.2.3.4');
+  });
 });

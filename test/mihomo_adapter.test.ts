@@ -79,7 +79,8 @@ describe('Mihomo Adapter Suite', () => {
     expect(result.config!['obfs-password']).toBe('obfspass123');
     expect(result.config!['obfs-min-packet-size']).toBe(64);
     expect(result.config!['obfs-max-packet-size']).toBe(1024);
-    expect(result.config!['client-fingerprint']).toBe('chrome');
+    expect(result.config!.fingerprint).toBe('f451ad6bd9404ff81fde262cc8bdf9b9da1e4a357edec4c17555c6f8bf1c3e2f');
+    expect(result.config!['client-fingerprint']).toBeUndefined();
     expect(result.config!['skip-cert-verify']).toBe(true);
 
     expect(result.unsupportedParams).toContain('customHy2Param');

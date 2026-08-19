@@ -50,7 +50,7 @@ export function parseVless(urlStr: string): VlessNode | null {
     const flow = qMap.flow || undefined;
     const packetEncoding = qMap.packetEncoding || qMap['packet-encoding'] || qMap.packet_encoding || undefined;
     const encryption = qMap.encryption || undefined;
-    const sni = qMap.sni || qMap.peer || qMap.host || server;
+    const sni = qMap.sni || qMap.servername || qMap.serverName || qMap.peer || server;
     const fp = qMap.fp || qMap.fingerprint || qMap['client-fingerprint'] || undefined;
     const alpnStr = qMap.alpn;
     const alpn = alpnStr ? alpnStr.split(',').map(s => s.trim()).filter(Boolean) : undefined;
@@ -71,7 +71,8 @@ export function parseVless(urlStr: string): VlessNode | null {
 
     const recognizedKeys = new Set([
       'type', 'security', 'flow', 'packetencoding', 'packet-encoding', 'packet_encoding',
-      'encryption', 'sni', 'peer', 'host', 'fp', 'fingerprint', 'client-fingerprint',
+      'encryption', 'sni', 'servername', 'server-name', 'server_name', 'peer', 'host',
+      'fp', 'fingerprint', 'client-fingerprint',
       'alpn', 'allowinsecure', 'insecure', 'allow_insecure', 'skip-cert-verify',
       'pbk', 'public-key', 'publickey', 'sid', 'short-id', 'shortid', 'spx', 'spider-x', 'spiderx',
       'path', 'servicename', 'service-name', 'grpc-service-name', 'mode', 'extra', 'headertype', 'header-type'
