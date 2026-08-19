@@ -1,6 +1,6 @@
 // src/parsers/tuic.ts
 import { TuicNode } from '../types';
-import { parseRawQuery, queryEntriesToRecord, tryDecodeURIComponent } from '../utils';
+import { parseRawQuery, QueryParamReader, tryDecodeURIComponent } from '../utils';
 
 export function parseTuic(urlStr: string): TuicNode | null {
   try {
@@ -44,30 +44,18 @@ export function parseTuic(urlStr: string): TuicNode | null {
     if (!server || (!uuid && !password)) return null;
 
     const rawQuery = parseRawQuery(queryPart);
-    const qMap = queryEntriesToRecord(rawQuery.entries);
+    const q = new QueryParamReader(rawQuery.entries);
 
-    const sni = qMap.sni || server;
-    const congestionControl = qMap.congestion_control || qMap['congestion-controller'] || qMap.congestionControl || 'bbr';
-    const udpRelayMode = qMap.udp_relay_mode || qMap['udp-relay-mode'] || qMap.udpRelayMode || 'native';
-    const alpnStr = qMap.alpn;
+    const sni = q.get('sni', 'peer', 'servername', 'serverName', 'server-name', 'server_name') || server;
+    const congestionControl = q.get('congestion_control', 'congestion-control', 'congestion-controller', 'congestion_controller', 'congestionControl', 'congestioncontrol', 'cc') || 'bbr';
+    const udpRelayMode = q.get('udp_relay_mode', 'udp-relay-mode', 'udpRelayMode', 'udprelaymode', 'udp-relay', 'udp_relay', 'udprelay') || 'native';
+    const alpnStr = q.get('alpn');
     const alpn = alpnStr ? alpnStr.split(',').map(s => s.trim()).filter(Boolean) : undefined;
-    const insecure = qMap.allow_insecure === '1' || qMap.insecure === '1' || qMap['skip-cert-verify'] === 'true';
-    const zeroRttHandshake = qMap.zero_rtt_handshake === '1' || qMap['zero-rtt-handshake'] === 'true';
-    const heartbeat = qMap.heartbeat;
+    const insecure = q.getBool('allow_insecure', 'allowinsecure', 'allowInsecure', 'insecure', 'skip-cert-verify', 'skip_cert_verify', 'skipcertverify');
+    const zeroRttHandshake = q.getBool('zero_rtt_handshake', 'zero-rtt-handshake', 'zeroRttHandshake', 'zerortthandshake', '0rtt', 'zero-rtt', 'zero_rtt');
+    const heartbeat = q.get('heartbeat', 'heartbeat_interval', 'heartbeat-interval', 'heartbeatinterval');
 
-    const recognizedKeys = new Set([
-      'sni', 'congestion_control', 'congestion-controller', 'congestioncontrol',
-      'udp_relay_mode', 'udp-relay-mode', 'udprelaymode',
-      'alpn', 'allow_insecure', 'insecure', 'skip-cert-verify',
-      'zero_rtt_handshake', 'zero-rtt-handshake', 'heartbeat'
-    ]);
-
-    const extras: Record<string, unknown> = {};
-    for (const entry of rawQuery.entries) {
-      if (!recognizedKeys.has(entry.key.toLowerCase())) {
-        extras[entry.key] = entry.value;
-      }
-    }
+    const extras = q.getUnusedExtras();
 
     return {
       name,

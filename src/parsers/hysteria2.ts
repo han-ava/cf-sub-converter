@@ -1,6 +1,6 @@
 // src/parsers/hysteria2.ts
 import { Hysteria2Node } from '../types';
-import { parseRawQuery, queryEntriesToRecord, tryDecodeURIComponent } from '../utils';
+import { parseRawQuery, QueryParamReader, tryDecodeURIComponent } from '../utils';
 
 export function parseHysteria2(urlStr: string): Hysteria2Node | null {
   try {
@@ -42,40 +42,25 @@ export function parseHysteria2(urlStr: string): Hysteria2Node | null {
     if (!server || !password) return null;
 
     const rawQuery = parseRawQuery(queryPart);
-    const qMap = queryEntriesToRecord(rawQuery.entries);
+    const q = new QueryParamReader(rawQuery.entries);
 
-    const sni = qMap.sni || qMap.peer || server;
-    const obfs = qMap.obfs;
-    const obfsPassword = qMap['obfs-password'] || qMap.obfs_password || qMap.obfspassword;
-    const obfsMinPacketSize = qMap['obfs-min-packet-size'] || qMap.obfs_min_packet_size;
-    const obfsMaxPacketSize = qMap['obfs-max-packet-size'] || qMap.obfs_max_packet_size;
-    const ports = qMap.ports || qMap.mport;
-    const hopInterval = qMap['hop-interval'] || qMap.hop_interval;
-    const up = qMap.up || qMap.up_mbps || qMap.upMbps;
-    const down = qMap.down || qMap.down_mbps || qMap.downMbps;
-    const alpnStr = qMap.alpn;
+    const sni = q.get('sni', 'peer', 'servername', 'serverName', 'server-name', 'server_name') || server;
+    const obfs = q.get('obfs', 'obfs-type', 'obfs_type', 'obfstype');
+    const obfsPassword = q.get('obfs-password', 'obfs_password', 'obfspassword', 'obfs-pass', 'obfs_pass', 'obfspass', 'obfs-param', 'obfs_param', 'obfsparam');
+    const obfsMinPacketSize = q.getInt('obfs-min-packet-size', 'obfs_min_packet_size', 'obfsminpacketsize', 'obfs-min-size', 'obfs_min_size', 'obfsminsize');
+    const obfsMaxPacketSize = q.getInt('obfs-max-packet-size', 'obfs_max_packet_size', 'obfsmaxpacketsize', 'obfs-max-size', 'obfs_max_size', 'obfsmaxsize');
+    const ports = q.get('ports', 'mport', 'mports');
+    const hopInterval = q.getInt('hop-interval', 'hop_interval', 'hopinterval');
+    const up = q.get('up', 'up_mbps', 'upmbps', 'upMbps', 'upload');
+    const down = q.get('down', 'down_mbps', 'downmbps', 'downMbps', 'download');
+    const alpnStr = q.get('alpn');
     const alpn = alpnStr ? alpnStr.split(',').map(s => s.trim()).filter(Boolean) : undefined;
-    const certificateFingerprint = qMap.pinSHA256 || qMap.pinsha256 || qMap['pin-sha256'] || qMap.fingerprint;
-    const insecure = qMap.insecure === '1' || qMap.allowInsecure === '1' || qMap['skip-cert-verify'] === 'true';
-    const nameCertVerify = qMap['name-cert-verify'] || qMap.name_cert_verify;
-    const handshakeTimeout = qMap['handshake-timeout'] || qMap.handshake_timeout;
+    const certificateFingerprint = q.get('pinSHA256', 'pinsha256', 'pin-sha256', 'pin_sha256', 'fingerprint', 'fp', 'client-fingerprint', 'client_fingerprint', 'clientfingerprint');
+    const insecure = q.getBool('insecure', 'allowInsecure', 'allowinsecure', 'allow_insecure', 'skip-cert-verify', 'skip_cert_verify', 'skipcertverify');
+    const nameCertVerify = q.get('name-cert-verify', 'name_cert_verify', 'namecertverify');
+    const handshakeTimeout = q.get('handshake-timeout', 'handshake_timeout', 'handshaketimeout');
 
-    const recognizedKeys = new Set([
-      'sni', 'peer', 'obfs', 'obfs-password', 'obfs_password', 'obfspassword',
-      'obfs-min-packet-size', 'obfs_min_packet_size', 'obfs-max-packet-size', 'obfs_max_packet_size',
-      'ports', 'mport', 'hop-interval', 'hop_interval', 'up', 'up_mbps', 'upmbps',
-      'down', 'down_mbps', 'downmbps', 'alpn', 'fp', 'fingerprint', 'client-fingerprint',
-      'pinsha256', 'pin-sha256', 'pin_sha256',
-      'insecure', 'allowinsecure', 'skip-cert-verify', 'name-cert-verify', 'name_cert_verify',
-      'handshake-timeout', 'handshake_timeout'
-    ]);
-
-    const extras: Record<string, unknown> = {};
-    for (const entry of rawQuery.entries) {
-      if (!recognizedKeys.has(entry.key.toLowerCase())) {
-        extras[entry.key] = entry.value;
-      }
-    }
+    const extras = q.getUnusedExtras();
 
     return {
       name,
@@ -92,13 +77,13 @@ export function parseHysteria2(urlStr: string): Hysteria2Node | null {
         sni,
         skipCertVerify: insecure,
         ports,
-        hopInterval: hopInterval ? parseInt(hopInterval, 10) : undefined,
+        hopInterval,
         up,
         down,
         obfs,
         obfsPassword,
-        obfsMinPacketSize: obfsMinPacketSize ? parseInt(obfsMinPacketSize, 10) : undefined,
-        obfsMaxPacketSize: obfsMaxPacketSize ? parseInt(obfsMaxPacketSize, 10) : undefined,
+        obfsMinPacketSize,
+        obfsMaxPacketSize,
         alpn,
         certificateFingerprint: certificateFingerprint ? String(certificateFingerprint).trim() : undefined,
         fingerprint: certificateFingerprint ? String(certificateFingerprint).trim() : undefined,

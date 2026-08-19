@@ -194,22 +194,19 @@ export function sanitizeUrlForLog(urlStr: string): string {
   }
 }
 
-const UPSTREAM_USER_AGENT =
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) ' +
-  'AppleWebKit/537.36 (KHTML, like Gecko) ' +
-  'Chrome/151.0.0.0 Safari/537.36';
+export const UPSTREAM_USER_AGENT = 'ClashMeta/1.19.0; Mihomo/1.19.0; Shadowrocket/1990; v2rayNG/1.9.0';
 
 /**
- * 带有 302 重定向核验、精确 Cache Key（URL + UA）、流式体积截断与超时的安全订阅抓取
+ * 带有 302 重定向核验、精确 Cache Key（URL + 固定上游 UA）、流式体积截断与超时的安全订阅抓取
  */
 export async function fetchSubscriptionWithTimeout(
   initialUrl: string,
-  customUserAgent?: string,
+  _customUserAgent?: string,
   enableCache = true,
   cacheTtlSeconds = 180,
   outerSignal?: AbortSignal
 ): Promise<{ ok: boolean; status: number; text: string; userinfo?: string }> {
-  // 向上游请求时始终使用统一的现代浏览器 UA，确保看板与客户端获取完全一致的完整节点数据
+  // 向上游请求时始终使用统一固定的代理客户端 UA，确保看板与客户端获取完全一致的完整节点数据，杜绝缓存分裂
   const userAgent = UPSTREAM_USER_AGENT;
 
   // 1. 精确 Cache Key (URL + UserAgent 哈希，防止不同客户端拉取到混淆格式)

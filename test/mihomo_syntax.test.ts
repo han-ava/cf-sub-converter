@@ -16,6 +16,7 @@ describe('Mihomo CLI Syntax Validation Suite', () => {
       parseSingleNode(FIXTURES.ss_sip002_plugin)!,
       parseSingleNode(FIXTURES.ss_ss2022)!,
       parseSingleNode(FIXTURES.hy2_full)!,
+      parseSingleNode(FIXTURES.hy2_gecko)!,
       parseSingleNode(FIXTURES.anytls_standard)!,
       parseSingleNode(FIXTURES.trojan_ws)!,
       parseSingleNode(FIXTURES.tuic_standard)!

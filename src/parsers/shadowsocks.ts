@@ -1,6 +1,6 @@
 // src/parsers/shadowsocks.ts
 import { ShadowsocksNode } from '../types';
-import { parseRawQuery, queryEntriesToRecord, safeBase64Decode, tryDecodeURIComponent } from '../utils';
+import { parseRawQuery, QueryParamReader, safeBase64Decode, tryDecodeURIComponent } from '../utils';
 
 export function parsePlugin(pluginParam: string): { plugin: string; pluginOpts: Record<string, any> } {
   if (!pluginParam) return { plugin: '', pluginOpts: {} };
@@ -47,7 +47,7 @@ export function parseShadowsocks(urlStr: string): ShadowsocksNode | null {
     }
 
     const rawQuery = parseRawQuery(queryPart);
-    const queryMap = queryEntriesToRecord(rawQuery.entries);
+    const q = new QueryParamReader(rawQuery.entries);
 
     let method = '';
     let password = '';
@@ -120,24 +120,23 @@ export function parseShadowsocks(urlStr: string): ShadowsocksNode | null {
       server = server.slice(1, -1);
     }
 
+    const pluginParam = q.get('plugin');
     let pluginName: string | undefined;
     let pluginOpts: Record<string, any> | undefined;
-    if (queryMap.plugin) {
-      const parsed = parsePlugin(queryMap.plugin);
+    if (pluginParam) {
+      const parsed = parsePlugin(pluginParam);
       pluginName = parsed.plugin;
       pluginOpts = parsed.pluginOpts;
     }
 
     const isSS2022 = method.startsWith('2022-');
 
-    const extras: Record<string, unknown> = {};
-    const recognizedKeys = new Set(['plugin', 'udp-over-tcp', 'uot', 'udp-over-tcp-version', 'client-fingerprint', 'smux']);
+    const udpOverTcp = q.getBool('udp-over-tcp', 'udp_over_tcp', 'uot', 'udpovertcp');
+    const uotVer = q.getInt('udp-over-tcp-version', 'udp_over_tcp_version', 'uot-version', 'uot_version', 'uotversion');
+    const clientFingerprint = q.get('client-fingerprint', 'client_fingerprint', 'clientfingerprint', 'fp', 'fingerprint');
+    const smuxParam = q.get('smux');
 
-    for (const entry of rawQuery.entries) {
-      if (!recognizedKeys.has(entry.key.toLowerCase())) {
-        extras[entry.key] = entry.value;
-      }
-    }
+    const extras = q.getUnusedExtras();
 
     return {
       name,
@@ -155,9 +154,9 @@ export function parseShadowsocks(urlStr: string): ShadowsocksNode | null {
         isSS2022,
         plugin: pluginName,
         pluginOpts,
-        udpOverTcp: queryMap['udp-over-tcp'] === '1' || queryMap['uot'] === '1' || queryMap['udp-over-tcp'] === 'true',
-        udpOverTcpVersion: queryMap['udp-over-tcp-version'] ? parseInt(queryMap['udp-over-tcp-version'], 10) : undefined,
-        clientFingerprint: queryMap['client-fingerprint'] || undefined,
+        udpOverTcp,
+        udpOverTcpVersion: uotVer,
+        clientFingerprint,
         extras
       },
       udp: true

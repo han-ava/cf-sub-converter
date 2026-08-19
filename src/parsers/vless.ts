@@ -1,6 +1,6 @@
 // src/parsers/vless.ts
 import { VlessNode } from '../types';
-import { parseRawQuery, queryEntriesToRecord, tryDecodeURIComponent } from '../utils';
+import { parseRawQuery, QueryParamReader, tryDecodeURIComponent } from '../utils';
 
 export function parseVless(urlStr: string): VlessNode | null {
   try {
@@ -43,47 +43,35 @@ export function parseVless(urlStr: string): VlessNode | null {
     if (!server || !uuid) return null;
 
     const rawQuery = parseRawQuery(queryPart);
-    const qMap = queryEntriesToRecord(rawQuery.entries);
+    const q = new QueryParamReader(rawQuery.entries);
 
-    const type = (qMap.type || 'tcp').toLowerCase();
-    const security = (qMap.security || 'none').toLowerCase();
-    const flow = qMap.flow || undefined;
-    const packetEncoding = qMap.packetEncoding || qMap['packet-encoding'] || qMap.packet_encoding || undefined;
-    const encryption = qMap.encryption || undefined;
-    const sni = qMap.sni || qMap.servername || qMap.serverName || qMap.peer || server;
-    const fp = qMap.fp || qMap.fingerprint || qMap['client-fingerprint'] || undefined;
-    const alpnStr = qMap.alpn;
+    const type = (q.get('type', 'net', 'network', 'transport') || 'tcp').toLowerCase();
+    const security = (q.get('security', 'tls') || 'none').toLowerCase();
+    const flow = q.get('flow');
+    const packetEncoding = q.get('packetEncoding', 'packet-encoding', 'packet_encoding', 'packetencoding', 'packet_addr', 'packetaddr', 'packet-addr');
+    const encryption = q.get('encryption');
+    const sni = q.get('sni', 'servername', 'serverName', 'server-name', 'server_name', 'peer') || server;
+    const fp = q.get('fp', 'fingerprint', 'client-fingerprint', 'client_fingerprint', 'clientfingerprint');
+    const alpnStr = q.get('alpn');
     const alpn = alpnStr ? alpnStr.split(',').map(s => s.trim()).filter(Boolean) : undefined;
-    const allowInsecure = qMap.allowInsecure === '1' || qMap.insecure === '1' || qMap.allow_insecure === '1' || qMap['skip-cert-verify'] === 'true';
+    const allowInsecure = q.getBool('allowInsecure', 'allowinsecure', 'allow_insecure', 'insecure', 'skip-cert-verify', 'skip_cert_verify', 'skipcertverify');
 
-    const pbk = qMap.pbk || qMap['public-key'] || qMap.publicKey;
-    const sid = qMap.sid || qMap['short-id'] || qMap.shortId;
-    const spx = qMap.spx || qMap['spider-x'] || qMap.spiderX;
+    const pbk = q.get('pbk', 'public-key', 'publicKey', 'public_key', 'publickey');
+    const sid = q.get('sid', 'short-id', 'shortId', 'short_id', 'shortid');
+    const spx = q.get('spx', 'spider-x', 'spiderX', 'spider_x', 'spiderx');
 
     const isReality = security === 'reality' || !!pbk;
     const isTls = security === 'tls' || security === 'reality' || !!pbk;
 
-    const path = qMap.path || (type === 'ws' || type === 'xhttp' ? '/' : undefined);
-    const host = qMap.host || undefined;
-    const serviceName = qMap.serviceName || qMap['service-name'] || qMap['grpc-service-name'] || (type === 'grpc' ? qMap.path : undefined);
-    const mode = qMap.mode || undefined;
-    const extra = qMap.extra || undefined;
+    const path = q.get('path', 'ws-path', 'ws_path', 'wspath') || (type === 'ws' || type === 'xhttp' ? '/' : undefined);
+    const host = q.get('host', 'ws-host', 'ws_host', 'wshost', 'obfs-host', 'obfs_host', 'obfshost');
+    const serviceName = q.get('serviceName', 'servicename', 'service-name', 'service_name', 'grpc-service-name', 'grpc_service_name', 'grpcservicename') || (type === 'grpc' ? q.get('path', 'ws-path', 'ws_path', 'wspath') : undefined);
+    const mode = q.get('mode', 'grpc-mode', 'grpc_mode', 'grpcmode');
+    const extra = q.get('extra');
+    const headerType = q.get('headerType', 'headertype', 'header-type', 'header_type');
+    const authority = q.get('authority');
 
-    const recognizedKeys = new Set([
-      'type', 'security', 'flow', 'packetencoding', 'packet-encoding', 'packet_encoding',
-      'encryption', 'sni', 'servername', 'server-name', 'server_name', 'peer', 'host',
-      'fp', 'fingerprint', 'client-fingerprint',
-      'alpn', 'allowinsecure', 'insecure', 'allow_insecure', 'skip-cert-verify',
-      'pbk', 'public-key', 'publickey', 'sid', 'short-id', 'shortid', 'spx', 'spider-x', 'spiderx',
-      'path', 'servicename', 'service-name', 'grpc-service-name', 'mode', 'extra', 'headertype', 'header-type'
-    ]);
-
-    const extras: Record<string, unknown> = {};
-    for (const entry of rawQuery.entries) {
-      if (!recognizedKeys.has(entry.key.toLowerCase())) {
-        extras[entry.key] = entry.value;
-      }
-    }
+    const extras = q.getUnusedExtras();
 
     const transport: VlessNode['protocolData']['transport'] = {
       type,

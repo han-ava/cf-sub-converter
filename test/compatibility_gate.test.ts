@@ -685,4 +685,64 @@ describe('Tower-Inspired Compatibility Gate Suite', () => {
     const resNoSni = adaptNodeToMihomo(nodeNoSni!);
     expect(resNoSni.config!.servername).toBe('1.2.3.4');
   });
+
+  // ── HY2 Gecko 混淆支持测试 ───────────────────────────────────────────────
+
+  test('20. Hysteria 2 with obfs=gecko is fully supported by Mihomo and passes without fatal', () => {
+    const hy2GeckoUri = 'hysteria2://my_pass_123@hy2.example.com:443?sni=hy2.example.com&obfs=gecko&obfs-password=gecko_secret_pass#HY2%20Gecko';
+    const node = parseSingleNode(hy2GeckoUri);
+    expect(node).not.toBeNull();
+    expect(node!.protocolData.obfs).toBe('gecko');
+    expect(node!.protocolData.obfsPassword).toBe('gecko_secret_pass');
+
+    const res = adaptNodeToMihomo(node!);
+    expect(res.fatal).toBe(false);
+    expect(res.lossy).toBe(false);
+    expect(res.emitted).toBe(true);
+    expect(res.warnings.length).toBe(0);
+    expect(res.unsupportedParams.length).toBe(0);
+    expect(res.config!.obfs).toBe('gecko');
+    expect(res.config!['obfs-password']).toBe('gecko_secret_pass');
+  });
+
+  // ── Query Alias 大小写不敏感解析与全量字段提取测试 ────────────────────────
+
+  test('21. Universal case-insensitive query alias reading preserves all aliases without silent drop', () => {
+    // VLESS 带 server_name, publickey, shortid, spiderx, allowinsecure
+    const vlessAliasUri = 'vless://b831381d-6324-4d53-ad4f-8cda48b30811@1.2.3.4:443?security=reality&server_name=reality.example.com&publickey=abc1234567890abcdef1234567890abcdef12345678&shortid=1234abcd&spiderx=%2Flogin&allowinsecure=1#VLESS%20Aliases';
+    const vlessNode = parseSingleNode(vlessAliasUri);
+    expect(vlessNode).not.toBeNull();
+    expect(vlessNode!.protocolData.sni).toBe('reality.example.com');
+    expect(vlessNode!.protocolData.realityOpts?.publicKey).toBe('abc1234567890abcdef1234567890abcdef12345678');
+    expect(vlessNode!.protocolData.realityOpts?.shortId).toBe('1234abcd');
+    expect(vlessNode!.protocolData.realityOpts?.spiderX).toBe('/login');
+    expect(vlessNode!.protocolData.skipCertVerify).toBe(true);
+
+    const vlessRes = adaptNodeToMihomo(vlessNode!);
+    expect(vlessRes.fatal).toBe(false);
+    expect(vlessRes.lossy).toBe(false);
+    expect(vlessRes.emitted).toBe(true);
+    expect(vlessRes.warnings.length).toBe(0);
+    expect(vlessRes.config!.servername).toBe('reality.example.com');
+    expect(vlessRes.config!['reality-opts']['public-key']).toBe('abc1234567890abcdef1234567890abcdef12345678');
+
+    // HY2 带 pin_sha256, upmbps, downmbps, allowinsecure
+    const hy2AliasUri = 'hysteria2://pass123@hy2.example.com:443?server_name=hy2.example.com&pin_sha256=f451ad6bd9404ff81fde262cc8bdf9b9da1e4a357edec4c17555c6f8bf1c3e2f&upmbps=100&downmbps=500&allowinsecure=1#HY2%20Aliases';
+    const hy2Node = parseSingleNode(hy2AliasUri);
+    expect(hy2Node).not.toBeNull();
+    expect(hy2Node!.protocolData.certificateFingerprint).toBe('f451ad6bd9404ff81fde262cc8bdf9b9da1e4a357edec4c17555c6f8bf1c3e2f');
+    expect(hy2Node!.protocolData.up).toBe('100');
+    expect(hy2Node!.protocolData.down).toBe('500');
+    expect(hy2Node!.protocolData.skipCertVerify).toBe(true);
+
+    const hy2Res = adaptNodeToMihomo(hy2Node!);
+    expect(hy2Res.fatal).toBe(false);
+    expect(hy2Res.lossy).toBe(false);
+    expect(hy2Res.emitted).toBe(true);
+    expect(hy2Res.warnings.length).toBe(0);
+    expect(hy2Res.config!.fingerprint).toBe('f451ad6bd9404ff81fde262cc8bdf9b9da1e4a357edec4c17555c6f8bf1c3e2f');
+    expect(hy2Res.config!.up).toBe('100');
+    expect(hy2Res.config!.down).toBe('500');
+    expect(hy2Res.config!['skip-cert-verify']).toBe(true);
+  });
 });

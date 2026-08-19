@@ -1,6 +1,6 @@
 // src/parsers/ssr.ts
 import { ShadowsocksRNode } from '../types';
-import { parseRawQuery, safeBase64Decode, tryDecodeURIComponent } from '../utils';
+import { parseRawQuery, QueryParamReader, safeBase64Decode, tryDecodeURIComponent } from '../utils';
 
 export function parseShadowsocksR(urlStr: string): ShadowsocksRNode | null {
   try {
@@ -28,16 +28,24 @@ export function parseShadowsocksR(urlStr: string): ShadowsocksRNode | null {
     let obfsParam = '';
     let protoParam = '';
     const rawQuery = parseRawQuery(queryPart);
+    const q = new QueryParamReader(rawQuery.entries);
 
-    if (queryPart) {
-      const qParams = new URLSearchParams(queryPart);
-      const remarks = qParams.get('remarks');
+    if (rawQuery.entries.length > 0) {
+      const remarks = q.get('remarks');
       if (remarks) {
         name = safeBase64Decode(remarks) || tryDecodeURIComponent(remarks);
       }
-      obfsParam = safeBase64Decode(qParams.get('obfsparam') || '') || qParams.get('obfsparam') || '';
-      protoParam = safeBase64Decode(qParams.get('protoparam') || '') || qParams.get('protoparam') || '';
+      const rawObfs = q.get('obfsparam', 'obfs_param', 'obfs-param', 'obfsParam');
+      if (rawObfs) {
+        obfsParam = safeBase64Decode(rawObfs) || rawObfs;
+      }
+      const rawProto = q.get('protoparam', 'proto_param', 'proto-param', 'protoParam');
+      if (rawProto) {
+        protoParam = safeBase64Decode(rawProto) || rawProto;
+      }
     }
+
+    const extras = q.getUnusedExtras();
 
     return {
       name,
@@ -56,7 +64,7 @@ export function parseShadowsocksR(urlStr: string): ShadowsocksRNode | null {
         obfs,
         obfsParam,
         protoParam,
-        extras: {}
+        extras
       },
       udp: true
     };

@@ -181,6 +181,101 @@ export function queryEntriesToRecord(entries?: RawQueryEntry[]): Record<string, 
 }
 
 /**
+ * 大小写不敏感地从 RawQueryEntry 列表中获取指定别名对应的参数值（命中第一个匹配项）
+ */
+export function getQueryParam(
+  entries: RawQueryEntry[] | undefined,
+  ...aliases: string[]
+): string | undefined {
+  if (!entries || entries.length === 0) return undefined;
+  const aliasSet = new Set(aliases.map(x => x.toLowerCase()));
+  for (const entry of entries) {
+    if (aliasSet.has(entry.key.toLowerCase())) {
+      return entry.value;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * 大小写不敏感地从 RawQueryEntry 列表中获取布尔型参数值 ('1', 'true')
+ */
+export function getQueryBool(
+  entries: RawQueryEntry[] | undefined,
+  ...aliases: string[]
+): boolean {
+  const val = getQueryParam(entries, ...aliases);
+  if (!val) return false;
+  const clean = val.toLowerCase().trim();
+  return clean === '1' || clean === 'true';
+}
+
+/**
+ * 统一 Query 参数提取器：自动跟踪被读取的别名，防止已声明别名未读取导致的静默丢参或 Gate 误判
+ */
+export class QueryParamReader {
+  private entries: RawQueryEntry[];
+  private usedKeys = new Set<string>();
+
+  constructor(entries?: RawQueryEntry[]) {
+    this.entries = entries || [];
+  }
+
+  get(...aliases: string[]): string | undefined {
+    if (!this.entries || this.entries.length === 0) return undefined;
+    const aliasSet = new Set(aliases.map(x => x.toLowerCase()));
+    let firstVal: string | undefined = undefined;
+
+    for (const entry of this.entries) {
+      const entryKeyLower = entry.key.toLowerCase();
+      if (aliasSet.has(entryKeyLower)) {
+        this.usedKeys.add(entryKeyLower);
+        if (firstVal === undefined) {
+          firstVal = entry.value;
+        }
+      }
+    }
+    return firstVal;
+  }
+
+  getBool(...aliases: string[]): boolean {
+    const val = this.get(...aliases);
+    if (!val) return false;
+    const clean = val.toLowerCase().trim();
+    return clean === '1' || clean === 'true';
+  }
+
+  getInt(...aliases: string[]): number | undefined {
+    const val = this.get(...aliases);
+    if (!val) return undefined;
+    const num = parseInt(val, 10);
+    return isNaN(num) ? undefined : num;
+  }
+
+  markRecognized(...aliases: string[]): void {
+    const aliasSet = new Set(aliases.map(x => x.toLowerCase()));
+    for (const entry of this.entries) {
+      const entryKeyLower = entry.key.toLowerCase();
+      if (aliasSet.has(entryKeyLower)) {
+        this.usedKeys.add(entryKeyLower);
+      }
+    }
+  }
+
+  getUnusedExtras(ignoreKeys: string[] = []): Record<string, unknown> {
+    const ignored = new Set(ignoreKeys.map(k => k.toLowerCase()));
+    const extras: Record<string, unknown> = {};
+    for (const entry of this.entries) {
+      const entryKeyLower = entry.key.toLowerCase();
+      if (!this.usedKeys.has(entryKeyLower) && !ignored.has(entryKeyLower)) {
+        extras[entry.key] = entry.value;
+      }
+    }
+    return extras;
+  }
+}
+
+/**
  * 无损重命名原始 URI：仅替换最后的 #节点名称，100% 保持所有原始协议参数
  */
 export function renameRawUri(raw: string, name: string): string {

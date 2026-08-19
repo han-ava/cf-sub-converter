@@ -1,6 +1,6 @@
 // src/parsers/anytls.ts
 import { AnyTLSNode } from '../types';
-import { parseRawQuery, queryEntriesToRecord, safeBase64Decode, tryDecodeURIComponent } from '../utils';
+import { parseRawQuery, QueryParamReader, safeBase64Decode, tryDecodeURIComponent } from '../utils';
 
 export function parseAnyTLS(urlStr: string): AnyTLSNode | null {
   try {
@@ -21,7 +21,7 @@ export function parseAnyTLS(urlStr: string): AnyTLSNode | null {
     }
 
     const rawQuery = parseRawQuery(queryPart);
-    const qMap = queryEntriesToRecord(rawQuery.entries);
+    const q = new QueryParamReader(rawQuery.entries);
 
     let password = '';
     let server = '';
@@ -68,30 +68,18 @@ export function parseAnyTLS(urlStr: string): AnyTLSNode | null {
 
     if (!server || !password) return null;
 
-    const sni = qMap.sni || qMap.peer || server;
-    const alpnStr = qMap.alpn;
+    const sni = q.get('sni', 'peer', 'servername', 'serverName', 'server-name', 'server_name') || server;
+    const alpnStr = q.get('alpn');
     const alpn = alpnStr ? alpnStr.split(',').map(s => s.trim()).filter(Boolean) : undefined;
-    const fp = qMap.fp || qMap.fingerprint || qMap['client-fingerprint'];
-    const insecure = qMap.insecure === '1' || qMap.insecure === 'true' || qMap.allowInsecure === '1' || qMap['skip-cert-verify'] === 'true';
-    const nameCertVerify = qMap['name-cert-verify'] || qMap.name_cert_verify;
-    const clientMetadata = qMap['client-metadata'] || qMap.client_metadata;
-    const idleCheckInterval = qMap['idle-session-check-interval'] || qMap.idle_session_check_interval;
-    const idleTimeout = qMap['idle-session-timeout'] || qMap.idle_session_timeout;
-    const minIdleSession = qMap['min-idle-session'] || qMap.min_idle_session;
+    const fp = q.get('fp', 'fingerprint', 'client-fingerprint', 'client_fingerprint', 'clientfingerprint');
+    const insecure = q.getBool('insecure', 'allowinsecure', 'allow_insecure', 'allowInsecure', 'skip-cert-verify', 'skip_cert_verify', 'skipcertverify');
+    const nameCertVerify = q.get('name-cert-verify', 'name_cert_verify', 'namecertverify');
+    const clientMetadata = q.get('client-metadata', 'client_metadata', 'clientmetadata');
+    const idleCheckInterval = q.get('idle-session-check-interval', 'idle_session_check_interval', 'idlesessioncheckinterval');
+    const idleTimeout = q.get('idle-session-timeout', 'idle_session_timeout', 'idlesessiontimeout');
+    const minIdleSession = q.get('min-idle-session', 'min_idle_session', 'minidlesession');
 
-    const recognizedKeys = new Set([
-      'sni', 'peer', 'alpn', 'fp', 'fingerprint', 'client-fingerprint',
-      'insecure', 'allowinsecure', 'skip-cert-verify', 'name-cert-verify', 'name_cert_verify',
-      'client-metadata', 'client_metadata', 'idle-session-check-interval', 'idle_session_check_interval',
-      'idle-session-timeout', 'idle_session_timeout', 'min-idle-session', 'min_idle_session'
-    ]);
-
-    const extras: Record<string, unknown> = {};
-    for (const entry of rawQuery.entries) {
-      if (!recognizedKeys.has(entry.key.toLowerCase())) {
-        extras[entry.key] = entry.value;
-      }
-    }
+    const extras = q.getUnusedExtras();
 
     return {
       name,

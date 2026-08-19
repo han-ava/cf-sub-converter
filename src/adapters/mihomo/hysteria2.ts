@@ -2,7 +2,7 @@
 import { AdapterResult, ConversionWarning, Hysteria2Node } from '../../types';
 import { parseALPN, detectUnmappedFields, normalizeSha256Fingerprint } from '../../utils';
 
-const SUPPORTED_HY2_OBFS = new Set(['salamander']);
+const SUPPORTED_HY2_OBFS = new Set(['salamander', 'gecko']);
 
 export function adaptHysteria2ToMihomo(node: Hysteria2Node): AdapterResult {
   const warnings: ConversionWarning[] = [];

@@ -1,6 +1,6 @@
 // src/parsers/trojan.ts
 import { TrojanNode } from '../types';
-import { parseRawQuery, queryEntriesToRecord, tryDecodeURIComponent } from '../utils';
+import { parseRawQuery, QueryParamReader, tryDecodeURIComponent } from '../utils';
 
 export function parseTrojan(urlStr: string): TrojanNode | null {
   try {
@@ -42,31 +42,22 @@ export function parseTrojan(urlStr: string): TrojanNode | null {
     if (!server || !password) return null;
 
     const rawQuery = parseRawQuery(queryPart);
-    const qMap = queryEntriesToRecord(rawQuery.entries);
+    const q = new QueryParamReader(rawQuery.entries);
 
-    const type = (qMap.type || 'tcp').toLowerCase();
-    const sni = qMap.sni || qMap.peer || server;
-    const alpnStr = qMap.alpn;
+    const type = (q.get('type', 'net', 'network', 'transport') || 'tcp').toLowerCase();
+    const sni = q.get('sni', 'peer', 'servername', 'serverName', 'server-name', 'server_name') || server;
+    const alpnStr = q.get('alpn');
     const alpn = alpnStr ? alpnStr.split(',').map(s => s.trim()).filter(Boolean) : undefined;
-    const fp = qMap.fp || qMap.fingerprint || qMap['client-fingerprint'];
-    const allowInsecure = qMap.allowInsecure === '1' || qMap.insecure === '1' || qMap.allow_insecure === '1' || qMap['skip-cert-verify'] === 'true';
+    const fp = q.get('fp', 'fingerprint', 'client-fingerprint', 'client_fingerprint', 'clientfingerprint');
+    const allowInsecure = q.getBool('allowInsecure', 'allowinsecure', 'allow_insecure', 'insecure', 'skip-cert-verify', 'skip_cert_verify', 'skipcertverify');
 
-    const path = qMap.path || (type === 'ws' ? '/' : undefined);
-    const host = qMap.host || undefined;
-    const serviceName = qMap.serviceName || qMap['service-name'] || qMap['grpc-service-name'] || undefined;
+    const path = q.get('path', 'ws-path', 'ws_path', 'wspath') || (type === 'ws' ? '/' : undefined);
+    const host = q.get('host', 'ws-host', 'ws_host', 'wshost', 'obfs-host', 'obfs_host', 'obfshost');
+    const serviceName = q.get('serviceName', 'servicename', 'service-name', 'service_name', 'grpc-service-name', 'grpc_service_name', 'grpcservicename') || (type === 'grpc' ? q.get('path', 'ws-path', 'ws_path', 'wspath') : undefined);
+    const mode = q.get('mode', 'grpc-mode', 'grpc_mode', 'grpcmode');
+    const headerType = q.get('headerType', 'headertype', 'header-type', 'header_type');
 
-    const recognizedKeys = new Set([
-      'type', 'sni', 'peer', 'alpn', 'fp', 'fingerprint', 'client-fingerprint',
-      'allowinsecure', 'insecure', 'allow_insecure', 'skip-cert-verify',
-      'path', 'host', 'servicename', 'service-name', 'grpc-service-name'
-    ]);
-
-    const extras: Record<string, unknown> = {};
-    for (const entry of rawQuery.entries) {
-      if (!recognizedKeys.has(entry.key.toLowerCase())) {
-        extras[entry.key] = entry.value;
-      }
-    }
+    const extras = q.getUnusedExtras();
 
     const transport: TrojanNode['protocolData']['transport'] = {
       type,

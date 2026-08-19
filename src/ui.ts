@@ -1295,7 +1295,7 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
         } else if (status === 'warning') {
           const count = (conv.unsupportedParams?.length || 0) + (conv.warnings?.length || 0);
           badge = \`<span class="node-tag-warn">⚠️ 有转换警告 (\${count})</span>\`;
-          actionDesc = \`<span style="color: var(--warning);">[处理] 节点仍然输出到最终配置中。已自动剔除未映射参数以确保连接不报错。建议检查这些参数是否影响连接。</span>\`;
+          actionDesc = \`<span style="color: var(--warning);">[处理] 节点仍输出到最终配置中。<br>存在未映射参数，可能影响连接语义，请根据警告详情确认。</span>\`;
         } else {
           badge = \`<span class="node-tag-perfect">✅ 完整转换</span>\`;
           actionDesc = \`<span style="color: var(--success);">[处理] 所有参数均已忠实映射到 Mihomo，无任何丢失。</span>\`;
