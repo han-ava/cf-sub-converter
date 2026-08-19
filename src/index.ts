@@ -102,6 +102,7 @@ async function loadAllNodes(
 
   // 若输入不包含任何 http/https 远程订阅地址（即为用户直接粘贴的 Base64 订阅、YAML、JSON 或多行节点列表），优先作为整段配置解析，避免被行分割破坏 MIME Base64 或截断
   if (!trimmedUrlParam.includes('http://') && !trimmedUrlParam.includes('https://')) {
+    console.log('[DEBUG][SOURCE_RAW]', trimmedUrlParam);
     try {
       const parsed = await parseContent(trimmedUrlParam);
       if (parsed.length > 0) {
@@ -145,6 +146,7 @@ async function loadAllNodes(
 
     for (const result of fetchResults) {
       if (result.ok && result.text) {
+        console.log('[DEBUG][SOURCE_RAW]', result.text);
         if (result.userinfo) {
           fetchedUserinfos.push(result.userinfo);
         }
@@ -229,6 +231,7 @@ export default {
     if (request.method === 'POST' && url.pathname === '/api/preview') {
       try {
         const body: any = await request.json();
+        console.log('[DEBUG][REQUEST]', JSON.stringify(body));
         const rawUrl = body.url || '';
         const requestToken = body.token || extractRequestToken(request, url);
 
@@ -249,6 +252,7 @@ export default {
         }
 
         const { nodes: rawNodes, userinfo } = await loadAllNodes(rawUrl, undefined, true, 180, 'first');
+        console.log('[DEBUG][PARSED_NODES]', JSON.stringify(rawNodes, null, 2));
 
         // 过滤与重命名
         const renameRules = parseRenameRules(body.rename ? String(body.rename) : '');
@@ -260,6 +264,16 @@ export default {
           addEmoji: body.emoji !== false,
           enableUdp: body.udp !== false
         });
+        console.log('[DEBUG][PROCESSED_NODES]', JSON.stringify(processedNodes, null, 2));
+
+        let debugRaw = '';
+        let debugBase64 = '';
+        try {
+          debugRaw = toRawLinks(processedNodes);
+          debugBase64 = toBase64(processedNodes);
+        } catch (e: any) {
+          console.warn('[DEBUG] Failed to serialize debug raw/base64 in preview:', e?.message || e);
+        }
 
         // 统计计算全量 processedNodes（不受 UI 1000 条截断影响）
         let perfectCount = 0;
@@ -349,7 +363,13 @@ export default {
             userinfo: userinfoObj,
             regions: regionStats,
             warningAggregations,
-            nodes: nodeItems
+            nodes: nodeItems,
+            debug: {
+              parsedNodes: rawNodes,
+              processedNodes,
+              raw: debugRaw,
+              base64: debugBase64
+            }
           }),
           {
             headers: {
@@ -399,6 +419,7 @@ export default {
       let cacheTtl = 180;
 
       if (request.method === 'GET') {
+        console.log('[DEBUG][REQUEST]', JSON.stringify({ method: 'GET', url: request.url, search: Object.fromEntries(url.searchParams) }));
         rawUrl = url.searchParams.get('url') || '';
         target = (url.searchParams.get('target') || detectedTarget).toLowerCase();
         includeRegex = url.searchParams.get('include') || '';
@@ -421,6 +442,7 @@ export default {
       } else if (request.method === 'POST') {
         try {
           const body: any = await request.json();
+          console.log('[DEBUG][REQUEST]', JSON.stringify(body));
           rawUrl = body.url || '';
           target = (body.target || detectedTarget).toLowerCase();
           includeRegex = body.include || '';
@@ -483,6 +505,7 @@ export default {
           infoStrategy,
           globalAbortController.signal
         );
+        console.log('[DEBUG][PARSED_NODES]', JSON.stringify(rawNodes, null, 2));
 
         clearTimeout(globalTimeout);
 
@@ -505,6 +528,7 @@ export default {
           addEmoji,
           enableUdp
         });
+        console.log('[DEBUG][PROCESSED_NODES]', JSON.stringify(processedNodes, null, 2));
 
         // 响应头构建：禁止私密订阅被中间缓存
         const responseHeaders: Record<string, string> = {
