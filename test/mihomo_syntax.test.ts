@@ -1,5 +1,5 @@
 // test/mihomo_syntax.test.ts
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, test } from 'vitest';
 import { parseSingleNode } from '../src/parser';
 import { toClashMeta } from '../src/generator';
 import { FIXTURES } from './fixtures/nodes';

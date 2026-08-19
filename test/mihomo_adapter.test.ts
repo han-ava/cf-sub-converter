@@ -1,5 +1,5 @@
 // test/mihomo_adapter.test.ts
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, test } from 'vitest';
 import { parseSingleNode, parseContent } from '../src/parser';
 import { adaptNodeToMihomo, nodeToClashProxy } from '../src/adapters/mihomo';
 import { FIXTURES } from './fixtures/nodes';

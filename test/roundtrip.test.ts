@@ -1,5 +1,5 @@
 // test/roundtrip.test.ts
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, test } from 'vitest';
 import { parseSingleNode, parseContent } from '../src/parser';
 import { toClashMeta } from '../src/generator';
 import { toRawLinks, toBase64 } from '../src/adapters/raw';

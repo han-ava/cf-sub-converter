@@ -1,5 +1,5 @@
 // test/base64_e2e_serialization.test.ts
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, test } from 'vitest';
 import { parseContent, parseSingleNode } from '../src/parser';
 import { toRawLinks, toBase64 } from '../src/adapters/raw';
 import { safeBase64Decode } from '../src/utils';
