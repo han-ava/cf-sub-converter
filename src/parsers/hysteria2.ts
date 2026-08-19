@@ -1,6 +1,6 @@
 // src/parsers/hysteria2.ts
 import { Hysteria2Node } from '../types';
-import { parseRawQuery, parseStrictEndpoint, QueryParamReader, tryDecodeURIComponent } from '../utils';
+import { parseHy2HopInterval, parseRawQuery, parseStrictEndpoint, QueryParamReader, tryDecodeURIComponent } from '../utils';
 
 export function parseHysteria2(urlStr: string): Hysteria2Node | null {
   try {
@@ -33,12 +33,21 @@ export function parseHysteria2(urlStr: string): Hysteria2Node | null {
     const q = new QueryParamReader(rawQuery.entries);
 
     const sni = q.get('sni', 'peer', 'servername', 'serverName', 'server-name', 'server_name') || server;
-    const obfs = q.get('obfs', 'obfs-type', 'obfs_type', 'obfstype');
+    const obfs = q.getEnum(['salamander', 'gecko'], 'obfs', 'obfs-type', 'obfs_type', 'obfstype');
     const obfsPassword = q.get('obfs-password', 'obfs_password', 'obfspassword', 'obfs-pass', 'obfs_pass', 'obfspass', 'obfs-param', 'obfs_param', 'obfsparam');
     const obfsMinPacketSize = q.getInt('obfs-min-packet-size', 'obfs_min_packet_size', 'obfsminpacketsize', 'obfs-min-size', 'obfs_min_size', 'obfsminsize');
     const obfsMaxPacketSize = q.getInt('obfs-max-packet-size', 'obfs_max_packet_size', 'obfsmaxpacketsize', 'obfs-max-size', 'obfs_max_size', 'obfsmaxsize');
     const ports = q.get('ports', 'mport', 'mports');
-    const hopInterval = q.getInt('hop-interval', 'hop_interval', 'hopinterval');
+    const rawHopInterval = q.get('hop-interval', 'hop_interval', 'hopinterval');
+    let hopInterval: number | string | undefined = undefined;
+    if (rawHopInterval !== undefined) {
+      const parsedHop = parseHy2HopInterval(rawHopInterval);
+      if (parsedHop.invalid) {
+        q.getInt('hop-interval');
+      } else {
+        hopInterval = parsedHop.val;
+      }
+    }
     const up = q.get('up', 'up_mbps', 'upmbps', 'upMbps', 'upload');
     const down = q.get('down', 'down_mbps', 'downmbps', 'downMbps', 'download');
     const alpnStr = q.get('alpn');

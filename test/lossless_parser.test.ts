@@ -96,14 +96,19 @@ describe('Lossless Parser Suite', () => {
     expect(node.protocolData.sni).toBe('hy2.example.com');
     expect(node.protocolData.obfs).toBe('salamander');
     expect(node.protocolData.obfsPassword).toBe('obfspass123');
-    expect(node.protocolData.obfsMinPacketSize).toBe(64);
-    expect(node.protocolData.obfsMaxPacketSize).toBe(1024);
     expect(node.protocolData.ports).toBe('20000-30000');
     expect(node.protocolData.hopInterval).toBe(30);
     expect(node.protocolData.up).toBe('100');
     expect(node.protocolData.down).toBe('500');
     expect(node.protocolData.alpn).toEqual(['h3']);
     expect(node.protocolData.extras.customHy2Param).toBe('val');
+
+    // Gecko obfs min/max packet sizes
+    const geckoNode = parseSingleNode(FIXTURES.hy2_gecko) as Hysteria2Node;
+    expect(geckoNode).not.toBeNull();
+    expect(geckoNode.protocolData.obfs).toBe('gecko');
+    expect(geckoNode.protocolData.obfsMinPacketSize).toBe(64);
+    expect(geckoNode.protocolData.obfsMaxPacketSize).toBe(1024);
   });
 
   test('AnyTLS parsing', () => {

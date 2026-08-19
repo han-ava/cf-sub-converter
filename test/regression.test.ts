@@ -97,7 +97,8 @@ describe('Regression Fixtures Golden Tests', () => {
     });
   });
 
-  test('6. Hysteria 2 multi-ports and obfs-salamander map accurately', () => {
+  test('6. Hysteria 2 multi-ports, salamander and gecko obfs map accurately', () => {
+    // Salamander without gecko-specific packet sizes
     const node = parseSingleNode(REGRESSION_FIXTURES.hy2_provider);
     expect(node).not.toBeNull();
     expect(node!.protocolData.ports).toBe('20000-30000');
@@ -109,8 +110,19 @@ describe('Regression Fixtures Golden Tests', () => {
     expect(res.config!.ports).toBe('20000-30000');
     expect(res.config!.obfs).toBe('salamander');
     expect(res.config!['obfs-password']).toBe('obfspass123');
-    expect(res.config!['obfs-min-packet-size']).toBe(64);
-    expect(res.config!['obfs-max-packet-size']).toBe(1024);
+    expect(res.config!['obfs-min-packet-size']).toBeUndefined();
+    expect(res.config!['obfs-max-packet-size']).toBeUndefined();
+
+    // Gecko with packet sizes and hop-interval range
+    const geckoNode = parseSingleNode(REGRESSION_FIXTURES.hy2_gecko);
+    expect(geckoNode).not.toBeNull();
+    expect(geckoNode!.protocolData.hopInterval).toBe('15-30');
+    const geckoRes = adaptNodeToMihomo(geckoNode!);
+    expect(geckoRes.fatal).toBe(false);
+    expect(geckoRes.config!.obfs).toBe('gecko');
+    expect(geckoRes.config!['obfs-min-packet-size']).toBe(64);
+    expect(geckoRes.config!['obfs-max-packet-size']).toBe(1024);
+    expect(geckoRes.config!['hop-interval']).toBe('15-30');
   });
 
   test('7. AnyTLS official URI spec maps cleanly without Reality', () => {

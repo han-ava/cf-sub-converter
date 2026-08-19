@@ -33,7 +33,10 @@ export const REGRESSION_FIXTURES = {
   })).toString('base64'),
 
   // 6. Hysteria 2 真实多端口、obfs-salamander 与参数
-  hy2_provider: 'hysteria2://provider_pass_123@[2001:db8::1]:443?sni=hy2.provider.com&obfs=salamander&obfs-password=obfspass123&obfs-min-packet-size=64&obfs-max-packet-size=1024&ports=20000-30000&hop-interval=30&up=100&down=500&alpn=h3&fp=chrome&skip-cert-verify=true#%E6%B3%95%E5%9B%BD%20HY2%20Provider',
+  hy2_provider: 'hysteria2://provider_pass_123@[2001:db8::1]:443?sni=hy2.provider.com&obfs=salamander&obfs-password=obfspass123&ports=20000-30000&hop-interval=30&up=100&down=500&alpn=h3&skip-cert-verify=true#%E6%B3%95%E5%9B%BD%20HY2%20Provider',
+
+  // 6b. Hysteria 2 Gecko 混淆与 obfs-min/max-packet-size
+  hy2_gecko: 'hysteria2://gecko_pass_456@hy2.gecko.com:443?sni=hy2.gecko.com&obfs=gecko&obfs-password=geckopass123&obfs-min-packet-size=64&obfs-max-packet-size=1024&ports=40000-50000&hop-interval=15-30#%E6%97%A5%E6%9C%AC%20HY2%20Gecko',
 
   // 7. AnyTLS 官方规范格式 (无 Reality，含官方 sni & insecure)
   anytls_official: 'anytls://any_pass_999@anytls.provider.com:8443?sni=anytls.provider.com&insecure=1&alpn=h2,http/1.1&client-fingerprint=chrome&idle-session-timeout=60#%E9%A6%96%E5%B0%94%20AnyTLS%20Official',

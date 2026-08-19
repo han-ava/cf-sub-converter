@@ -156,7 +156,7 @@ export interface Hysteria2Node extends BaseNode {
     sni?: string;
     skipCertVerify?: boolean;
     ports?: string;
-    hopInterval?: number;
+    hopInterval?: number | string;
     up?: string | number;
     down?: string | number;
     obfs?: string;

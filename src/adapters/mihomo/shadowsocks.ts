@@ -12,6 +12,44 @@ const SUPPORTED_SS_PLUGINS = new Set([
   'jls'
 ]);
 
+function formatMihomoPluginOpts(plugin: string, rawOpts: Record<string, any>): Record<string, any> {
+  const result: Record<string, any> = {};
+  const booleanKeys = new Set(['tls', 'mux', 'skip-cert-verify', 'skipcertverify', 'nocomp', 'quiet']);
+  const numberKeys = new Set([
+    'version', 'mtu', 'sndwnd', 'rcvwnd', 'datashard', 'parityshard', 'dscp', 'interval', 'resend', 'nc'
+  ]);
+
+  for (const [k, v] of Object.entries(rawOpts)) {
+    const kLower = k.toLowerCase();
+    if (v === true || v === false) {
+      result[k] = v;
+    } else if (typeof v === 'string') {
+      const valTrimmed = v.trim();
+      const valLower = valTrimmed.toLowerCase();
+      if (booleanKeys.has(kLower)) {
+        if (valLower === 'true' || valLower === '1' || valTrimmed === '') {
+          result[k] = true;
+        } else if (valLower === 'false' || valLower === '0') {
+          result[k] = false;
+        } else {
+          result[k] = valTrimmed;
+        }
+      } else if (numberKeys.has(kLower)) {
+        if (/^-?\d+$/.test(valTrimmed)) {
+          result[k] = parseInt(valTrimmed, 10);
+        } else {
+          result[k] = valTrimmed;
+        }
+      } else {
+        result[k] = valTrimmed;
+      }
+    } else {
+      result[k] = v;
+    }
+  }
+  return result;
+}
+
 export function adaptShadowsocksToMihomo(node: ShadowsocksNode): AdapterResult {
   const warnings: ConversionWarning[] = [];
   const unsupportedParams: string[] = [];
@@ -118,7 +156,7 @@ export function adaptShadowsocksToMihomo(node: ShadowsocksNode): AdapterResult {
   if (normalizedPlugin) {
     config.plugin = normalizedPlugin;
     if (p.pluginOpts) {
-      config['plugin-opts'] = p.pluginOpts;
+      config['plugin-opts'] = formatMihomoPluginOpts(normalizedPlugin, p.pluginOpts);
     }
   }
 

@@ -34,9 +34,23 @@ export function parseVless(urlStr: string): VlessNode | null {
     const q = new QueryParamReader(rawQuery.entries);
 
     const type = (q.get('type', 'net', 'network', 'transport') || 'tcp').toLowerCase();
-    const security = (q.get('security', 'tls') || 'none').toLowerCase();
-    const flow = q.get('flow');
-    const packetEncoding = q.get('packetEncoding', 'packet-encoding', 'packet_encoding', 'packetencoding', 'packet_addr', 'packetaddr', 'packet-addr');
+    const rawSecurity = q.get('security', 'tls');
+    let security = 'none';
+    if (rawSecurity) {
+      const parsedSec = q.getEnum(['tls', 'reality', 'none'], 'security', 'tls');
+      if (parsedSec) security = parsedSec;
+    }
+    const rawFlow = q.get('flow');
+    let flow: string | undefined = undefined;
+    if (rawFlow) {
+      flow = q.getEnum(['xtls-rprx-vision', 'xtls-rprx-vision-udp443', 'none'], 'flow');
+      if (flow === 'none') flow = undefined;
+    }
+    const rawPacketEncoding = q.get('packetEncoding', 'packet-encoding', 'packet_encoding', 'packetencoding', 'packet_addr', 'packetaddr', 'packet-addr');
+    let packetEncoding: string | undefined = undefined;
+    if (rawPacketEncoding) {
+      packetEncoding = q.getEnum(['packet', 'packetaddr', 'xudp'], 'packetEncoding', 'packet-encoding', 'packet_encoding', 'packetencoding', 'packet_addr', 'packetaddr', 'packet-addr');
+    }
     const encryption = q.get('encryption');
     const sni = q.get('sni', 'servername', 'serverName', 'server-name', 'server_name', 'peer') || server;
     const fp = q.get('fp', 'fingerprint', 'client-fingerprint', 'client_fingerprint', 'clientfingerprint');

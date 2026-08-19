@@ -41,8 +41,8 @@ export const FIXTURES = {
   ss_ss2022: 'ss://' + Buffer.from('2022-blake3-aes-128-gcm:dGVzdDEyMzQ1Njc4OTAxMg==').toString('base64') + '@2.2.2.2:8443/?udp-over-tcp=true&udp-over-tcp-version=2#SS2022%20Node',
   ss_ipv6_legacy: 'ss://' + Buffer.from('aes-256-gcm:pass123@[2400:3200::1]:8388').toString('base64') + '#%E6%97%A5%E6%9C%AC%20SS%20IPv6',
 
-  hy2_full: 'hysteria2://my_hy2_password@[2001:db8::1]:443?sni=hy2.example.com&obfs=salamander&obfs-password=obfspass123&obfs-min-packet-size=64&obfs-max-packet-size=1024&ports=20000-30000&hop-interval=30&up=100&down=500&alpn=h3&pinSHA256=f451ad6bd9404ff81fde262cc8bdf9b9da1e4a357edec4c17555c6f8bf1c3e2f&skip-cert-verify=true&customHy2Param=val#%E6%B3%95%E5%9B%BD%20HY2%20Full',
-  hy2_gecko: 'hysteria2://my_gecko_password@hy2gecko.example.com:443?sni=hy2gecko.example.com&obfs=gecko&obfs-password=geckopass123&ports=40000-50000#%E6%97%A5%E6%9C%AC%20HY2%20Gecko',
+  hy2_full: 'hysteria2://my_hy2_password@[2001:db8::1]:443?sni=hy2.example.com&obfs=salamander&obfs-password=obfspass123&ports=20000-30000&hop-interval=30&up=100&down=500&alpn=h3&pinSHA256=f451ad6bd9404ff81fde262cc8bdf9b9da1e4a357edec4c17555c6f8bf1c3e2f&skip-cert-verify=true&customHy2Param=val#%E6%B3%95%E5%9B%BD%20HY2%20Full',
+  hy2_gecko: 'hysteria2://my_gecko_password@hy2gecko.example.com:443?sni=hy2gecko.example.com&obfs=gecko&obfs-password=geckopass123&obfs-min-packet-size=64&obfs-max-packet-size=1024&ports=40000-50000#%E6%97%A5%E6%9C%AC%20HY2%20Gecko',
   
   anytls_standard: 'anytls://any_pass_123@anytls.example.com:8443?sni=anytls.example.com&alpn=h2,http/1.1&client-fingerprint=chrome&idle-session-timeout=60&min-idle-session=5&skip-cert-verify=true#%E9%A6%96%E5%B0%94%20AnyTLS',
 

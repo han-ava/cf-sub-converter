@@ -71,8 +71,8 @@ export function parseTuic(urlStr: string): TuicNode | null {
     const fastOpen = q.getBool('fast-open', 'fast_open', 'fastopen');
     const maxOpenStreams = q.getInt('max-open-streams', 'max_open_streams', 'maxopenstreams');
     const maxUdpRelayPacketSize = q.getInt('max-udp-relay-packet-size', 'max_udp_relay_packet_size', 'maxudprelaypacketsize');
-    const congestionController = q.get('congestion_controller', 'congestion-controller', 'congestionController', 'congestioncontroller', 'congestion_control', 'congestion-control', 'congestionControl', 'congestioncontrol', 'cc') || 'bbr';
-    const udpRelayMode = q.get('udp_relay_mode', 'udp-relay-mode', 'udpRelayMode', 'udprelaymode', 'udp-relay', 'udp_relay', 'udprelay') || 'native';
+    const congestionController = q.getEnum(['bbr', 'cubic', 'new_reno'], 'congestion_controller', 'congestion-controller', 'congestionController', 'congestioncontroller', 'congestion_control', 'congestion-control', 'congestionControl', 'congestioncontrol', 'cc') || 'bbr';
+    const udpRelayMode = q.getEnum(['native', 'quic'], 'udp_relay_mode', 'udp-relay-mode', 'udpRelayMode', 'udprelaymode', 'udp-relay', 'udp_relay', 'udprelay') || 'native';
     const alpnStr = q.get('alpn');
     const alpn = alpnStr ? alpnStr.split(',').map(s => s.trim()).filter(Boolean) : undefined;
     const insecure = q.getBool('allow_insecure', 'allowinsecure', 'allowInsecure', 'insecure', 'skip-cert-verify', 'skip_cert_verify', 'skipcertverify');

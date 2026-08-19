@@ -19,8 +19,18 @@ export function adaptAnyTLSToMihomo(node: AnyTLSNode): AdapterResult {
     };
   }
 
-  // Compatibility Gate: AnyTLS + Reality 互斥检查（Mihomo 官方明确不支持 AnyTLS + Reality）
-  if (p.extras?.reality || p.extras?.pbk || p.extras?.['public-key']) {
+  // Compatibility Gate: AnyTLS + Reality 互斥检查（Mihomo 官方明确不支持 AnyTLS + Reality，严格匹配所有 alias）
+  const REALITY_ALIASES = [
+    'reality', 'reality-opts', 'realityopts', 'reality_opts',
+    'pbk', 'public-key', 'publickey', 'public_key',
+    'sid', 'short-id', 'shortid', 'short_id',
+    'spx', 'spider-x', 'spiderx', 'spider_x'
+  ];
+  const extrasKeys = Object.keys(p.extras || {}).map(k => k.toLowerCase());
+  const hasRealityKey = REALITY_ALIASES.some(alias => extrasKeys.includes(alias));
+  const hasSecurityReality = (typeof p.extras?.security === 'string' && p.extras.security.toLowerCase() === 'reality');
+
+  if (hasRealityKey || hasSecurityReality) {
     return {
       fatal: true,
       lossy: true,

@@ -420,4 +420,137 @@ describe('QueryParamReader & Universal Alias Suite', () => {
     expect(res2.fatal).toBe(true);
     expect(res2.emitted).toBe(false);
   });
+
+  test('17. VMess host / SNI isolation & strict TLS validation', () => {
+    // host=cdn.example.com without sni -> SNI must fallback to server (origin.example.com), NOT host!
+    const vmessObj = {
+      v: '2',
+      ps: 'VMess Host SNI Isolation',
+      add: 'origin.example.com',
+      port: 443,
+      id: 'a3d9059f-7db9-4674-8be0-b530263f848a',
+      net: 'ws',
+      host: 'cdn.example.com',
+      tls: 'tls'
+    };
+    const uri = `vmess://${btoa(JSON.stringify(vmessObj))}`;
+    const node = parseSingleNode(uri);
+    expect(node).not.toBeNull();
+    expect(node!.protocolData.sni).toBe('origin.example.com');
+    expect(node!.protocolData.transport?.headers?.Host).toBe('cdn.example.com');
+
+    const res = adaptNodeToMihomo(node!);
+    expect(res.fatal).toBe(false);
+    expect(res.config!.servername).toBe('origin.example.com');
+    expect(res.config!['ws-opts'].headers.Host).toBe('cdn.example.com');
+
+    // Invalid TLS string "abc" triggers fatal gate
+    const badTlsObj = {
+      ...vmessObj,
+      tls: 'abc'
+    };
+    const badTlsUri = `vmess://${btoa(JSON.stringify(badTlsObj))}`;
+    const badNode = parseSingleNode(badTlsUri);
+    expect(badNode).not.toBeNull();
+    expect(badNode!.protocolData.invalidParams?.some(p => p.key === 'tls')).toBe(true);
+    const badRes = adaptNodeToMihomo(badNode!);
+    expect(badRes.fatal).toBe(true);
+    expect(badRes.emitted).toBe(false);
+  });
+
+  test('18. SS plugin-opts preserve raw string passwords without guessing numbers', () => {
+    // password="123456" in plugin-opts must stay string "123456"
+    const ssUri = 'ss://Y2hhY2hhMjAtaWV0Zi1wb2x5MTMwNTpteXBhc3N3b3JkMTIzIQ@1.2.3.4:8388/?plugin=shadow-tls%3Bpassword%3D123456%3Bsni%3Dexample.com%3Bversion%3D3#SS%20Plugin%20Opts';
+    const node = parseSingleNode(ssUri);
+    expect(node).not.toBeNull();
+    expect(node!.protocolData.pluginOpts?.password).toBe('123456');
+
+    const res = adaptNodeToMihomo(node!);
+    expect(res.fatal).toBe(false);
+    expect(res.config!['plugin-opts'].password).toBe('123456');
+    expect(res.config!['plugin-opts'].version).toBe(3);
+    expect(typeof res.config!['plugin-opts'].password).toBe('string');
+    expect(typeof res.config!['plugin-opts'].version).toBe('number');
+  });
+
+  test('19. HY2 hop-interval random range and obfs-salamander packet size warnings', () => {
+    // hop-interval=15-30
+    const hy2Uri = 'hysteria2://pass@1.2.3.4:443?hop-interval=15-30&obfs=salamander&obfs-min-packet-size=64#HY2%20Hop';
+    const node = parseSingleNode(hy2Uri);
+    expect(node).not.toBeNull();
+    expect(node!.protocolData.hopInterval).toBe('15-30');
+
+    const res = adaptNodeToMihomo(node!);
+    expect(res.fatal).toBe(false);
+    expect(res.config!['hop-interval']).toBe('15-30');
+    // obfs-min-packet-size must be stripped for salamander
+    expect(res.config!['obfs-min-packet-size']).toBeUndefined();
+    expect(res.unsupportedParams).toContain('obfs-min-packet-size');
+
+    // Invalid hop-interval 30abc -> invalidParams
+    const badHopUri = 'hysteria2://pass@1.2.3.4:443?hop-interval=30abc#HY2%20Bad%20Hop';
+    const badNode = parseSingleNode(badHopUri);
+    expect(badNode).not.toBeNull();
+    expect(badNode!.protocolData.invalidParams?.some(p => p.key === 'hop-interval')).toBe(true);
+  });
+
+  test('20. Protocol Enum validation Gates: TUIC, VMess, VLESS', () => {
+    // TUIC: invalid congestion-controller
+    const tuicBad = 'tuic://my_uuid:my_pass@1.2.3.4:8443?congestion_controller=invalid_cc#TUIC%20Bad%20CC';
+    const tuicNode = parseSingleNode(tuicBad);
+    expect(tuicNode).not.toBeNull();
+    expect(tuicNode!.protocolData.invalidParams?.some(p => p.key === 'congestion_controller')).toBe(true);
+
+    // VMess: invalid cipher
+    const vmessBad = {
+      v: '2',
+      ps: 'VMess Bad Cipher',
+      add: '1.2.3.4',
+      port: 443,
+      id: 'a3d9059f-7db9-4674-8be0-b530263f848a',
+      scy: 'unsupported-cipher'
+    };
+    const vmessNode = parseSingleNode(`vmess://${btoa(JSON.stringify(vmessBad))}`);
+    expect(vmessNode).not.toBeNull();
+    expect(vmessNode!.protocolData.invalidParams?.some(p => p.key === 'scy')).toBe(true);
+    const vmessRes = adaptNodeToMihomo(vmessNode!);
+    expect(vmessRes.fatal).toBe(true); // cipher/scy is critical
+
+    // VLESS: invalid flow
+    const vlessBad = 'vless://a3d9059f-7db9-4674-8be0-b530263f848a@1.2.3.4:443?flow=invalid-flow#VLESS%20Bad%20Flow';
+    const vlessNode = parseSingleNode(vlessBad);
+    expect(vlessNode).not.toBeNull();
+    expect(vlessNode!.protocolData.invalidParams?.some(p => p.key === 'flow')).toBe(true);
+  });
+
+  test('21. AnyTLS Reality full alias rejection Gate', () => {
+    const realityAliases = [
+      'anytls://pass@1.2.3.4:8443?security=reality#AnyTLS%20Reality%201',
+      'anytls://pass@1.2.3.4:8443?pbk=f6Hq_u8bL6ZtD3yL5p1bUv8tH9zQ6wK7nJ4mP2sE5rY#AnyTLS%20Reality%202',
+      'anytls://pass@1.2.3.4:8443?reality-opts=some-opts#AnyTLS%20Reality%203',
+      'anytls://pass@1.2.3.4:8443?publicKey=some-pubkey#AnyTLS%20Reality%204',
+      'anytls://pass@1.2.3.4:8443?spiderX=%2F#AnyTLS%20Reality%205'
+    ];
+
+    for (const uri of realityAliases) {
+      const node = parseSingleNode(uri);
+      expect(node).not.toBeNull();
+      const res = adaptNodeToMihomo(node!);
+      expect(res.fatal).toBe(true);
+      expect(res.emitted).toBe(false);
+      expect(res.warnings.some(w => w.field === 'reality' && w.level === 'fatal')).toBe(true);
+    }
+  });
+
+  test('22. parseStrictEndpoint: Unbracketed IPv6 with multiple colons must return strict error', () => {
+    // Unbracketed IPv6 like 2001:db8::1 must NOT be parsed as host="2001:db8:" and port=1
+    const unbracketedUri = 'vless://a3d9059f-7db9-4674-8be0-b530263f848a@2001:db8::1#Unbracketed%20IPv6';
+    const node = parseSingleNode(unbracketedUri);
+    expect(node).not.toBeNull();
+    expect(node!.protocolData.invalidParams?.some(p => p.key === 'port')).toBe(true);
+
+    const res = adaptNodeToMihomo(node!);
+    expect(res.fatal).toBe(true);
+    expect(res.emitted).toBe(false);
+  });
 });

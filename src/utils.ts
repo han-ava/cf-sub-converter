@@ -284,6 +284,25 @@ export class QueryParamReader {
     return undefined;
   }
 
+  getEnum(allowedValues: string[], ...aliases: string[]): string | undefined {
+    const val = this.get(...aliases);
+    if (val === undefined) return undefined;
+    const clean = val.trim().toLowerCase();
+    const matched = allowedValues.find(a => a.toLowerCase() === clean);
+    if (matched !== undefined) {
+      return matched;
+    }
+    const aliasSet = new Set(aliases.map(x => x.toLowerCase()));
+    const matchedEntry = this.entries.find(e => aliasSet.has(e.key.toLowerCase()));
+    const key = matchedEntry ? matchedEntry.key : aliases[0] || 'unknown';
+    this.invalidParams.push({
+      key,
+      value: val,
+      reason: `参数值 "${val}" 不是合法的枚举值 (允许值: ${allowedValues.join(', ')})`
+    });
+    return undefined;
+  }
+
   markRecognized(...aliases: string[]): void {
     const aliasSet = new Set(aliases.map(x => x.toLowerCase()));
     for (const entry of this.entries) {
@@ -348,6 +367,15 @@ export function parseStrictEndpoint(serverPortStr: string, defaultPort: number =
       return { server, port: defaultPort, error: `IPv6 地址后包含非法字符: ${afterBracket}`, rawPort: afterBracket };
     }
   } else {
+    // 检查未加 [] 的裸 IPv6 地址（包含多个冒号）
+    const colonCount = (cleanStr.match(/:/g) || []).length;
+    if (colonCount > 1) {
+      return {
+        server: cleanStr,
+        port: defaultPort,
+        error: `IPv6 地址 [${cleanStr}] 格式错误: 必须使用方括号 [ ] 包裹 (例如 [${cleanStr}]:${defaultPort})`
+      };
+    }
     const colonIndex = cleanStr.lastIndexOf(':');
     if (colonIndex !== -1) {
       server = cleanStr.substring(0, colonIndex);
@@ -458,6 +486,28 @@ export class JsonFieldReader {
     return undefined;
   }
 
+  getEnum(allowedValues: string[], ...aliases: string[]): string | undefined {
+    const aliasSet = new Set(aliases.map(x => x.toLowerCase()));
+    for (const [k, v] of Object.entries(this.json)) {
+      if (aliasSet.has(k.toLowerCase())) {
+        this.usedKeys.add(k.toLowerCase());
+        if (v === undefined || v === null || v === '') return undefined;
+        const str = String(v).trim().toLowerCase();
+        const matched = allowedValues.find(a => a.toLowerCase() === str);
+        if (matched !== undefined) {
+          return matched;
+        }
+        this.invalidFields.push({
+          key: k,
+          value: String(v),
+          reason: `字段值 "${v}" 不是合法的枚举值 (允许值: ${allowedValues.join(', ')})`
+        });
+        return undefined;
+      }
+    }
+    return undefined;
+  }
+
   getRaw(...aliases: string[]): any {
     const aliasSet = new Set(aliases.map(x => x.toLowerCase()));
     for (const [k, v] of Object.entries(this.json)) {
@@ -492,6 +542,39 @@ export class JsonFieldReader {
     }
     return extras;
   }
+}
+
+/**
+ * 校验并解析 Hysteria 2 hop-interval (支持单正整数如 30 或合法范围如 15-30)
+ */
+export function parseHy2HopInterval(value: string | number | undefined): {
+  val?: number | string;
+  invalid?: boolean;
+  reason?: string;
+} {
+  if (value === undefined || value === null || value === '') {
+    return {};
+  }
+  if (typeof value === 'number') {
+    if (Number.isInteger(value) && value > 0) return { val: value };
+    return { invalid: true, reason: `hop-interval 必须为正整数或范围，当前为 ${value}` };
+  }
+  const str = String(value).trim();
+  if (/^\d+$/.test(str)) {
+    const num = parseInt(str, 10);
+    if (num > 0) return { val: num };
+    return { invalid: true, reason: `hop-interval 必须为大于 0 的正整数` };
+  }
+  if (/^\d+-\d+$/.test(str)) {
+    const parts = str.split('-').map(s => parseInt(s, 10));
+    const min = parts[0]!;
+    const max = parts[1]!;
+    if (min > 0 && max >= min) {
+      return { val: str };
+    }
+    return { invalid: true, reason: `hop-interval 范围 [${str}] 非法，要求 min > 0 且 max >= min` };
+  }
+  return { invalid: true, reason: `hop-interval [${str}] 格式非法，仅支持正整数 (如 30) 或合法范围 (如 15-30)` };
 }
 
 /**

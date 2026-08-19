@@ -65,10 +65,30 @@ export function adaptHysteria2ToMihomo(node: Hysteria2Node): AdapterResult {
   if (p.down) config.down = p.down;
 
   if (p.obfs) {
-    config.obfs = p.obfs;
+    const obfsLower = p.obfs.toLowerCase();
+    config.obfs = obfsLower;
     if (p.obfsPassword) config['obfs-password'] = p.obfsPassword;
-    if (p.obfsMinPacketSize) config['obfs-min-packet-size'] = p.obfsMinPacketSize;
-    if (p.obfsMaxPacketSize) config['obfs-max-packet-size'] = p.obfsMaxPacketSize;
+    if (obfsLower === 'gecko') {
+      if (p.obfsMinPacketSize) config['obfs-min-packet-size'] = p.obfsMinPacketSize;
+      if (p.obfsMaxPacketSize) config['obfs-max-packet-size'] = p.obfsMaxPacketSize;
+    } else {
+      if (p.obfsMinPacketSize) {
+        unsupportedParams.push('obfs-min-packet-size');
+        warnings.push({
+          level: 'warn',
+          field: 'obfs-min-packet-size',
+          message: `obfs-min-packet-size 仅适用于 gecko 混淆，当前混淆为 [${p.obfs}]，已自动忽略`
+        });
+      }
+      if (p.obfsMaxPacketSize) {
+        unsupportedParams.push('obfs-max-packet-size');
+        warnings.push({
+          level: 'warn',
+          field: 'obfs-max-packet-size',
+          message: `obfs-max-packet-size 仅适用于 gecko 混淆，当前混淆为 [${p.obfs}]，已自动忽略`
+        });
+      }
+    }
   }
 
   const alpn = parseALPN(p.alpn);

@@ -21,7 +21,7 @@ export function adaptVmessToMihomo(node: VmessNode): AdapterResult {
   }
 
   // Compatibility Gate: 非法参数 (invalidParams) 分类拦截与警告
-  const invRes = processInvalidParams(p.invalidParams, new Set(['uuid', 'server', 'port', 'cipher', 'alterid', 'aid']));
+  const invRes = processInvalidParams(p.invalidParams, new Set(['uuid', 'server', 'port', 'cipher', 'scy', 'alterid', 'aid', 'tls']));
   if (invRes.fatal) {
     return {
       fatal: true,

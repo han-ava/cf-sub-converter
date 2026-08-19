@@ -22,20 +22,28 @@ export function parseVmess(urlStr: string): VmessNode | null {
     r.markRecognized('v', 'version');
 
     const alterId = r.getStrictInt('aid', 'alterId', 'alter_id') ?? 0;
-    const cipher = r.getString('scy', 'cipher', 'security') || 'auto';
+    const cipher = r.getEnum(['auto', 'aes-128-gcm', 'chacha20-poly1305', 'none', 'zero'], 'scy', 'cipher', 'security') || 'auto';
     const net = (r.getString('net', 'network', 'transport') || 'tcp').toLowerCase();
 
     const rawTls = r.getRaw('tls');
     let tls = false;
-    if (typeof rawTls === 'boolean') {
-      tls = rawTls;
-    } else if (rawTls !== undefined && rawTls !== null && rawTls !== '') {
-      const tlsStr = String(rawTls).toLowerCase().trim();
-      tls = tlsStr === 'tls' || tlsStr === 'true' || tlsStr === '1';
+    if (rawTls !== undefined && rawTls !== null && rawTls !== '') {
+      if (typeof rawTls === 'boolean') {
+        tls = rawTls;
+      } else {
+        const tlsStr = String(rawTls).toLowerCase().trim();
+        if (tlsStr === 'tls' || tlsStr === 'true' || tlsStr === '1') {
+          tls = true;
+        } else if (tlsStr === 'none' || tlsStr === 'false' || tlsStr === '0') {
+          tls = false;
+        } else {
+          r.getStrictBool('tls'); // 触发 invalidFields 收集
+        }
+      }
     }
     r.markRecognized('tls');
 
-    const sni = r.getString('sni', 'peer') || r.getString('host') || server;
+    const sni = r.getString('sni', 'peer', 'servername', 'serverName', 'server-name', 'server_name') || server;
     const fp = r.getString('fp', 'fingerprint', 'client-fingerprint');
     const rawAlpn = r.getRaw('alpn');
     let alpn: string[] | undefined;

@@ -6,7 +6,7 @@ export function parsePlugin(pluginParam: string): { plugin: string; pluginOpts: 
   if (!pluginParam) return { plugin: '', pluginOpts: {} };
 
   const parts = pluginParam.split(';');
-  const plugin = parts[0] || '';
+  const plugin = parts[0]?.trim() || '';
   const pluginOpts: Record<string, any> = {};
 
   for (let i = 1; i < parts.length; i++) {
@@ -15,11 +15,8 @@ export function parsePlugin(pluginParam: string): { plugin: string; pluginOpts: 
     const eqIdx = part.indexOf('=');
     if (eqIdx !== -1) {
       const key = part.substring(0, eqIdx).trim();
-      const val = part.substring(eqIdx + 1).trim();
-      if (val === 'true') pluginOpts[key] = true;
-      else if (val === 'false') pluginOpts[key] = false;
-      else if (!isNaN(Number(val)) && val !== '') pluginOpts[key] = Number(val);
-      else pluginOpts[key] = tryDecodeURIComponent(val);
+      const rawVal = part.substring(eqIdx + 1).trim();
+      pluginOpts[key] = tryDecodeURIComponent(rawVal);
     } else {
       pluginOpts[part] = true;
     }
