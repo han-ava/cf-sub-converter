@@ -103,45 +103,19 @@ function mapReuseSettings(raw: unknown): { mapped: Record<string, unknown>; unma
   const mapped: Record<string, unknown> = {};
   const unmapped: string[] = [];
 
-  const maxConcurrencyRaw = r.getRaw('max-concurrency', 'maxConcurrency');
-  if (maxConcurrencyRaw !== undefined && maxConcurrencyRaw !== null && maxConcurrencyRaw !== '') {
-    if (typeof maxConcurrencyRaw === 'number' && Number.isInteger(maxConcurrencyRaw)) {
-      mapped['max-concurrency'] = maxConcurrencyRaw;
-    } else if (typeof maxConcurrencyRaw === 'string') {
-      const trimmed = maxConcurrencyRaw.trim();
-      if (/^\d+(-\d+)?$/.test(trimmed)) {
-        mapped['max-concurrency'] = /^\d+$/.test(trimmed) ? parseInt(trimmed, 10) : trimmed;
-      } else {
-        unmapped.push(`reuse-settings.max-concurrency (非法值: "${maxConcurrencyRaw}")`);
-      }
-    } else {
-      unmapped.push(`reuse-settings.max-concurrency (非法值: "${maxConcurrencyRaw}")`);
-    }
-  }
+  const maxConcurrency = r.getIntOrRange('max-concurrency', 'maxConcurrency');
+  if (maxConcurrency !== undefined) mapped['max-concurrency'] = maxConcurrency;
 
-  const maxConnectionsRaw = r.getRaw('max-connections', 'maxConnections');
-  if (maxConnectionsRaw !== undefined && maxConnectionsRaw !== null && maxConnectionsRaw !== '') {
-    if (typeof maxConnectionsRaw === 'number' && Number.isInteger(maxConnectionsRaw)) {
-      mapped['max-connections'] = maxConnectionsRaw;
-    } else if (typeof maxConnectionsRaw === 'string') {
-      const trimmed = maxConnectionsRaw.trim();
-      if (/^\d+(-\d+)?$/.test(trimmed)) {
-        mapped['max-connections'] = /^\d+$/.test(trimmed) ? parseInt(trimmed, 10) : trimmed;
-      } else {
-        unmapped.push(`reuse-settings.max-connections (非法值: "${maxConnectionsRaw}")`);
-      }
-    } else {
-      unmapped.push(`reuse-settings.max-connections (非法值: "${maxConnectionsRaw}")`);
-    }
-  }
+  const maxConnections = r.getIntOrRange('max-connections', 'maxConnections');
+  if (maxConnections !== undefined) mapped['max-connections'] = maxConnections;
 
-  const cMaxReuse = r.getStrictInt('c-max-reuse-times', 'cMaxReuseTimes');
+  const cMaxReuse = r.getIntOrRange('c-max-reuse-times', 'cMaxReuseTimes');
   if (cMaxReuse !== undefined) mapped['c-max-reuse-times'] = cMaxReuse;
 
-  const hMaxReq = r.getStrictInt('h-max-request-times', 'hMaxRequestTimes');
+  const hMaxReq = r.getIntOrRange('h-max-request-times', 'hMaxRequestTimes');
   if (hMaxReq !== undefined) mapped['h-max-request-times'] = hMaxReq;
 
-  const hMaxReusable = r.getStrictInt('h-max-reusable-secs', 'hMaxReusableSecs');
+  const hMaxReusable = r.getIntOrRange('h-max-reusable-secs', 'hMaxReusableSecs');
   if (hMaxReusable !== undefined) mapped['h-max-reusable-secs'] = hMaxReusable;
 
   const hKeepAlive = r.getStrictInt('h-keep-alive-period', 'hKeepAlivePeriod');
@@ -195,23 +169,9 @@ function mapXhttpFields(
   const noGrpc = r.getStrictBool('no-grpc-header', 'noGRPCHeader', 'nogrpcheader');
   if (noGrpc !== undefined) mapped['no-grpc-header'] = noGrpc;
 
-  // x-padding-bytes
-  const rawXPadding = r.getRaw('x-padding-bytes', 'xPaddingBytes', 'xpaddingbytes');
-  if (rawXPadding !== undefined && rawXPadding !== null && rawXPadding !== '') {
-    r.markRecognized('x-padding-bytes', 'xPaddingBytes', 'xpaddingbytes');
-    if (typeof rawXPadding === 'number' && Number.isInteger(rawXPadding) && rawXPadding >= 0) {
-      mapped['x-padding-bytes'] = rawXPadding;
-    } else if (typeof rawXPadding === 'string') {
-      const trimmed = rawXPadding.trim();
-      if (/^\d+(-\d+)?$/.test(trimmed)) {
-        mapped['x-padding-bytes'] = trimmed;
-      } else {
-        unmapped.push(`${prefix}.x-padding-bytes (非法值: "${rawXPadding}")`);
-      }
-    } else {
-      unmapped.push(`${prefix}.x-padding-bytes (非法值: "${rawXPadding}")`);
-    }
-  }
+  // x-padding-bytes (支持单个非负整数或范围如 100-1000)
+  const xPadding = r.getIntOrRange('x-padding-bytes', 'xPaddingBytes', 'xpaddingbytes');
+  if (xPadding !== undefined) mapped['x-padding-bytes'] = xPadding;
 
   // x-padding options
   const xPadObfs = r.getStrictBool('x-padding-obfs-mode', 'xPaddingObfsMode');
@@ -243,7 +203,8 @@ function mapXhttpFields(
   const sessionTable = r.getString('session-table', 'sessionTable', 'sessionIDTable', 'sessionIdTable', 'sessionidtable');
   if (sessionTable) mapped['session-table'] = sessionTable;
 
-  const sessionLength = r.getStrictInt('session-length', 'sessionLength', 'sessionIDLength', 'sessionIdLength', 'sessionidlength');
+  // session-length (支持单个非负整数或范围如 16-32)
+  const sessionLength = r.getIntOrRange('session-length', 'sessionLength', 'sessionIDLength', 'sessionIdLength', 'sessionidlength');
   if (sessionLength !== undefined) mapped['session-length'] = sessionLength;
 
   // seq options

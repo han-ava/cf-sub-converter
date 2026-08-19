@@ -1,6 +1,6 @@
 // test/query_reader_and_aliases.test.ts
 import { describe, expect, test } from 'bun:test';
-import { QueryParamReader, parseRawQuery, getQueryBool, getQueryParam } from '../src/utils';
+import { QueryParamReader, parseRawQuery, getQueryBool, getQueryParam, parsePositiveIntOrRange, JsonFieldReader } from '../src/utils';
 import { parseSingleNode } from '../src/parser';
 import { adaptNodeToMihomo } from '../src/adapters/mihomo';
 import { renderHtmlPage } from '../src/ui';
@@ -675,5 +675,50 @@ describe('QueryParamReader & Universal Alias Suite', () => {
     expect(res.unsupportedParams).toContain('plugin-opts.mtu');
     expect(res.warnings.some(w => w.field === 'plugin-opts.tls')).toBe(true);
     expect(res.warnings.some(w => w.field === 'plugin-opts.mtu')).toBe(true);
+  });
+
+  test('27. parsePositiveIntOrRange, JsonFieldReader & QueryParamReader getIntOrRange tests', () => {
+    // 1. parsePositiveIntOrRange unit tests
+    expect(parsePositiveIntOrRange(600)).toEqual({ value: 600 });
+    expect(parsePositiveIntOrRange('600')).toEqual({ value: 600 });
+    expect(parsePositiveIntOrRange('600-900')).toEqual({ value: '600-900' });
+    expect(parsePositiveIntOrRange(' 16 - 32 ')).toEqual({ value: '16-32' });
+    expect(parsePositiveIntOrRange(0)).toEqual({ value: 0 });
+    expect(parsePositiveIntOrRange('0')).toEqual({ value: 0 });
+    expect(parsePositiveIntOrRange('0-100')).toEqual({ value: '0-100' });
+
+    // Invalid values
+    expect(parsePositiveIntOrRange(1.5).error).toBeDefined();
+    expect(parsePositiveIntOrRange(-5).error).toBeDefined();
+    expect(parsePositiveIntOrRange('-5').error).toBeDefined();
+    expect(parsePositiveIntOrRange('900-600').error).toBeDefined(); // min > max
+    expect(parsePositiveIntOrRange('abc').error).toBeDefined();
+    expect(parsePositiveIntOrRange('1-2-3').error).toBeDefined();
+
+    // 2. JsonFieldReader getIntOrRange
+    const jr = new JsonFieldReader({
+      sessionIDLength: '16-32',
+      sessionLenInt: 16,
+      hMaxReq: '600-900',
+      badRange: '900-600',
+      badStr: 'abc'
+    });
+    expect(jr.getIntOrRange('session-length', 'sessionIDLength')).toBe('16-32');
+    expect(jr.getIntOrRange('sessionLenInt')).toBe(16);
+    expect(jr.getIntOrRange('hMaxReq')).toBe('600-900');
+    expect(jr.getIntOrRange('badRange')).toBeUndefined();
+    expect(jr.getIntOrRange('badStr')).toBeUndefined();
+    expect(jr.getInvalidFields().length).toBe(2);
+
+    // 3. QueryParamReader getIntOrRange
+    const qr = new QueryParamReader([
+      { key: 'session-length', value: '16-32' },
+      { key: 'concurrency', value: '5-10' },
+      { key: 'bad', value: 'invalid-val' }
+    ]);
+    expect(qr.getIntOrRange('session-length')).toBe('16-32');
+    expect(qr.getIntOrRange('concurrency')).toBe('5-10');
+    expect(qr.getIntOrRange('bad')).toBeUndefined();
+    expect(qr.getInvalidParams().length).toBe(1);
   });
 });

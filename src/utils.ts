@@ -284,6 +284,24 @@ export class QueryParamReader {
     return undefined;
   }
 
+  getIntOrRange(...aliases: string[]): number | string | undefined {
+    const val = this.get(...aliases);
+    if (val === undefined || val === null || val === '') return undefined;
+    const res = parsePositiveIntOrRange(val);
+    if (res.value !== undefined) {
+      return res.value;
+    }
+    const aliasSet = new Set(aliases.map(x => x.toLowerCase()));
+    const matchedEntry = this.entries.find(e => aliasSet.has(e.key.toLowerCase()));
+    const key = matchedEntry ? matchedEntry.key : aliases[0] || 'unknown';
+    this.invalidParams.push({
+      key,
+      value: val,
+      reason: res.error || `参数值 "${val}" 不是合法的非负整数或范围`
+    });
+    return undefined;
+  }
+
   getEnum(allowedValues: string[], ...aliases: string[]): string | undefined {
     const val = this.get(...aliases);
     if (val === undefined) return undefined;
@@ -408,6 +426,54 @@ export function parseStrictEndpoint(serverPortStr: string, defaultPort: number =
 }
 
 /**
+ * 统一解析非负整数或整数范围 (如 600, "600", "600-900", "16-32")
+ * 返回非负整数 number 或规范化范围字符串 "min-max"；格式非法时返回 error
+ */
+export function parsePositiveIntOrRange(
+  val: unknown
+): { value?: number | string; error?: string } {
+  if (val === undefined || val === null || val === '') {
+    return {};
+  }
+
+  if (typeof val === 'number') {
+    if (!Number.isInteger(val)) {
+      return { error: `值 "${val}" 是浮点数而非整数` };
+    }
+    if (val < 0) {
+      return { error: `值 "${val}" 是负数，必须为非负整数` };
+    }
+    return { value: val };
+  }
+
+  if (typeof val === 'string') {
+    const trimmed = val.trim();
+    if (!trimmed) return {};
+
+    // 匹配单个非负整数
+    if (/^\d+$/.test(trimmed)) {
+      const parsed = parseInt(trimmed, 10);
+      return { value: parsed };
+    }
+
+    // 匹配范围 "min-max"
+    const match = trimmed.match(/^(\d+)\s*-\s*(\d+)$/);
+    if (match) {
+      const min = parseInt(match[1]!, 10);
+      const max = parseInt(match[2]!, 10);
+      if (min > max) {
+        return { error: `范围下限 [${min}] 大于上限 [${max}]: "${trimmed}"` };
+      }
+      return { value: `${min}-${max}` };
+    }
+
+    return { error: `值 "${trimmed}" 不是合法的非负整数或范围 (例如 600 或 600-900)` };
+  }
+
+  return { error: `值类型非法 (期望数字或字符串)` };
+}
+
+/**
  * 结构化 JSON 字段严格读取器 (VMess 等 JSON 载荷解析专用)
  * 提供严格类型转换、别名回退与 invalidFields 追踪
  */
@@ -458,6 +524,27 @@ export class JsonFieldReader {
           key: k,
           value: String(v),
           reason: `字段值 "${v}" 不是合法的整数 (包含非数字字符或格式错误)`
+        });
+        return undefined;
+      }
+    }
+    return undefined;
+  }
+
+  getIntOrRange(...aliases: string[]): number | string | undefined {
+    const aliasSet = new Set(aliases.map(x => x.toLowerCase()));
+    for (const [k, v] of Object.entries(this.json)) {
+      if (aliasSet.has(k.toLowerCase())) {
+        this.usedKeys.add(k.toLowerCase());
+        if (v === undefined || v === null || v === '') return undefined;
+        const res = parsePositiveIntOrRange(v);
+        if (res.value !== undefined) {
+          return res.value;
+        }
+        this.invalidFields.push({
+          key: k,
+          value: String(v),
+          reason: res.error || `字段值 "${v}" 不是合法的非负整数或范围`
         });
         return undefined;
       }

@@ -941,4 +941,73 @@ describe('Tower-Inspired Compatibility Gate Suite', () => {
     expect(resBadMtu.config!['plugin-opts'].mode).toBe('websocket');
     expect(resBadMtu.unsupportedParams).toContain('plugin-opts.mtu');
   });
+
+  // ── XHTTP & reuse-settings 正整数与范围值测试 ──────────────────────────────
+
+  test('25. XHTTP and reuse-settings positive int and range support', () => {
+    // 1. 合法范围值与正整数 (sessionIDLength="16-32", hMaxRequestTimes="600-900", etc.)
+    const xhttpRangeNode = parseSingleNode(
+      'vless://b831381d-6324-4d53-ad4f-8cda48b30811@1.2.3.4:443' +
+      '?type=xhttp&security=tls&sni=main.example.com' +
+      '&extra=' + encodeURIComponent(JSON.stringify({
+        sessionIDLength: '16-32',
+        xPaddingBytes: '100-1000',
+        reuseSettings: {
+          maxConcurrency: '5-10',
+          maxConnections: 100,
+          cMaxReuseTimes: '50-100',
+          hMaxRequestTimes: '600-900',
+          hMaxReusableSecs: '1800-3000',
+          hKeepAlivePeriod: 30
+        }
+      })) +
+      '#XHTTP%20Ranges'
+    );
+    expect(xhttpRangeNode).not.toBeNull();
+    const res = adaptNodeToMihomo(xhttpRangeNode!);
+    expect(res.fatal).toBe(false);
+    expect(res.lossy).toBe(false);
+    const opts = res.config!['xhttp-opts'];
+    expect(opts['session-length']).toBe('16-32');
+    expect(opts['x-padding-bytes']).toBe('100-1000');
+    const reuse = opts['reuse-settings'];
+    expect(reuse['max-concurrency']).toBe('5-10');
+    expect(reuse['max-connections']).toBe(100);
+    expect(reuse['c-max-reuse-times']).toBe('50-100');
+    expect(reuse['h-max-request-times']).toBe('600-900');
+    expect(reuse['h-max-reusable-secs']).toBe('1800-3000');
+    expect(reuse['h-keep-alive-period']).toBe(30);
+
+    // 2. h-keep-alive-period 不允许范围值，范围格式必须被严格拒绝到 unmapped
+    const badKeepAliveNode = parseSingleNode(
+      'vless://b831381d-6324-4d53-ad4f-8cda48b30811@1.2.3.4:443' +
+      '?type=xhttp&security=tls&sni=main.example.com' +
+      '&extra=' + encodeURIComponent(JSON.stringify({
+        reuseSettings: {
+          hKeepAlivePeriod: '30-60'
+        }
+      })) +
+      '#Bad%20KeepAlive'
+    );
+    const resBadKeep = adaptNodeToMihomo(badKeepAliveNode!);
+    expect(resBadKeep.fatal).toBe(false);
+    expect(resBadKeep.lossy).toBe(true);
+    expect(resBadKeep.config!['xhttp-opts']?.['reuse-settings']?.['h-keep-alive-period']).toBeUndefined();
+    expect(resBadKeep.unsupportedParams.some(p => p.includes('h-keep-alive-period') || p.includes('hKeepAlivePeriod'))).toBe(true);
+
+    // 3. 非法倒置范围 (如 900-600) 被拒绝到 unmapped
+    const badRangeNode = parseSingleNode(
+      'vless://b831381d-6324-4d53-ad4f-8cda48b30811@1.2.3.4:443' +
+      '?type=xhttp&security=tls&sni=main.example.com' +
+      '&extra=' + encodeURIComponent(JSON.stringify({
+        sessionIDLength: '900-600'
+      })) +
+      '#Bad%20Range'
+    );
+    const resBadRange = adaptNodeToMihomo(badRangeNode!);
+    expect(resBadRange.fatal).toBe(false);
+    expect(resBadRange.lossy).toBe(true);
+    expect(resBadRange.config!['xhttp-opts']['session-length']).toBeUndefined();
+    expect(resBadRange.unsupportedParams.some(p => p.includes('session-length') || p.includes('sessionIDLength'))).toBe(true);
+  });
 });
