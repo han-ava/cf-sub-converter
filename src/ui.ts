@@ -771,7 +771,52 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       </div>
     </div>
 
-    <!-- 实时解析与流量看板 (Live Inspector) -->
+    <!-- 结果面板 (紧随生成按钮下方) -->
+    <div class="panel results-wrapper" id="resultsPanel">
+      <div class="panel-header">
+        <div class="panel-title">
+          <span>🎉 转换链接已生成</span>
+        </div>
+      </div>
+
+      <div class="result-card">
+        <div class="result-header">
+          <span class="result-title">🔗 转换后订阅地址</span>
+          <span id="targetBadge" class="badge">Clash Meta</span>
+        </div>
+        <div class="url-box">
+          <input type="text" id="outputUrl" readonly>
+          <button class="btn btn-secondary btn-sm" onclick="copyLink()">复制</button>
+          <button class="btn btn-secondary btn-sm" onclick="showQrCode()">二维码</button>
+        </div>
+
+        <div class="action-buttons">
+          <button class="btn btn-primary btn-sm" id="btnImportCurrent" onclick="importCurrentClient()">🚀 一键导入到 Clash</button>
+          <button class="btn btn-secondary btn-sm" onclick="copyLink()">📋 复制链接</button>
+          <button class="btn btn-secondary btn-sm" onclick="showQrCode()">📱 二维码</button>
+          <button class="btn btn-secondary btn-sm" onclick="saveToLocalFavorites()">⭐ 收藏配置</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 本地收藏夹 (纯浏览器 localStorage，零泄露风险) -->
+    <div class="panel" id="favPanel">
+      <div class="panel-header">
+        <div class="panel-title">
+          <span>⭐ 本地配置收藏夹</span>
+        </div>
+        <button class="btn btn-secondary btn-sm" onclick="saveToLocalFavorites()">+ 收藏当前配置</button>
+      </div>
+
+      <div id="favList" class="fav-list">
+        <div style="color: var(--text-dim); font-size: 0.85rem; text-align: center; padding: 1.25rem; background: var(--bg-input); border-radius: var(--radius-md); border: 1px dashed var(--border);">
+          ⭐ 暂无保存的配置<br>
+          <span style="font-size: 0.78rem; color: var(--text-muted); margin-top: 4px; display: inline-block;">在上方配置好订阅与规则后，点击「+ 收藏当前配置」即可保存</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 实时解析与流量看板 (Live Inspector: 置于最下方平铺展开) -->
     <div class="panel results-wrapper" id="inspectPanel">
       <div class="panel-header">
         <div class="panel-title">
@@ -837,51 +882,6 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       <div id="regionChips" class="region-chips"></div>
 
       <div class="node-list-box" id="nodeList"></div>
-    </div>
-
-    <!-- 结果面板 -->
-    <div class="panel results-wrapper" id="resultsPanel">
-      <div class="panel-header">
-        <div class="panel-title">
-          <span>🎉 转换链接已生成</span>
-        </div>
-      </div>
-
-      <div class="result-card">
-        <div class="result-header">
-          <span class="result-title">🔗 转换后订阅地址</span>
-          <span id="targetBadge" class="badge">Clash Meta</span>
-        </div>
-        <div class="url-box">
-          <input type="text" id="outputUrl" readonly>
-          <button class="btn btn-secondary btn-sm" onclick="copyLink()">复制</button>
-          <button class="btn btn-secondary btn-sm" onclick="showQrCode()">二维码</button>
-        </div>
-
-        <div class="action-buttons">
-          <button class="btn btn-primary btn-sm" id="btnImportCurrent" onclick="importCurrentClient()">🚀 一键导入到 Clash</button>
-          <button class="btn btn-secondary btn-sm" onclick="copyLink()">📋 复制链接</button>
-          <button class="btn btn-secondary btn-sm" onclick="showQrCode()">📱 二维码</button>
-          <button class="btn btn-secondary btn-sm" onclick="saveToLocalFavorites()">⭐ 收藏配置</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- 本地收藏夹 (纯浏览器 localStorage，零泄露风险) -->
-    <div class="panel">
-      <div class="panel-header">
-        <div class="panel-title">
-          <span>⭐ 本地配置收藏夹</span>
-        </div>
-        <button class="btn btn-secondary btn-sm" onclick="saveToLocalFavorites()">+ 收藏当前配置</button>
-      </div>
-
-      <div id="favList" class="fav-list">
-        <div style="color: var(--text-dim); font-size: 0.85rem; text-align: center; padding: 1.25rem; background: var(--bg-input); border-radius: var(--radius-md); border: 1px dashed var(--border);">
-          ⭐ 暂无保存的配置<br>
-          <span style="font-size: 0.78rem; color: var(--text-muted); margin-top: 4px; display: inline-block;">在上方配置好订阅与规则后，点击「+ 收藏当前配置」即可保存</span>
-        </div>
-      </div>
     </div>
   </div>
 
