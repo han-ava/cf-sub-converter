@@ -80,6 +80,7 @@ export function parseAnyTLS(urlStr: string): AnyTLSNode | null {
     const minIdleSession = q.get('min-idle-session', 'min_idle_session', 'minidlesession');
 
     const extras = q.getUnusedExtras();
+    const invalidParams = q.getInvalidParams();
 
     return {
       name,
@@ -90,7 +91,10 @@ export function parseAnyTLS(urlStr: string): AnyTLSNode | null {
         format: 'uri',
         raw: urlStr
       },
-      rawQuery,
+      rawQuery: {
+        ...rawQuery,
+        invalidParams: invalidParams.length > 0 ? invalidParams : undefined
+      },
       protocolData: {
         password,
         sni,
@@ -102,6 +106,7 @@ export function parseAnyTLS(urlStr: string): AnyTLSNode | null {
         idleSessionCheckInterval: idleCheckInterval,
         idleSessionTimeout: idleTimeout,
         minIdleSession,
+        invalidParams: invalidParams.length > 0 ? invalidParams : undefined,
         extras
       },
       udp: true

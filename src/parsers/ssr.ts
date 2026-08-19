@@ -46,6 +46,7 @@ export function parseShadowsocksR(urlStr: string): ShadowsocksRNode | null {
     }
 
     const extras = q.getUnusedExtras();
+    const invalidParams = q.getInvalidParams();
 
     return {
       name,
@@ -56,7 +57,10 @@ export function parseShadowsocksR(urlStr: string): ShadowsocksRNode | null {
         format: 'uri',
         raw: urlStr
       },
-      rawQuery,
+      rawQuery: {
+        ...rawQuery,
+        invalidParams: invalidParams.length > 0 ? invalidParams : undefined
+      },
       protocolData: {
         cipher,
         password,
@@ -64,6 +68,7 @@ export function parseShadowsocksR(urlStr: string): ShadowsocksRNode | null {
         obfs,
         obfsParam,
         protoParam,
+        invalidParams: invalidParams.length > 0 ? invalidParams : undefined,
         extras
       },
       udp: true

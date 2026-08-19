@@ -1,6 +1,6 @@
 // src/adapters/mihomo/vless.ts
 import { AdapterResult, ConversionWarning, VlessNode } from '../../types';
-import { parseALPN, detectUnmappedFields } from '../../utils';
+import { parseALPN, detectUnmappedFields, processInvalidParams } from '../../utils';
 
 const SUPPORTED_VLESS_TRANSPORTS = new Set([
   'tcp', 'ws', 'grpc', 'http', 'h2', 'xhttp', 'splithttp'
@@ -408,7 +408,7 @@ function applyXhttpExtra(
 
 const HANDLED_VLESS_PROTOCOL_KEYS = new Set([
   'uuid', 'flow', 'encryption', 'packetEncoding', 'security', 'sni', 'alpn',
-  'fingerprint', 'skipCertVerify', 'realityOpts', 'transport', 'extras'
+  'fingerprint', 'skipCertVerify', 'realityOpts', 'transport', 'invalidParams', 'extras'
 ]);
 const HANDLED_VLESS_TRANSPORT_KEYS = new Set([
   'type', 'path', 'headers', 'serviceName', 'mode', 'extra'
@@ -422,13 +422,28 @@ export function adaptVlessToMihomo(node: VlessNode): AdapterResult {
   const unsupportedParams: string[] = [];
   const p = node.protocolData;
 
-  // Gate: 必需凭据
+  // Compatibility Gate: 必需凭据
   if (!p.uuid || !p.uuid.trim()) {
     return { fatal: true, lossy: true, emitted: false,
       skipReason: `节点 [${node.name}] 缺少必需的 VLESS UUID`,
       warnings: [{ level: 'fatal', field: 'uuid', message: '缺少必需的 VLESS UUID' }],
       unsupportedParams: ['uuid'] };
   }
+
+  // Compatibility Gate: 非法参数 (invalidParams) 分类拦截与警告
+  const invRes = processInvalidParams(p.invalidParams, new Set(['uuid', 'server', 'port', 'type', 'security', 'publickey', 'public-key', 'pbk']));
+  if (invRes.fatal) {
+    return {
+      fatal: true,
+      lossy: true,
+      emitted: false,
+      skipReason: invRes.fatalReason,
+      warnings: invRes.warnings,
+      unsupportedParams: invRes.unsupportedParams
+    };
+  }
+  warnings.push(...invRes.warnings);
+  unsupportedParams.push(...invRes.unsupportedParams);
 
   const isReality = p.security === 'reality' || !!p.realityOpts;
   const isTls = p.security === 'tls' || isReality;

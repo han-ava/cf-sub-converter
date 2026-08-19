@@ -1,6 +1,6 @@
 // src/adapters/mihomo/tuic.ts
 import { AdapterResult, ConversionWarning, TuicNode } from '../../types';
-import { parseALPN, detectUnmappedFields } from '../../utils';
+import { parseALPN, detectUnmappedFields, processInvalidParams } from '../../utils';
 
 export function adaptTuicToMihomo(node: TuicNode): AdapterResult {
   const warnings: ConversionWarning[] = [];
@@ -18,6 +18,21 @@ export function adaptTuicToMihomo(node: TuicNode): AdapterResult {
       unsupportedParams: ['uuid']
     };
   }
+
+  // Compatibility Gate: 非法参数 (invalidParams) 分类拦截与警告
+  const invRes = processInvalidParams(p.invalidParams, new Set(['uuid', 'password', 'server', 'port']));
+  if (invRes.fatal) {
+    return {
+      fatal: true,
+      lossy: true,
+      emitted: false,
+      skipReason: invRes.fatalReason,
+      warnings: invRes.warnings,
+      unsupportedParams: invRes.unsupportedParams
+    };
+  }
+  warnings.push(...invRes.warnings);
+  unsupportedParams.push(...invRes.unsupportedParams);
 
   const alpn = parseALPN(p.alpn);
 
@@ -47,7 +62,7 @@ export function adaptTuicToMihomo(node: TuicNode): AdapterResult {
   // 自动检测 known-but-unmapped：对比已解析字段集与适配器建模字段集
   const HANDLED_TUIC_PROTOCOL_KEYS = new Set([
     'uuid', 'password', 'sni', 'alpn', 'skipCertVerify', 'congestionControl',
-    'udpRelayMode', 'zeroRttHandshake', 'heartbeat', 'extras'
+    'udpRelayMode', 'zeroRttHandshake', 'heartbeat', 'invalidParams', 'extras'
   ]);
   const unmapped = detectUnmappedFields(p as Record<string, unknown>, HANDLED_TUIC_PROTOCOL_KEYS);
   for (const item of unmapped) {

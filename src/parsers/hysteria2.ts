@@ -55,12 +55,13 @@ export function parseHysteria2(urlStr: string): Hysteria2Node | null {
     const down = q.get('down', 'down_mbps', 'downmbps', 'downMbps', 'download');
     const alpnStr = q.get('alpn');
     const alpn = alpnStr ? alpnStr.split(',').map(s => s.trim()).filter(Boolean) : undefined;
-    const certificateFingerprint = q.get('pinSHA256', 'pinsha256', 'pin-sha256', 'pin_sha256', 'fingerprint', 'fp', 'client-fingerprint', 'client_fingerprint', 'clientfingerprint');
+    const certificateFingerprint = q.get('pinSHA256', 'pinsha256', 'pin-sha256', 'pin_sha256', 'fingerprint');
     const insecure = q.getBool('insecure', 'allowInsecure', 'allowinsecure', 'allow_insecure', 'skip-cert-verify', 'skip_cert_verify', 'skipcertverify');
     const nameCertVerify = q.get('name-cert-verify', 'name_cert_verify', 'namecertverify');
     const handshakeTimeout = q.get('handshake-timeout', 'handshake_timeout', 'handshaketimeout');
 
     const extras = q.getUnusedExtras();
+    const invalidParams = q.getInvalidParams();
 
     return {
       name,
@@ -71,7 +72,10 @@ export function parseHysteria2(urlStr: string): Hysteria2Node | null {
         format: 'uri',
         raw: urlStr
       },
-      rawQuery,
+      rawQuery: {
+        ...rawQuery,
+        invalidParams: invalidParams.length > 0 ? invalidParams : undefined
+      },
       protocolData: {
         password,
         sni,
@@ -89,6 +93,7 @@ export function parseHysteria2(urlStr: string): Hysteria2Node | null {
         fingerprint: certificateFingerprint ? String(certificateFingerprint).trim() : undefined,
         nameCertVerify,
         handshakeTimeout,
+        invalidParams: invalidParams.length > 0 ? invalidParams : undefined,
         extras
       },
       udp: true

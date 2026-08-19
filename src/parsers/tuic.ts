@@ -56,6 +56,7 @@ export function parseTuic(urlStr: string): TuicNode | null {
     const heartbeat = q.get('heartbeat', 'heartbeat_interval', 'heartbeat-interval', 'heartbeatinterval');
 
     const extras = q.getUnusedExtras();
+    const invalidParams = q.getInvalidParams();
 
     return {
       name,
@@ -66,7 +67,10 @@ export function parseTuic(urlStr: string): TuicNode | null {
         format: 'uri',
         raw: urlStr
       },
-      rawQuery,
+      rawQuery: {
+        ...rawQuery,
+        invalidParams: invalidParams.length > 0 ? invalidParams : undefined
+      },
       protocolData: {
         uuid,
         password,
@@ -77,6 +81,7 @@ export function parseTuic(urlStr: string): TuicNode | null {
         skipCertVerify: insecure,
         zeroRttHandshake,
         heartbeat,
+        invalidParams: invalidParams.length > 0 ? invalidParams : undefined,
         extras
       },
       udp: true

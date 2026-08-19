@@ -1,6 +1,6 @@
 // src/adapters/mihomo/trojan.ts
 import { AdapterResult, ConversionWarning, TrojanNode } from '../../types';
-import { parseALPN, detectUnmappedFields } from '../../utils';
+import { parseALPN, detectUnmappedFields, processInvalidParams } from '../../utils';
 
 export function adaptTrojanToMihomo(node: TrojanNode): AdapterResult {
   const warnings: ConversionWarning[] = [];
@@ -18,6 +18,21 @@ export function adaptTrojanToMihomo(node: TrojanNode): AdapterResult {
       unsupportedParams: ['password']
     };
   }
+
+  // Compatibility Gate: 非法参数 (invalidParams) 分类拦截与警告
+  const invRes = processInvalidParams(p.invalidParams, new Set(['password', 'server', 'port']));
+  if (invRes.fatal) {
+    return {
+      fatal: true,
+      lossy: true,
+      emitted: false,
+      skipReason: invRes.fatalReason,
+      warnings: invRes.warnings,
+      unsupportedParams: invRes.unsupportedParams
+    };
+  }
+  warnings.push(...invRes.warnings);
+  unsupportedParams.push(...invRes.unsupportedParams);
 
   const config: Record<string, any> = {
     name: node.name,
@@ -55,7 +70,7 @@ export function adaptTrojanToMihomo(node: TrojanNode): AdapterResult {
 
   // 自动检测 known-but-unmapped：对比已解析字段集与适配器建模字段集
   const HANDLED_TROJAN_PROTOCOL_KEYS = new Set([
-    'password', 'sni', 'alpn', 'skipCertVerify', 'fingerprint', 'transport', 'extras'
+    'password', 'sni', 'alpn', 'skipCertVerify', 'fingerprint', 'transport', 'invalidParams', 'extras'
   ]);
   const HANDLED_TROJAN_TRANSPORT_KEYS = new Set([
     'type', 'path', 'headers', 'serviceName'

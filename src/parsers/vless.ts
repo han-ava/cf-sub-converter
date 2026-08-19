@@ -72,6 +72,7 @@ export function parseVless(urlStr: string): VlessNode | null {
     const authority = q.get('authority');
 
     const extras = q.getUnusedExtras();
+    const invalidParams = q.getInvalidParams();
 
     const transport: VlessNode['protocolData']['transport'] = {
       type,
@@ -91,7 +92,10 @@ export function parseVless(urlStr: string): VlessNode | null {
         format: 'uri',
         raw: urlStr
       },
-      rawQuery,
+      rawQuery: {
+        ...rawQuery,
+        invalidParams: invalidParams.length > 0 ? invalidParams : undefined
+      },
       protocolData: {
         uuid,
         flow,
@@ -108,6 +112,7 @@ export function parseVless(urlStr: string): VlessNode | null {
           spiderX: spx || ''
         } : undefined,
         transport,
+        invalidParams: invalidParams.length > 0 ? invalidParams : undefined,
         extras
       },
       udp: true

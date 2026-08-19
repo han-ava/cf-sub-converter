@@ -1,6 +1,6 @@
 // src/adapters/mihomo/anytls.ts
 import { AdapterResult, AnyTLSNode, ConversionWarning } from '../../types';
-import { parseALPN, detectUnmappedFields } from '../../utils';
+import { parseALPN, detectUnmappedFields, processInvalidParams } from '../../utils';
 
 export function adaptAnyTLSToMihomo(node: AnyTLSNode): AdapterResult {
   const warnings: ConversionWarning[] = [];
@@ -30,6 +30,21 @@ export function adaptAnyTLSToMihomo(node: AnyTLSNode): AdapterResult {
       unsupportedParams: ['reality', 'pbk']
     };
   }
+
+  // Compatibility Gate: 非法参数 (invalidParams) 分类拦截与警告
+  const invRes = processInvalidParams(p.invalidParams, new Set(['password', 'server', 'port']));
+  if (invRes.fatal) {
+    return {
+      fatal: true,
+      lossy: true,
+      emitted: false,
+      skipReason: invRes.fatalReason,
+      warnings: invRes.warnings,
+      unsupportedParams: invRes.unsupportedParams
+    };
+  }
+  warnings.push(...invRes.warnings);
+  unsupportedParams.push(...invRes.unsupportedParams);
 
   const config: Record<string, any> = {
     name: node.name,
@@ -62,7 +77,7 @@ export function adaptAnyTLSToMihomo(node: AnyTLSNode): AdapterResult {
   const HANDLED_ANYTLS_PROTOCOL_KEYS = new Set([
     'password', 'sni', 'alpn', 'fingerprint', 'insecure', 'nameCertVerify',
     'clientMetadata', 'idleSessionCheckInterval', 'idleSessionTimeout',
-    'minIdleSession', 'shadowTlsOpts', 'restlsOpts', 'jlsOpts', 'extras'
+    'minIdleSession', 'shadowTlsOpts', 'restlsOpts', 'jlsOpts', 'invalidParams', 'extras'
   ]);
   const unmapped = detectUnmappedFields(p as Record<string, unknown>, HANDLED_ANYTLS_PROTOCOL_KEYS);
   for (const item of unmapped) {

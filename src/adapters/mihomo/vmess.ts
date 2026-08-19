@@ -128,7 +128,7 @@ export function adaptVmessToMihomo(node: VmessNode): AdapterResult {
   const HANDLED_VMESS_PROTOCOL_KEYS = new Set([
     'uuid', 'alterId', 'cipher', 'security', 'tls', 'sni', 'alpn',
     'fingerprint', 'skipCertVerify', 'packetEncoding', 'globalPadding',
-    'authenticatedLength', 'transport', 'rawJson', 'extras'
+    'authenticatedLength', 'transport', 'rawJson', 'invalidParams', 'extras'
   ]);
   const HANDLED_VMESS_TRANSPORT_KEYS = new Set([
     'type', 'path', 'headers', 'serviceName', 'httpHost', 'httpPath',

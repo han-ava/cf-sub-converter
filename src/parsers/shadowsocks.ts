@@ -137,6 +137,7 @@ export function parseShadowsocks(urlStr: string): ShadowsocksNode | null {
     const smuxParam = q.get('smux');
 
     const extras = q.getUnusedExtras();
+    const invalidParams = q.getInvalidParams();
 
     return {
       name,
@@ -147,7 +148,10 @@ export function parseShadowsocks(urlStr: string): ShadowsocksNode | null {
         format: 'uri',
         raw: urlStr
       },
-      rawQuery,
+      rawQuery: {
+        ...rawQuery,
+        invalidParams: invalidParams.length > 0 ? invalidParams : undefined
+      },
       protocolData: {
         cipher: method,
         password,
@@ -157,6 +161,7 @@ export function parseShadowsocks(urlStr: string): ShadowsocksNode | null {
         udpOverTcp,
         udpOverTcpVersion: uotVer,
         clientFingerprint,
+        invalidParams: invalidParams.length > 0 ? invalidParams : undefined,
         extras
       },
       udp: true

@@ -1,5 +1,5 @@
 // src/utils.ts
-import { NodeEnvelope, RawQuery, RawQueryEntry, ShadowsocksNode } from './types';
+import { ConversionWarning, InvalidQueryParam, NodeEnvelope, RawQuery, RawQueryEntry, ShadowsocksNode } from './types';
 
 /**
  * 带有完整 UTF-8 支持的安全 Base64 解码
@@ -198,24 +198,28 @@ export function getQueryParam(
 }
 
 /**
- * 大小写不敏感地从 RawQueryEntry 列表中获取布尔型参数值 ('1', 'true')
+ * 大小写不敏感地从 RawQueryEntry 列表中获取布尔型参数值 ('1', 'true' -> true; '0', 'false' -> false; 其他 -> undefined)
  */
 export function getQueryBool(
   entries: RawQueryEntry[] | undefined,
   ...aliases: string[]
-): boolean {
+): boolean | undefined {
   const val = getQueryParam(entries, ...aliases);
-  if (!val) return false;
+  if (val === undefined) return undefined;
   const clean = val.toLowerCase().trim();
-  return clean === '1' || clean === 'true';
+  if (clean === '1' || clean === 'true') return true;
+  if (clean === '0' || clean === 'false') return false;
+  return undefined;
 }
 
 /**
  * 统一 Query 参数提取器：自动跟踪被读取的别名，防止已声明别名未读取导致的静默丢参或 Gate 误判
+ * 同时严格校验布尔与整数类型，杜绝非法参数被静默消费为 false 或猜测数字
  */
 export class QueryParamReader {
   private entries: RawQueryEntry[];
   private usedKeys = new Set<string>();
+  private invalidParams: InvalidQueryParam[] = [];
 
   constructor(entries?: RawQueryEntry[]) {
     this.entries = entries || [];
@@ -238,18 +242,46 @@ export class QueryParamReader {
     return firstVal;
   }
 
-  getBool(...aliases: string[]): boolean {
+  getBool(...aliases: string[]): boolean | undefined {
     const val = this.get(...aliases);
-    if (!val) return false;
+    if (val === undefined) return undefined;
     const clean = val.toLowerCase().trim();
-    return clean === '1' || clean === 'true';
+    if (clean === '1' || clean === 'true') {
+      return true;
+    }
+    if (clean === '0' || clean === 'false') {
+      return false;
+    }
+    const aliasSet = new Set(aliases.map(x => x.toLowerCase()));
+    const matchedEntry = this.entries.find(e => aliasSet.has(e.key.toLowerCase()));
+    const key = matchedEntry ? matchedEntry.key : aliases[0] || 'unknown';
+    this.invalidParams.push({
+      key,
+      value: val,
+      reason: `参数值 "${val}" 不是合法的布尔值 (仅允许 1/0/true/false)`
+    });
+    return undefined;
   }
 
   getInt(...aliases: string[]): number | undefined {
     const val = this.get(...aliases);
-    if (!val) return undefined;
-    const num = parseInt(val, 10);
-    return isNaN(num) ? undefined : num;
+    if (val === undefined) return undefined;
+    const clean = val.trim();
+    if (/^-?\d+$/.test(clean)) {
+      const num = parseInt(clean, 10);
+      if (!isNaN(num)) {
+        return num;
+      }
+    }
+    const aliasSet = new Set(aliases.map(x => x.toLowerCase()));
+    const matchedEntry = this.entries.find(e => aliasSet.has(e.key.toLowerCase()));
+    const key = matchedEntry ? matchedEntry.key : aliases[0] || 'unknown';
+    this.invalidParams.push({
+      key,
+      value: val,
+      reason: `参数值 "${val}" 不是合法的整数 (包含非数字字符或格式错误)`
+    });
+    return undefined;
   }
 
   markRecognized(...aliases: string[]): void {
@@ -260,6 +292,10 @@ export class QueryParamReader {
         this.usedKeys.add(entryKeyLower);
       }
     }
+  }
+
+  getInvalidParams(): InvalidQueryParam[] {
+    return [...this.invalidParams];
   }
 
   getUnusedExtras(ignoreKeys: string[] = []): Record<string, unknown> {
@@ -273,6 +309,54 @@ export class QueryParamReader {
     }
     return extras;
   }
+}
+
+/**
+ * 校验并分类 invalidParams：
+ * 关键参数（如 uuid, password, cipher, pbk, port, server）非法直接致命拦截 (fatal: true)
+ * 非关键参数（如 insecure, hop-interval, obfs-min-packet-size 等）记录 warning 并列入 unsupportedParams (lossy: true)
+ */
+export function processInvalidParams(
+  invalidParams: InvalidQueryParam[] | undefined,
+  criticalKeys: Set<string> = new Set(['port', 'server', 'password', 'uuid', 'cipher', 'publickey', 'public-key', 'pbk'])
+): {
+  fatal: boolean;
+  fatalReason?: string;
+  warnings: ConversionWarning[];
+  unsupportedParams: string[];
+} {
+  const warnings: ConversionWarning[] = [];
+  const unsupportedParams: string[] = [];
+  let fatal = false;
+  let fatalReason: string | undefined = undefined;
+
+  if (!invalidParams || invalidParams.length === 0) {
+    return { fatal: false, warnings, unsupportedParams };
+  }
+
+  for (const item of invalidParams) {
+    const keyLower = item.key.toLowerCase();
+    const isCritical = criticalKeys.has(keyLower);
+    unsupportedParams.push(item.key);
+
+    if (isCritical) {
+      fatal = true;
+      fatalReason = `关键参数 [${item.key}=${item.value}] 格式非法: ${item.reason}`;
+      warnings.push({
+        level: 'fatal',
+        field: item.key,
+        message: fatalReason
+      });
+    } else {
+      warnings.push({
+        level: 'warn',
+        field: item.key,
+        message: `参数 [${item.key}=${item.value}] 格式非法: ${item.reason}`
+      });
+    }
+  }
+
+  return { fatal, fatalReason, warnings, unsupportedParams };
 }
 
 /**

@@ -1,6 +1,6 @@
 // src/adapters/mihomo/shadowsocks.ts
 import { AdapterResult, ConversionWarning, ShadowsocksNode } from '../../types';
-import { strictBase64Decode, detectUnmappedFields } from '../../utils';
+import { strictBase64Decode, detectUnmappedFields, processInvalidParams } from '../../utils';
 
 const SUPPORTED_SS_PLUGINS = new Set([
   'v2ray-plugin',
@@ -28,6 +28,21 @@ export function adaptShadowsocksToMihomo(node: ShadowsocksNode): AdapterResult {
       unsupportedParams: ['password']
     };
   }
+
+  // Compatibility Gate: 非法参数 (invalidParams) 分类拦截与警告
+  const invRes = processInvalidParams(p.invalidParams, new Set(['password', 'cipher', 'server', 'port']));
+  if (invRes.fatal) {
+    return {
+      fatal: true,
+      lossy: true,
+      emitted: false,
+      skipReason: invRes.fatalReason,
+      warnings: invRes.warnings,
+      unsupportedParams: invRes.unsupportedParams
+    };
+  }
+  warnings.push(...invRes.warnings);
+  unsupportedParams.push(...invRes.unsupportedParams);
 
   // Compatibility Gate: SS2022 严格 Base64 密钥长度校验 (SIP022 标准规范)
   if (p.isSS2022) {
@@ -117,7 +132,7 @@ export function adaptShadowsocksToMihomo(node: ShadowsocksNode): AdapterResult {
   // 自动检测 known-but-unmapped：对比已解析字段集与适配器建模字段集
   const HANDLED_SS_PROTOCOL_KEYS = new Set([
     'cipher', 'password', 'isSS2022', 'plugin', 'pluginOpts',
-    'udpOverTcp', 'udpOverTcpVersion', 'clientFingerprint', 'smux', 'extras'
+    'udpOverTcp', 'udpOverTcpVersion', 'clientFingerprint', 'smux', 'invalidParams', 'extras'
   ]);
   const unmapped = detectUnmappedFields(p as Record<string, unknown>, HANDLED_SS_PROTOCOL_KEYS);
   for (const item of unmapped) {

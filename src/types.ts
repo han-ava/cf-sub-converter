@@ -34,9 +34,16 @@ export interface RawQueryEntry {
   value: string;
 }
 
+export interface InvalidQueryParam {
+  key: string;
+  value: string;
+  reason: string;
+}
+
 export interface RawQuery {
   raw: string;
   entries: RawQueryEntry[];
+  invalidParams?: InvalidQueryParam[];
 }
 
 export interface BaseNode {
@@ -73,6 +80,7 @@ export interface VlessNode extends BaseNode {
       mode?: string;
       extra?: string;
     };
+    invalidParams?: InvalidQueryParam[];
     extras: Record<string, unknown>;
   };
 }
@@ -117,6 +125,7 @@ export interface VmessNode extends BaseNode {
       h2PoolSize?: number;
     };
     rawJson: Record<string, unknown>;
+    invalidParams?: InvalidQueryParam[];
     extras: Record<string, unknown>;
   };
 }
@@ -133,6 +142,7 @@ export interface ShadowsocksNode extends BaseNode {
     udpOverTcpVersion?: number;
     clientFingerprint?: string;
     smux?: Record<string, any>;
+    invalidParams?: InvalidQueryParam[];
     extras: Record<string, unknown>;
   };
 }
@@ -156,6 +166,7 @@ export interface Hysteria2Node extends BaseNode {
     fingerprint?: string;
     nameCertVerify?: string;
     handshakeTimeout?: string;
+    invalidParams?: InvalidQueryParam[];
     extras: Record<string, unknown>;
   };
 }
@@ -176,6 +187,7 @@ export interface AnyTLSNode extends BaseNode {
     shadowTlsOpts?: Record<string, any>;
     restlsOpts?: Record<string, any>;
     jlsOpts?: Record<string, any>;
+    invalidParams?: InvalidQueryParam[];
     extras: Record<string, unknown>;
   };
 }
@@ -194,6 +206,7 @@ export interface TrojanNode extends BaseNode {
       headers?: Record<string, string>;
       serviceName?: string;
     };
+    invalidParams?: InvalidQueryParam[];
     extras: Record<string, unknown>;
   };
 }
@@ -210,6 +223,7 @@ export interface TuicNode extends BaseNode {
     skipCertVerify?: boolean;
     zeroRttHandshake?: boolean;
     heartbeat?: string;
+    invalidParams?: InvalidQueryParam[];
     extras: Record<string, unknown>;
   };
 }
@@ -223,6 +237,7 @@ export interface ShadowsocksRNode extends BaseNode {
     obfs: string;
     obfsParam?: string;
     protoParam?: string;
+    invalidParams?: InvalidQueryParam[];
     extras: Record<string, unknown>;
   };
 }

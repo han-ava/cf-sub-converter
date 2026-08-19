@@ -58,6 +58,7 @@ export function parseTrojan(urlStr: string): TrojanNode | null {
     const headerType = q.get('headerType', 'headertype', 'header-type', 'header_type');
 
     const extras = q.getUnusedExtras();
+    const invalidParams = q.getInvalidParams();
 
     const transport: TrojanNode['protocolData']['transport'] = {
       type,
@@ -75,7 +76,10 @@ export function parseTrojan(urlStr: string): TrojanNode | null {
         format: 'uri',
         raw: urlStr
       },
-      rawQuery,
+      rawQuery: {
+        ...rawQuery,
+        invalidParams: invalidParams.length > 0 ? invalidParams : undefined
+      },
       protocolData: {
         password,
         sni,
@@ -83,6 +87,7 @@ export function parseTrojan(urlStr: string): TrojanNode | null {
         fingerprint: fp,
         skipCertVerify: allowInsecure,
         transport,
+        invalidParams: invalidParams.length > 0 ? invalidParams : undefined,
         extras
       },
       udp: true

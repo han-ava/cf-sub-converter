@@ -1,6 +1,6 @@
 // src/adapters/mihomo/hysteria2.ts
 import { AdapterResult, ConversionWarning, Hysteria2Node } from '../../types';
-import { parseALPN, detectUnmappedFields, normalizeSha256Fingerprint } from '../../utils';
+import { parseALPN, detectUnmappedFields, normalizeSha256Fingerprint, processInvalidParams } from '../../utils';
 
 const SUPPORTED_HY2_OBFS = new Set(['salamander', 'gecko']);
 
@@ -33,6 +33,21 @@ export function adaptHysteria2ToMihomo(node: Hysteria2Node): AdapterResult {
     };
   }
 
+  // Compatibility Gate: 非法参数 (invalidParams) 分类拦截与警告
+  const invRes = processInvalidParams(p.invalidParams, new Set(['password', 'server', 'port', 'obfs']));
+  if (invRes.fatal) {
+    return {
+      fatal: true,
+      lossy: true,
+      emitted: false,
+      skipReason: invRes.fatalReason,
+      warnings: invRes.warnings,
+      unsupportedParams: invRes.unsupportedParams
+    };
+  }
+  warnings.push(...invRes.warnings);
+  unsupportedParams.push(...invRes.unsupportedParams);
+
   const config: Record<string, any> = {
     name: node.name,
     type: 'hysteria2',
@@ -64,7 +79,16 @@ export function adaptHysteria2ToMihomo(node: Hysteria2Node): AdapterResult {
   const certFp = p.certificateFingerprint || p.fingerprint;
   if (certFp) {
     const norm = normalizeSha256Fingerprint(certFp);
-    if (norm) config.fingerprint = norm;
+    if (norm) {
+      config.fingerprint = norm;
+    } else {
+      unsupportedParams.push('pinSHA256');
+      warnings.push({
+        level: 'warn',
+        field: 'pinSHA256',
+        message: `Hysteria 2 证书指纹 [${certFp}] 格式非法，必须为 64 位十六进制 SHA-256 哈希值`
+      });
+    }
   }
   if (p.nameCertVerify) config['name-cert-verify'] = p.nameCertVerify;
   if (p.handshakeTimeout) config['handshake-timeout'] = p.handshakeTimeout;
@@ -73,7 +97,7 @@ export function adaptHysteria2ToMihomo(node: Hysteria2Node): AdapterResult {
   const HANDLED_HY2_PROTOCOL_KEYS = new Set([
     'password', 'ports', 'sni', 'alpn', 'skipCertVerify', 'certificateFingerprint', 'fingerprint',
     'obfs', 'obfsPassword', 'obfsMinPacketSize', 'obfsMaxPacketSize',
-    'up', 'down', 'hopInterval', 'nameCertVerify', 'handshakeTimeout', 'extras'
+    'up', 'down', 'hopInterval', 'nameCertVerify', 'handshakeTimeout', 'invalidParams', 'extras'
   ]);
   const unmapped = detectUnmappedFields(p as Record<string, unknown>, HANDLED_HY2_PROTOCOL_KEYS);
   for (const item of unmapped) {
