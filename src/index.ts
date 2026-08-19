@@ -2,7 +2,8 @@
 import packageJson from '../package.json';
 import { Env, ProxyNode } from './types';
 import { parseContent } from './parser';
-import { toClashMeta, toSingBox, toBase64, toRawLinks, toSurge, toShadowrocketConf } from './generator';
+import { toClashMeta, toSingBox, toSurge, toShadowrocketConf } from './generator';
+import { toRawLinks, toBase64 } from './adapters/raw';
 import { adaptNodeToMihomo } from './adapters/mihomo';
 import { processNodes, createUserinfoNodes, parseUserinfo, getRegionByNodeName, parseRenameRules, formatContentDisposition } from './utils';
 import { isAuthorized, checkAuthStatus, fetchSubscriptionWithTimeout, extractRequestToken, sanitizeUrlForLog } from './security';

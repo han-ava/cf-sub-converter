@@ -131,10 +131,14 @@ function mapReuseSettings(raw: unknown): { mapped: Record<string, unknown>; unma
 }
 
 const XHTTP_VALID_MODES = ['auto', 'stream-one', 'stream-up', 'packet-up'];
-const XHTTP_VALID_UPLINK_METHODS = ['POST', 'PUT', 'GET', 'HEAD', 'OPTIONS', 'PATCH', 'DELETE'];
-const XHTTP_VALID_PLACEMENTS = ['header', 'cookie', 'query'];
-const XHTTP_VALID_DATA_PLACEMENTS = ['body', 'header', 'cookie', 'query'];
+const XHTTP_VALID_UPLINK_METHODS = ['POST', 'PUT', 'PATCH', 'DELETE'];
+const XHTTP_VALID_PLACEMENTS = ['path', 'query', 'cookie', 'header'];
+const XHTTP_VALID_DATA_PLACEMENTS = ['body', 'cookie', 'header'];
 const XHTTP_VALID_PADDING_PLACEMENTS = ['queryInHeader', 'cookie', 'header', 'query'];
+const XHTTP_VALID_PADDING_METHODS = ['repeat-x', 'tokenish'];
+const XHTTP_VALID_SESSION_TABLES = [
+  'uuid', 'ALPHABET', 'Alphabet', 'BASE36', 'Base62', 'HEX', 'alphabet', 'base36', 'hex', 'number'
+];
 
 /**
  * XHTTP 连接关键字段门禁表 (Critical Field Gate)
@@ -202,10 +206,10 @@ function mapXhttpFields(
   const xPadPlacement = r.getEnum(XHTTP_VALID_PADDING_PLACEMENTS, 'x-padding-placement', 'xPaddingPlacement');
   if (xPadPlacement) mapped['x-padding-placement'] = xPadPlacement;
 
-  const xPadMethod = r.getString('x-padding-method', 'xPaddingMethod');
+  const xPadMethod = r.getEnum(XHTTP_VALID_PADDING_METHODS, 'x-padding-method', 'xPaddingMethod');
   if (xPadMethod) mapped['x-padding-method'] = xPadMethod;
 
-  // uplink-http-method
+  // uplink-http-method (严格限定支持 request body 的 HTTP methods)
   const uplinkMethod = r.getEnum(XHTTP_VALID_UPLINK_METHODS, 'uplink-http-method', 'uplinkHTTPMethod', 'uplinkHttpMethod');
   if (uplinkMethod) mapped['uplink-http-method'] = uplinkMethod;
 
@@ -216,12 +220,21 @@ function mapXhttpFields(
   const sessionKey = r.getString('session-key', 'sessionKey', 'sessionIDKey', 'sessionIdKey', 'sessionidkey');
   if (sessionKey) mapped['session-key'] = sessionKey;
 
-  const sessionTable = r.getString('session-table', 'sessionTable', 'sessionIDTable', 'sessionIdTable', 'sessionidtable');
+  const sessionTable = r.getEnum(XHTTP_VALID_SESSION_TABLES, 'session-table', 'sessionTable', 'sessionIDTable', 'sessionIdTable', 'sessionidtable');
   if (sessionTable) mapped['session-table'] = sessionTable;
 
-  // session-length (支持单个非负整数或范围如 16-32)
+  // session-length (支持单个正整数或范围如 16-32；起始值 min 必须 > 0)
   const sessionLength = r.getIntOrRange('session-length', 'sessionLength', 'sessionIDLength', 'sessionIdLength', 'sessionidlength');
-  if (sessionLength !== undefined) mapped['session-length'] = sessionLength;
+  if (sessionLength !== undefined) {
+    const minVal = typeof sessionLength === 'number'
+      ? sessionLength
+      : parseInt(sessionLength.split('-')[0]!, 10);
+    if (minVal <= 0) {
+      unmapped.push(`${prefix}.session-length (必须为大于 0 的正整数或范围，当前为 "${sessionLength}")`);
+    } else {
+      mapped['session-length'] = sessionLength;
+    }
+  }
 
   // seq options
   const seqPlacement = r.getEnum(XHTTP_VALID_PLACEMENTS, 'seq-placement', 'seqPlacement', 'seqIDPlacement', 'seqIdPlacement');
@@ -230,6 +243,16 @@ function mapXhttpFields(
   const seqKey = r.getString('seq-key', 'seqKey', 'seqIDKey', 'seqIdKey');
   if (seqKey) mapped['seq-key'] = seqKey;
 
+  // 组合约束校验：当 session-placement 为 path 时，seq-placement 必须同为 path
+  if (sessionPlacement === 'path' && seqPlacement !== undefined && seqPlacement !== 'path') {
+    return {
+      mapped: {},
+      fatal: true,
+      skipReason: `XHTTP 关键参数配置冲突: 当 session-placement 为 path 时，seq-placement 必须同为 path (当前为 "${seqPlacement}")`,
+      unmapped: []
+    };
+  }
+
   // uplink-data options
   const uplinkDataPlacement = r.getEnum(XHTTP_VALID_DATA_PLACEMENTS, 'uplink-data-placement', 'uplinkDataPlacement');
   if (uplinkDataPlacement) mapped['uplink-data-placement'] = uplinkDataPlacement;
@@ -237,8 +260,15 @@ function mapXhttpFields(
   const uplinkDataKey = r.getString('uplink-data-key', 'uplinkDataKey');
   if (uplinkDataKey) mapped['uplink-data-key'] = uplinkDataKey;
 
+  // uplink-chunk-size (生效时必须 >= 64 bytes)
   const uplinkChunkSize = r.getStrictInt('uplink-chunk-size', 'uplinkChunkSize');
-  if (uplinkChunkSize !== undefined) mapped['uplink-chunk-size'] = uplinkChunkSize;
+  if (uplinkChunkSize !== undefined) {
+    if (uplinkChunkSize < 64) {
+      unmapped.push(`${prefix}.uplink-chunk-size (必须 >= 64 bytes，当前为 ${uplinkChunkSize})`);
+    } else {
+      mapped['uplink-chunk-size'] = uplinkChunkSize;
+    }
+  }
 
   // sc options
   const scMaxEachPost = r.getStrictInt('sc-max-each-post-bytes', 'scMaxEachPostBytes');

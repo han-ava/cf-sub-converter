@@ -353,7 +353,7 @@ describe('Tower-Inspired Compatibility Gate Suite', () => {
       '&extra=' + encodeURIComponent(JSON.stringify({
         sessionIDPlacement: 'header',
         sessionIDKey: 'skey',
-        sessionIDTable: 'stable',
+        sessionIDTable: 'hex',
         sessionIDLength: 16,
         uplinkHTTPMethod: 'POST'
       })) +
@@ -366,7 +366,7 @@ describe('Tower-Inspired Compatibility Gate Suite', () => {
     const xhttpOpts = res.config!['xhttp-opts'] as Record<string, any>;
     expect(xhttpOpts['session-placement']).toBe('header');
     expect(xhttpOpts['session-key']).toBe('skey');
-    expect(xhttpOpts['session-table']).toBe('stable');
+    expect(xhttpOpts['session-table']).toBe('hex');
     expect(xhttpOpts['session-length']).toBe(16);
     expect(xhttpOpts['uplink-http-method']).toBe('POST');
     expect(xhttpOpts['extra']).toBeUndefined();
@@ -1103,12 +1103,144 @@ describe('Tower-Inspired Compatibility Gate Suite', () => {
     const badUplinkDataPlacementNode = parseSingleNode(
       'vless://b831381d-6324-4d53-ad4f-8cda48b30811@1.2.3.4:443?type=xhttp&security=tls&extra=' +
       encodeURIComponent(JSON.stringify({
-        uplinkDataPlacement: 'path' // path 不是合法的 uplink-data-placement (仅 body/header/cookie/query)
+        uplinkDataPlacement: 'path' // path 不是合法的 uplink-data-placement (仅 body/header/cookie)
       })) + '#Bad%20Uplink%20Data%20Placement'
     );
     const resBadUplinkDataPlacement = adaptNodeToMihomo(badUplinkDataPlacementNode!);
     expect(resBadUplinkDataPlacement.fatal).toBe(true);
     expect(resBadUplinkDataPlacement.emitted).toBe(false);
     expect(resBadUplinkDataPlacement.skipReason).toContain('uplinkDataPlacement');
+  });
+
+  // ── XHTTP 官方规范对齐测试 (Mihomo 2026-07-18 规范) ──────────────────────────
+
+  test('27. XHTTP session/seq placement rules, enum gates, and bounds validation', () => {
+    // 1. session-placement 支持 'path'，且当 session-placement=path 时 seq-placement 也为 path -> 正常通过
+    const pathPlacementNode = parseSingleNode(
+      'vless://b831381d-6324-4d53-ad4f-8cda48b30811@1.2.3.4:443?type=xhttp&security=tls&extra=' +
+      encodeURIComponent(JSON.stringify({
+        sessionPlacement: 'path',
+        seqPlacement: 'path',
+        xPaddingMethod: 'repeat-x',
+        sessionTable: 'BASE36',
+        sessionLength: '16-32',
+        uplinkHTTPMethod: 'PUT',
+        uplinkChunkSize: 128
+      })) + '#Valid%20Path%20Placement'
+    );
+    expect(pathPlacementNode).not.toBeNull();
+    const resPath = adaptNodeToMihomo(pathPlacementNode!);
+    expect(resPath.fatal).toBe(false);
+    expect(resPath.lossy).toBe(false);
+    expect(resPath.emitted).toBe(true);
+    const opts = resPath.config!['xhttp-opts'];
+    expect(opts['session-placement']).toBe('path');
+    expect(opts['seq-placement']).toBe('path');
+    expect(opts['x-padding-method']).toBe('repeat-x');
+    expect(opts['session-table']).toBe('BASE36');
+    expect(opts['session-length']).toBe('16-32');
+    expect(opts['uplink-http-method']).toBe('PUT');
+    expect(opts['uplink-chunk-size']).toBe(128);
+
+    // 2. 组合校验冲突: session-placement 为 path，但 seq-placement 声明为 header -> Fatal
+    const conflictPlacementNode = parseSingleNode(
+      'vless://b831381d-6324-4d53-ad4f-8cda48b30811@1.2.3.4:443?type=xhttp&security=tls&extra=' +
+      encodeURIComponent(JSON.stringify({
+        sessionPlacement: 'path',
+        seqPlacement: 'header'
+      })) + '#Conflict%20Placement'
+    );
+    const resConflict = adaptNodeToMihomo(conflictPlacementNode!);
+    expect(resConflict.fatal).toBe(true);
+    expect(resConflict.emitted).toBe(false);
+    expect(resConflict.skipReason).toContain('当 session-placement 为 path 时，seq-placement 必须同为 path');
+
+    // 3. uplink-data-placement 为 query 已不再支持 -> 触发 Fatal 拦截
+    const badQueryUplinkDataNode = parseSingleNode(
+      'vless://b831381d-6324-4d53-ad4f-8cda48b30811@1.2.3.4:443?type=xhttp&security=tls&extra=' +
+      encodeURIComponent(JSON.stringify({
+        uplinkDataPlacement: 'query'
+      })) + '#Query%20Uplink%20Data'
+    );
+    const resQueryUplink = adaptNodeToMihomo(badQueryUplinkDataNode!);
+    expect(resQueryUplink.fatal).toBe(true);
+    expect(resQueryUplink.emitted).toBe(false);
+    expect(resQueryUplink.skipReason).toContain('uplinkDataPlacement');
+
+    // 4. x-padding-method 非法枚举 (非 repeat-x / tokenish) -> 降级警告到 unmapped，节点正常发出
+    const badPadMethodNode = parseSingleNode(
+      'vless://b831381d-6324-4d53-ad4f-8cda48b30811@1.2.3.4:443?type=xhttp&security=tls&extra=' +
+      encodeURIComponent(JSON.stringify({
+        xPaddingMethod: 'random-junk'
+      })) + '#Bad%20Pad%20Method'
+    );
+    const resBadPad = adaptNodeToMihomo(badPadMethodNode!);
+    expect(resBadPad.fatal).toBe(false);
+    expect(resBadPad.lossy).toBe(true);
+    expect(resBadPad.config!['xhttp-opts']?.['x-padding-method']).toBeUndefined();
+    expect(resBadPad.unsupportedParams.some(p => p.includes('xPaddingMethod') || p.includes('x-padding-method'))).toBe(true);
+
+    // 5. session-table 非法枚举 -> 降级警告到 unmapped，节点正常发出
+    const badSessionTableNode = parseSingleNode(
+      'vless://b831381d-6324-4d53-ad4f-8cda48b30811@1.2.3.4:443?type=xhttp&security=tls&extra=' +
+      encodeURIComponent(JSON.stringify({
+        sessionTable: 'invalid-charset-table'
+      })) + '#Bad%20Session%20Table'
+    );
+    const resBadTable = adaptNodeToMihomo(badSessionTableNode!);
+    expect(resBadTable.fatal).toBe(false);
+    expect(resBadTable.lossy).toBe(true);
+    expect(resBadTable.config!['xhttp-opts']?.['session-table']).toBeUndefined();
+    expect(resBadTable.unsupportedParams.some(p => p.includes('sessionTable') || p.includes('session-table'))).toBe(true);
+
+    // 6. session-length 必须 min > 0 (0 或 0-10 均非法) -> 降级警告到 unmapped
+    const zeroSessionLengthNode = parseSingleNode(
+      'vless://b831381d-6324-4d53-ad4f-8cda48b30811@1.2.3.4:443?type=xhttp&security=tls&extra=' +
+      encodeURIComponent(JSON.stringify({
+        sessionLength: 0
+      })) + '#Zero%20Session%20Length'
+    );
+    const resZeroLen = adaptNodeToMihomo(zeroSessionLengthNode!);
+    expect(resZeroLen.fatal).toBe(false);
+    expect(resZeroLen.lossy).toBe(true);
+    expect(resZeroLen.config!['xhttp-opts']?.['session-length']).toBeUndefined();
+    expect(resZeroLen.unsupportedParams.some(p => p.includes('session-length') || p.includes('sessionLength'))).toBe(true);
+
+    const zeroRangeSessionLengthNode = parseSingleNode(
+      'vless://b831381d-6324-4d53-ad4f-8cda48b30811@1.2.3.4:443?type=xhttp&security=tls&extra=' +
+      encodeURIComponent(JSON.stringify({
+        sessionLength: '0-16'
+      })) + '#Zero%20Range%20Session%20Length'
+    );
+    const resZeroRangeLen = adaptNodeToMihomo(zeroRangeSessionLengthNode!);
+    expect(resZeroRangeLen.fatal).toBe(false);
+    expect(resZeroRangeLen.lossy).toBe(true);
+    expect(resZeroRangeLen.config!['xhttp-opts']?.['session-length']).toBeUndefined();
+
+    // 7. uplink-http-method 收紧到 POST/PUT/PATCH/DELETE (GET / OPTIONS 视为非法) -> 降级警告到 unmapped
+    const getMethodNode = parseSingleNode(
+      'vless://b831381d-6324-4d53-ad4f-8cda48b30811@1.2.3.4:443?type=xhttp&security=tls&extra=' +
+      encodeURIComponent(JSON.stringify({
+        uplinkHTTPMethod: 'GET'
+      })) + '#Get%20Method'
+    );
+    const resGet = adaptNodeToMihomo(getMethodNode!);
+    expect(resGet.fatal).toBe(false);
+    expect(resGet.lossy).toBe(true);
+    expect(resGet.config!['xhttp-opts']?.['uplink-http-method']).toBeUndefined();
+    expect(resGet.unsupportedParams.some(p => p.includes('uplinkHTTPMethod') || p.includes('uplink-http-method'))).toBe(true);
+
+    // 8. uplink-chunk-size < 64 (如 32) -> 降级警告到 unmapped
+    const smallChunkNode = parseSingleNode(
+      'vless://b831381d-6324-4d53-ad4f-8cda48b30811@1.2.3.4:443?type=xhttp&security=tls&extra=' +
+      encodeURIComponent(JSON.stringify({
+        uplinkChunkSize: 32
+      })) + '#Small%20Chunk'
+    );
+    const resSmallChunk = adaptNodeToMihomo(smallChunkNode!);
+    expect(resSmallChunk.fatal).toBe(false);
+    expect(resSmallChunk.lossy).toBe(true);
+    expect(resSmallChunk.config!['xhttp-opts']?.['uplink-chunk-size']).toBeUndefined();
+    expect(resSmallChunk.unsupportedParams.some(p => p.includes('uplinkChunkSize') || p.includes('uplink-chunk-size'))).toBe(true);
   });
 });

@@ -308,7 +308,7 @@ export class QueryParamReader {
     const clean = val.trim();
     const cleanLower = clean.toLowerCase();
     const cleanNoDash = cleanLower.replace(/-/g, '');
-    const matched = allowedValues.find(a => {
+    const matched = allowedValues.find(a => a === clean) || allowedValues.find(a => {
       const aLower = a.toLowerCase();
       return aLower === cleanLower || aLower.replace(/-/g, '') === cleanNoDash;
     });
@@ -587,7 +587,7 @@ export class JsonFieldReader {
         const str = String(v).trim();
         const strLower = str.toLowerCase();
         const strNoDash = strLower.replace(/-/g, '');
-        const matched = allowedValues.find(a => {
+        const matched = allowedValues.find(a => a === str) || allowedValues.find(a => {
           const aLower = a.toLowerCase();
           return aLower === strLower || aLower.replace(/-/g, '') === strNoDash;
         });

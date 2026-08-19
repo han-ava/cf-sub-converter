@@ -2,12 +2,11 @@
 import yaml from 'js-yaml';
 import { NodeEnvelope } from './types';
 import { DEFAULT_CLASH_TEMPLATE, DEFAULT_SINGBOX_TEMPLATE } from './templates';
-import { safeBase64Encode, getRegionByNodeName, REGIONS } from './utils';
+import { getRegionByNodeName, REGIONS } from './utils';
 import { nodeToClashProxy } from './adapters/mihomo';
 import { nodeToSingBoxOutbound } from './adapters/singbox';
-import { toRawLinks } from './adapters/raw';
 
-export { nodeToClashProxy, nodeToSingBoxOutbound, toRawLinks };
+export { nodeToClashProxy, nodeToSingBoxOutbound };
 
 /**
  * 转换为 Clash Meta / Mihomo 配置文件 (YAML)
@@ -214,14 +213,6 @@ export function toSingBox(nodes: NodeEnvelope[], customTemplateJson?: string): s
   config.outbounds = defaultOutbounds;
 
   return JSON.stringify(config, null, 2);
-}
-
-/**
- * 转换为 Base64 订阅
- */
-export function toBase64(nodes: NodeEnvelope[]): string {
-  const rawLinks = toRawLinks(nodes);
-  return safeBase64Encode(rawLinks);
 }
 
 /**

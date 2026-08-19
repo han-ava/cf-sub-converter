@@ -2,7 +2,8 @@
 import { describe, expect, test } from 'bun:test';
 import { parseContent, parseSingleNode } from '../src/parser';
 import { adaptNodeToMihomo } from '../src/adapters/mihomo';
-import { toClashMeta, toRawLinks } from '../src/generator';
+import { toClashMeta } from '../src/generator';
+import { toRawLinks, toBase64 } from '../src/adapters/raw';
 import { REGRESSION_FIXTURES } from './fixtures/regression';
 import { writeFileSync, unlinkSync } from 'fs';
 import { spawnSync } from 'child_process';

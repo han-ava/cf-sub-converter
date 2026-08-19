@@ -25,14 +25,22 @@ export function toRawLinks(nodes: NodeEnvelope[]): string {
 
       // 2. 如果来源是 VMess JSON
       if (node.source.format === 'vmess-json') {
+        const rawJson = p.rawJson || {};
         const vmessObj = {
+          ...rawJson,
           ...p,
           ps: node.name,
           add: node.server,
           port: node.port,
-          id: p.uuid || p.id,
-          aid: p.alterId !== undefined ? p.alterId : (p.aid !== undefined ? p.aid : 0)
+          id: p.uuid || p.id || rawJson.id,
+          aid: p.alterId !== undefined ? p.alterId : (p.aid !== undefined ? p.aid : (rawJson.aid !== undefined ? rawJson.aid : 0))
         };
+        // 清理内部附加的非标准辅助字段
+        delete (vmessObj as any).rawJson;
+        delete (vmessObj as any).invalidParams;
+        delete (vmessObj as any).extras;
+        delete (vmessObj as any).transport;
+        delete (vmessObj as any).security;
         links.push(`vmess://${safeBase64Encode(JSON.stringify(vmessObj))}`);
         continue;
       }
@@ -180,4 +188,12 @@ export function toRawLinks(nodes: NodeEnvelope[]): string {
   }
 
   return links.join('\n');
+}
+
+/**
+ * 转换为 Base64 订阅
+ * 严格基于 Lossless Raw Links 编码
+ */
+export function toBase64(nodes: NodeEnvelope[]): string {
+  return safeBase64Encode(toRawLinks(nodes));
 }
