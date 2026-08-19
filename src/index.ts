@@ -95,6 +95,22 @@ async function loadAllNodes(
   userinfoStrategy?: 'first' | 'sum' | 'none',
   outerSignal?: AbortSignal
 ): Promise<{ nodes: ProxyNode[]; userinfo?: string }> {
+  const trimmedUrlParam = urlParam.trim();
+
+  // 如果是完整的 YAML 或 JSON 配置文本直接输入，优先整体解析，避免被行分割破坏结构
+  if (
+    trimmedUrlParam.includes('proxies:') ||
+    (trimmedUrlParam.startsWith('{') && trimmedUrlParam.endsWith('}')) ||
+    (trimmedUrlParam.startsWith('[') && trimmedUrlParam.endsWith(']'))
+  ) {
+    try {
+      const parsed = await parseContent(trimmedUrlParam);
+      if (parsed.length > 0) {
+        return { nodes: parsed, userinfo: undefined };
+      }
+    } catch {}
+  }
+
   const inputs = urlParam.split(/[\n\r|]+/);
   const allNodes: ProxyNode[] = [];
   const fetchedUserinfos: string[] = [];
