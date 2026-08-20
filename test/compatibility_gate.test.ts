@@ -97,12 +97,15 @@ describe('Tower-Inspired Compatibility Gate Suite', () => {
 
     expect(doc.proxies.length).toBe(1);
     expect(doc.proxies[0].name).toBe('香港 VLESS Reality');
+    expect(doc.dns['proxy-server-nameserver']).toEqual(['223.5.5.5', '119.29.29.29']);
 
     // Proxy groups only reference healthy node name
     const selectGroup = doc['proxy-groups'].find((g: any) => g.name === '🚀 节点选择');
+    const autoSelectGroup = doc['proxy-groups'].find((g: any) => g.name === '⚡ 自动选择');
     expect(selectGroup).toBeDefined();
     expect(selectGroup.proxies).toContain('香港 VLESS Reality');
     expect(selectGroup.proxies).not.toContain('Fatal Node');
+    expect(autoSelectGroup.url).toBe('https://cp.cloudflare.com/generate_204');
   });
 
   test('8. Full generated config with fatal nodes filtered passes mihomo -t -f', () => {

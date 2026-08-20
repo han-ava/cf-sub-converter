@@ -595,7 +595,7 @@ export default {
       let enableUdp = true;
       let showInfo = true;
       let preset = 'standard';
-      let testUrl = 'http://www.gstatic.com/generate_204';
+      let testUrl = 'https://cp.cloudflare.com/generate_204';
       let infoStrategy: 'first' | 'sum' | 'none' = 'first';
       let requestToken = extractRequestToken(request, url);
       let filename = 'SubConverter';
@@ -613,7 +613,7 @@ export default {
         enableUdp = url.searchParams.get('udp') !== '0';
         showInfo = url.searchParams.get('info') !== '0' && url.searchParams.get('show_info') !== '0';
         preset = (url.searchParams.get('preset') || 'standard').toLowerCase();
-        testUrl = url.searchParams.get('test_url') || 'http://www.gstatic.com/generate_204';
+        testUrl = url.searchParams.get('test_url') || 'https://cp.cloudflare.com/generate_204';
         filename = url.searchParams.get('filename') || 'SubConverter';
 
         const infoParam = url.searchParams.get('info_mode');
@@ -636,7 +636,7 @@ export default {
           enableUdp = body.udp !== false;
           showInfo = body.info !== false && body.show_info !== false;
           preset = (body.preset || 'standard').toLowerCase();
-          testUrl = body.test_url || 'http://www.gstatic.com/generate_204';
+          testUrl = body.test_url || 'https://cp.cloudflare.com/generate_204';
           if (body.info_mode) infoStrategy = body.info_mode;
           if (body.token) requestToken = body.token;
           filename = body.filename || 'SubConverter';

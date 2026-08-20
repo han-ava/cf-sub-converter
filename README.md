@@ -88,7 +88,7 @@ https://your-worker.workers.dev/sub?url=https://airport.com/sub?token=xxx&target
 | `token` | string | **是** | - | 访问鉴权 Token（需与 Worker 的 `AUTH_TOKEN` Secret 一致，亦支持 `Authorization: Bearer <token>` 请求头） |
 | `target` | string | 否 | `clash` / 自动识别 | 目标格式：`clash` (Clash Meta/Mihomo), `singbox`, `shadowrocket` (小火箭URI列表), `shadowrocket-conf` (.conf配置), `surge`, `base64`, `raw` |
 | `preset` | string | 否 | `standard` | Clash 规则分流预设：`standard` (标准全能), `ai` (增强 AI/OpenAI 分流), `media` (增强流媒体分流) |
-| `test_url` | string | 否 | `http://www.gstatic.com/generate_204` | 自动选择/延迟测速使用的 URL |
+| `test_url` | string | 否 | `https://cp.cloudflare.com/generate_204` | 自动选择/延迟测速使用的 URL |
 | `include` | string | 否 | - | 包含节点正则过滤，例如 `香港\|日本\|US` |
 | `exclude` | string | 否 | - | 排除节点正则过滤，例如 `剩余\|到期\|官网\|0.1x` |
 | `rename` | string | 否 | - | 节点重命名规则，格式为 `查找=替换`，多个规则可用换行或逗号隔开 |

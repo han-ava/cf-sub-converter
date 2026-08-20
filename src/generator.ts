@@ -15,7 +15,7 @@ export function toClashMeta(
   nodes: NodeEnvelope[],
   customTemplateYaml?: string,
   preset: string = 'standard',
-  testUrl: string = 'http://www.gstatic.com/generate_204'
+  testUrl: string = 'https://cp.cloudflare.com/generate_204'
 ): string {
   let config: any = null;
 
