@@ -77,7 +77,7 @@
 
 **URL 示例**：
 ```text
-https://your-worker.workers.dev/sub?url=https://airport.com/sub?token=xxx&target=clash&token=MyCustomSecretKey_999
+https://your-worker.workers.dev/sub?url=https://airport.com/sub?token=xxx&target=auto&token=MyCustomSecretKey_999
 ```
 
 #### 请求参数说明：
@@ -86,7 +86,7 @@ https://your-worker.workers.dev/sub?url=https://airport.com/sub?token=xxx&target
 | :--- | :--- | :--- | :--- | :--- |
 | `url` | string | **是** | - | 原始机场订阅链接，或节点链接。支持 `\|` 或换行拼接多个订阅源 |
 | `token` | string | **是** | - | 访问鉴权 Token（需与 Worker 的 `AUTH_TOKEN` Secret 一致，亦支持 `Authorization: Bearer <token>` 请求头） |
-| `target` | string | 否 | `clash` / 自动识别 | 目标格式：`clash` (Clash Meta/Mihomo), `singbox`, `shadowrocket` (小火箭URI列表), `shadowrocket-conf` (.conf配置), `surge`, `base64`, `raw` |
+| `target` | string | 否 | `auto` | 目标格式：`auto` 会根据客户端 User-Agent 自动识别 Shadowrocket、Clash/Mihomo/Stash、Sing-box 或 Surge（未识别时返回 Clash Meta）；也可显式指定 `clash`, `singbox`, `shadowrocket`, `shadowrocket-conf`, `surge`, `base64`, `raw` |
 | `preset` | string | 否 | `standard` | Clash 规则分流预设：`standard` (标准全能), `ai` (增强 AI/OpenAI 分流), `media` (增强流媒体分流) |
 | `test_url` | string | 否 | `https://cp.cloudflare.com/generate_204` | 自动选择/延迟测速使用的 URL |
 | `include` | string | 否 | - | 包含节点正则过滤，例如 `香港\|日本\|US` |

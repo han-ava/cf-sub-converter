@@ -11,6 +11,21 @@ import { renderHtmlPage } from './ui';
 
 const APP_VERSION = packageJson.version || '3.0.0-hardened';
 
+function detectTargetFromUserAgent(userAgent: string): string {
+  if (/Shadowrocket/i.test(userAgent)) return 'shadowrocket';
+  if (/Clash|Mihomo|Stash/i.test(userAgent)) return 'clash';
+  if (/sing-box/i.test(userAgent)) return 'singbox';
+  if (/Surge/i.test(userAgent)) return 'surge';
+  return 'clash';
+}
+
+function resolveTarget(requestedTarget: unknown, detectedTarget: string): string {
+  const normalizedTarget = typeof requestedTarget === 'string'
+    ? requestedTarget.trim().toLowerCase()
+    : '';
+  return !normalizedTarget || normalizedTarget === 'auto' ? detectedTarget : normalizedTarget;
+}
+
 function countProtocols(nodes: Array<Pick<ProxyNode, 'protocol'>>): Record<string, number> {
   return nodes.reduce((counts, node) => {
     const protocol = node.protocol || 'unknown';
@@ -634,17 +649,7 @@ export default {
     // 5. 标准订阅转换接口 (/sub)
     if (url.pathname === '/sub' || url.pathname === '/api/convert') {
       const clientUserAgent = request.headers.get('User-Agent') || '';
-      let detectedTarget = 'clash';
-
-      if (/Shadowrocket/i.test(clientUserAgent)) {
-        detectedTarget = 'shadowrocket';
-      } else if (/Clash|Mihomo|Stash/i.test(clientUserAgent)) {
-        detectedTarget = 'clash';
-      } else if (/sing-box/i.test(clientUserAgent)) {
-        detectedTarget = 'singbox';
-      } else if (/Surge/i.test(clientUserAgent)) {
-        detectedTarget = 'surge';
-      }
+      const detectedTarget = detectTargetFromUserAgent(clientUserAgent);
 
       let rawUrl = '';
       let target = '';
@@ -664,7 +669,7 @@ export default {
 
       if (request.method === 'GET') {
         rawUrl = url.searchParams.get('url') || '';
-        target = (url.searchParams.get('target') || detectedTarget).toLowerCase();
+        target = resolveTarget(url.searchParams.get('target'), detectedTarget);
         includeRegex = url.searchParams.get('include') || '';
         excludeRegex = url.searchParams.get('exclude') || '';
         renameRulesStr = url.searchParams.get('rename') || '';
@@ -686,7 +691,7 @@ export default {
         try {
           const body: any = await request.json();
           rawUrl = body.url || '';
-          target = (body.target || detectedTarget).toLowerCase();
+          target = resolveTarget(body.target, detectedTarget);
           includeRegex = body.include || '';
           excludeRegex = body.exclude || '';
           renameRulesStr = body.rename || '';

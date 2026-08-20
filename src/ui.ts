@@ -1183,7 +1183,8 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
         <div>
           <label for="targetClient">目标配置格式</label>
           <select id="targetClient" onchange="onTargetChange()">
-            <option value="clash" selected>Clash Meta (YAML)</option>
+            <option value="auto" selected>自动识别客户端 (Auto)</option>
+            <option value="clash">Clash Meta (YAML)</option>
             <option value="shadowrocket">Shadowrocket (小火箭 - 标准订阅)</option>
             <option value="singbox">Sing-Box (JSON)</option>
             <option value="base64">Base64 (通用订阅)</option>
@@ -1307,7 +1308,7 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
           <svg class="icon" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"></polyline></svg>
           <span>转换结果</span>
         </div>
-        <span id="targetBadge" class="badge badge-success">CLASH META</span>
+        <span id="targetBadge" class="badge badge-success">AUTO</span>
       </div>
 
       <div class="form-group">
@@ -1603,7 +1604,9 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
     function updateDynamicImportButton(target) {
       const btnImport = document.getElementById('btnImportCurrent');
       if (!btnImport) return;
-      if (target === 'clash') {
+      if (target === 'auto') {
+        btnImport.innerHTML = '<svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg><span>复制自动订阅链接</span>';
+      } else if (target === 'clash') {
         btnImport.innerHTML = '<svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg><span>导入 Clash</span>';
       } else if (target === 'shadowrocket' || target === 'shadowrocket-conf') {
         btnImport.innerHTML = '<svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg><span>导入小火箭</span>';
@@ -1636,7 +1639,7 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       document.getElementById('includeRegex').value = '';
       document.getElementById('excludeRegex').value = '';
       document.getElementById('renameRules').value = '';
-      document.getElementById('targetClient').value = 'clash';
+      document.getElementById('targetClient').value = 'auto';
       document.getElementById('rulePreset').value = 'standard';
       document.getElementById('addEmoji').checked = true;
       document.getElementById('enableUdp').checked = true;
@@ -2310,7 +2313,7 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       if (!item) return;
 
       document.getElementById('subUrl').value = item.subUrl || '';
-      document.getElementById('targetClient').value = item.target || 'clash';
+      document.getElementById('targetClient').value = item.target || 'auto';
       document.getElementById('rulePreset').value = item.preset || 'standard';
       document.getElementById('includeRegex').value = item.include || '';
       document.getElementById('excludeRegex').value = item.exclude || '';
@@ -2335,7 +2338,7 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       let html = '';
       for (let i = 0; i < favs.length; i++) {
         const f = favs[i];
-        const targetBadge = (f.target || 'clash').toUpperCase();
+        const targetBadge = (f.target || 'auto').toUpperCase();
         const dateStr = f.date ? new Date(f.date).toLocaleDateString() : '';
 
         html += '<div class="fav-item">' +
