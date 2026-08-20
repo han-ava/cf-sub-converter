@@ -1125,6 +1125,48 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       .action-grid { grid-template-columns: 1fr 1fr; }
       .container { padding: 0 1rem; margin: 1rem auto; }
       .panel { padding: 1.25rem; }
+
+      .node-table { table-layout: fixed; }
+
+      .node-table thead th:not(:first-child),
+      .node-table tbody tr:not(.details-row) > td:not(:first-child) {
+        display: none;
+      }
+
+      .node-table thead th:first-child,
+      .node-table tbody tr:not(.details-row) > td:first-child {
+        width: 100%;
+      }
+
+      .node-name-cell {
+        max-width: none;
+        min-width: 0;
+      }
+
+      .node-name-text,
+      .node-sub-text {
+        white-space: normal;
+        overflow-wrap: anywhere;
+      }
+
+      .details-row td,
+      .details-item {
+        min-width: 0;
+      }
+
+      .details-item {
+        align-items: flex-start;
+      }
+
+      .details-item > :not(.details-item-label) {
+        min-width: 0;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+      }
+
+      .details-grid > .details-item:last-child {
+        flex-wrap: wrap;
+      }
     }
 
     @media (max-width: 640px) {
