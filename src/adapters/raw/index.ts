@@ -15,7 +15,6 @@ export function toRawLinks(nodes: NodeEnvelope[]): string {
   let skippedCount = 0;
 
   for (const node of nodes) {
-    console.log('[DEBUG][RAW_NODE_IN]', JSON.stringify(node, null, 2));
     const before = links.length;
 
     try {
@@ -339,22 +338,17 @@ export function toRawLinks(nodes: NodeEnvelope[]): string {
       skippedCount++;
       console.error(
         '[DEBUG][RAW_NODE_ERROR]',
-        JSON.stringify(
-          {
-            node,
-            error: error instanceof Error ? error.stack || error.message : String(error)
-          },
-          null,
-          2
-        )
+        {
+          name: node.name,
+          protocol: node.protocol,
+          error: error instanceof Error ? error.message : String(error)
+        }
       );
       console.warn(`[toRawLinks] Failed to serialize node "${node.name}" (${node.protocol}):`, error?.message || error);
     }
 
     if (links.length === before) {
-      console.warn('[DEBUG][RAW_NODE_DROPPED]', JSON.stringify(node, null, 2));
-    } else {
-      console.log('[DEBUG][RAW_NODE_OUT]', links[links.length - 1]);
+      console.warn('[DEBUG][RAW_NODE_DROPPED]', { name: node.name, protocol: node.protocol });
     }
   }
 
@@ -376,8 +370,6 @@ export function toBase64(nodes: NodeEnvelope[]): string {
   }
   const base64 = safeBase64Encode(raw);
 
-  console.log('[DEBUG][RAW_ALL]', raw);
-  console.log('[DEBUG][BASE64_ALL]', base64);
   console.log(
     '[DEBUG][SUMMARY]',
     JSON.stringify({

@@ -11,6 +11,22 @@ import { renderHtmlPage } from './ui';
 
 const APP_VERSION = packageJson.version || '3.0.0-hardened';
 
+function countProtocols(nodes: Array<Pick<ProxyNode, 'protocol'>>): Record<string, number> {
+  return nodes.reduce((counts, node) => {
+    const protocol = node.protocol || 'unknown';
+    counts[protocol] = (counts[protocol] || 0) + 1;
+    return counts;
+  }, {} as Record<string, number>);
+}
+
+function countProtocolNames(protocols: string[]): Record<string, number> {
+  return protocols.reduce((counts, protocol) => {
+    const name = protocol || 'unknown';
+    counts[name] = (counts[name] || 0) + 1;
+    return counts;
+  }, {} as Record<string, number>);
+}
+
 // 基础跨域响应头
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -114,25 +130,33 @@ async function loadAllNodes(
 
   // 若输入不包含任何 http/https 远程订阅地址（即为用户直接粘贴的 Base64 订阅、YAML、JSON 或多行节点列表），优先作为整段配置解析，避免被行分割破坏 MIME Base64 或截断
   if (!trimmedUrlParam.includes('http://') && !trimmedUrlParam.includes('https://')) {
-    console.log('[SOURCE_START]', { index: 0, url: 'direct_input' });
+    console.log('[SOURCE_START]', { index: 0, source: 'direct_input' });
     console.log('[SOURCE_RESPONSE]', {
       index: 0,
-      url: 'direct_input',
+      source: 'direct_input',
       status: 200,
       contentType: 'text/plain',
       length: trimmedUrlParam.length
     });
-    console.log('[SOURCE_RAW]', { index: 0, url: 'direct_input', content: trimmedUrlParam });
 
     let decoded = '';
     try {
       const candidate = safeBase64Decode(trimmedUrlParam);
       if (candidate && candidate !== trimmedUrlParam && candidate.trim() !== trimmedUrlParam.trim()) {
         decoded = candidate;
-        console.log('[SOURCE_BASE64_DECODED]', { index: 0, url: 'direct_input', decoded });
+        console.log('[SOURCE_BASE64_DECODED]', {
+          index: 0,
+          source: 'direct_input',
+          inputLength: trimmedUrlParam.length,
+          decodedLength: decoded.length
+        });
       }
     } catch {
-      console.warn('[SOURCE_BASE64_DECODE_FAILED]', { index: 0, url: 'direct_input', content: trimmedUrlParam });
+      console.warn('[SOURCE_BASE64_DECODE_FAILED]', {
+        index: 0,
+        source: 'direct_input',
+        inputLength: trimmedUrlParam.length
+      });
     }
 
     try {
@@ -140,10 +164,9 @@ async function loadAllNodes(
       const protocols = parsed.map(n => n.protocol);
       console.log('[SOURCE_PARSE_RESULT]', {
         index: 0,
-        url: 'direct_input',
+        source: 'direct_input',
         nodes: parsed.length,
-        protocols,
-        parsedNodes: parsed
+        protocols: countProtocols(parsed)
       });
 
       const singleSummary: SourceSummary[] = [{
@@ -160,19 +183,19 @@ async function loadAllNodes(
 
       console.log('[ALL_SOURCES_SUMMARY]', singleSummary.map(s => ({
         index: s.index,
-        url: s.url,
+        source: s.url,
         status: s.status,
         rawLength: s.rawLength,
         decodedLength: s.decodedLength,
         nodeCount: s.nodeCount,
-        protocols: s.protocols
+        protocols: countProtocolNames(s.protocols)
       })));
 
       if (parsed.length > 0) {
         return { nodes: parsed, userinfo: undefined, sources: singleSummary };
       }
     } catch (err: any) {
-      console.error('[SOURCE_PARSE_ERROR]', { index: 0, url: 'direct_input', error: err?.message || err });
+      console.error('[SOURCE_PARSE_ERROR]', { index: 0, source: 'direct_input', error: err?.message || err });
     }
   }
 
@@ -200,7 +223,7 @@ async function loadAllNodes(
     const fetchResults = await pMap(
       safeRemoteUrls.map((url, i) => ({ url, index: i })),
       async ({ url, index }) => {
-        console.log('[SOURCE_START]', { index, url });
+        console.log('[SOURCE_START]', { index, source: sanitizeUrlForLog(url) });
         try {
           const res = await fetchSubscriptionWithTimeout(url, customUserAgent, enableCache, cacheTtl, outerSignal);
           return { index, url, ...res };
@@ -216,7 +239,7 @@ async function loadAllNodes(
       const { index, url, ok, status, text, userinfo, contentType } = res;
       console.log('[SOURCE_RESPONSE]', {
         index,
-        url,
+        source: sanitizeUrlForLog(url),
         status,
         contentType,
         length: text ? text.length : 0
@@ -227,17 +250,24 @@ async function loadAllNodes(
       }
 
       if (ok && text) {
-        console.log('[SOURCE_RAW]', { index, url, content: text });
-
         let decoded = '';
         try {
           const candidate = safeBase64Decode(text);
           if (candidate && candidate !== text && candidate.trim() !== text.trim()) {
             decoded = candidate;
-            console.log('[SOURCE_BASE64_DECODED]', { index, url, decoded });
+            console.log('[SOURCE_BASE64_DECODED]', {
+              index,
+              source: sanitizeUrlForLog(url),
+              inputLength: text.length,
+              decodedLength: decoded.length
+            });
           }
         } catch {
-          console.warn('[SOURCE_BASE64_DECODE_FAILED]', { index, url, content: text });
+          console.warn('[SOURCE_BASE64_DECODE_FAILED]', {
+            index,
+            source: sanitizeUrlForLog(url),
+            inputLength: text.length
+          });
         }
 
         let parsedNodes: NodeEnvelope[] = [];
@@ -245,20 +275,24 @@ async function loadAllNodes(
           parsedNodes = await parseContent(text);
           allNodes.push(...parsedNodes);
         } catch (err: any) {
-          console.error('[SOURCE_PARSE_ERROR]', { index, url, error: err?.message || err });
+          console.error('[SOURCE_PARSE_ERROR]', { index, source: sanitizeUrlForLog(url), error: err?.message || err });
         }
 
         const protocols = parsedNodes.map(n => n.protocol);
         console.log('[SOURCE_PARSE_RESULT]', {
           index,
-          url,
+          source: sanitizeUrlForLog(url),
           nodes: parsedNodes.length,
-          protocols,
-          parsedNodes
+          protocols: countProtocols(parsedNodes)
         });
 
         if (parsedNodes.length === 0) {
-          console.warn('[SOURCE_PARSE_EMPTY]', { index, url, status, length: text.length });
+          console.warn('[SOURCE_PARSE_EMPTY]', {
+            index,
+            source: sanitizeUrlForLog(url),
+            status,
+            length: text.length
+          });
         }
 
         sourceSummaries.push({
@@ -292,25 +326,33 @@ async function loadAllNodes(
     let directIdx = safeRemoteUrls.length;
     for (const rawText of rawTexts) {
       const idx = directIdx++;
-      console.log('[SOURCE_START]', { index: idx, url: 'direct_input' });
+      console.log('[SOURCE_START]', { index: idx, source: 'direct_input' });
       console.log('[SOURCE_RESPONSE]', {
         index: idx,
-        url: 'direct_input',
+        source: 'direct_input',
         status: 200,
         contentType: 'text/plain',
         length: rawText.length
       });
-      console.log('[SOURCE_RAW]', { index: idx, url: 'direct_input', content: rawText });
 
       let decoded = '';
       try {
         const candidate = safeBase64Decode(rawText);
         if (candidate && candidate !== rawText && candidate.trim() !== rawText.trim()) {
           decoded = candidate;
-          console.log('[SOURCE_BASE64_DECODED]', { index: idx, url: 'direct_input', decoded });
+          console.log('[SOURCE_BASE64_DECODED]', {
+            index: idx,
+            source: 'direct_input',
+            inputLength: rawText.length,
+            decodedLength: decoded.length
+          });
         }
       } catch {
-        console.warn('[SOURCE_BASE64_DECODE_FAILED]', { index: idx, url: 'direct_input', content: rawText });
+        console.warn('[SOURCE_BASE64_DECODE_FAILED]', {
+          index: idx,
+          source: 'direct_input',
+          inputLength: rawText.length
+        });
       }
 
       let parsedNodes: NodeEnvelope[] = [];
@@ -318,20 +360,19 @@ async function loadAllNodes(
         parsedNodes = await parseContent(rawText);
         allNodes.push(...parsedNodes);
       } catch (err: any) {
-        console.error('[SOURCE_PARSE_ERROR]', { index: idx, url: 'direct_input', error: err?.message || err });
+        console.error('[SOURCE_PARSE_ERROR]', { index: idx, source: 'direct_input', error: err?.message || err });
       }
 
       const protocols = parsedNodes.map(n => n.protocol);
       console.log('[SOURCE_PARSE_RESULT]', {
         index: idx,
-        url: 'direct_input',
+        source: 'direct_input',
         nodes: parsedNodes.length,
-        protocols,
-        parsedNodes
+        protocols: countProtocols(parsedNodes)
       });
 
       if (parsedNodes.length === 0) {
-        console.warn('[SOURCE_PARSE_EMPTY]', { index: idx, url: 'direct_input', length: rawText.length });
+        console.warn('[SOURCE_PARSE_EMPTY]', { index: idx, source: 'direct_input', length: rawText.length });
       }
 
       sourceSummaries.push({
@@ -352,12 +393,12 @@ async function loadAllNodes(
     '[ALL_SOURCES_SUMMARY]',
     sourceSummaries.map(s => ({
       index: s.index,
-      url: s.url,
+      source: s.type === 'remote' ? sanitizeUrlForLog(s.url) : s.url,
       status: s.status,
       rawLength: s.rawLength,
       decodedLength: s.decodedLength,
       nodeCount: s.nodeCount,
-      protocols: s.protocols
+      protocols: countProtocolNames(s.protocols)
     }))
   );
 
@@ -414,9 +455,21 @@ export default {
     if (request.method === 'POST' && url.pathname === '/api/preview') {
       try {
         const body: any = await request.json();
-        console.log('[DEBUG][REQUEST]', JSON.stringify(body));
         const rawUrl = body.url || '';
         const requestToken = body.token || extractRequestToken(request, url);
+        console.log('[DEBUG][REQUEST]', {
+          method: request.method,
+          path: url.pathname,
+          target: 'preview',
+          userAgent: request.headers.get('User-Agent') || '',
+          inputLength: String(rawUrl).length,
+          hasToken: Boolean(requestToken),
+          filters: {
+            include: Boolean(body.include),
+            exclude: Boolean(body.exclude),
+            rename: Boolean(body.rename)
+          }
+        });
 
         // 详细 Token 鉴权诊断
         const authResult = checkAuthStatus(env.AUTH_TOKEN, requestToken);
@@ -435,7 +488,10 @@ export default {
         }
 
         const { nodes: rawNodes, userinfo, sources } = await loadAllNodes(rawUrl, undefined, true, 180, 'first');
-        console.log('[DEBUG][PARSED_NODES]', JSON.stringify(rawNodes, null, 2));
+        console.log('[DEBUG][PARSED_NODES]', {
+          count: rawNodes.length,
+          protocols: countProtocols(rawNodes)
+        });
 
         // 过滤与重命名
         const renameRules = parseRenameRules(body.rename ? String(body.rename) : '');
@@ -447,7 +503,11 @@ export default {
           addEmoji: body.emoji !== false,
           enableUdp: body.udp !== false
         });
-        console.log('[DEBUG][PROCESSED_NODES]', JSON.stringify(processedNodes, null, 2));
+        console.log('[DEBUG][PROCESSED_NODES]', {
+          count: processedNodes.length,
+          dropped: rawNodes.length - processedNodes.length,
+          protocols: countProtocols(processedNodes)
+        });
 
         let debugRaw = '';
         let debugBase64 = '';
@@ -603,7 +663,6 @@ export default {
       let cacheTtl = 180;
 
       if (request.method === 'GET') {
-        console.log('[DEBUG][REQUEST]', JSON.stringify({ method: 'GET', url: request.url, search: Object.fromEntries(url.searchParams) }));
         rawUrl = url.searchParams.get('url') || '';
         target = (url.searchParams.get('target') || detectedTarget).toLowerCase();
         includeRegex = url.searchParams.get('include') || '';
@@ -626,7 +685,6 @@ export default {
       } else if (request.method === 'POST') {
         try {
           const body: any = await request.json();
-          console.log('[DEBUG][REQUEST]', JSON.stringify(body));
           rawUrl = body.url || '';
           target = (body.target || detectedTarget).toLowerCase();
           includeRegex = body.include || '';
@@ -649,6 +707,22 @@ export default {
           });
         }
       }
+
+      console.log('[DEBUG][REQUEST]', {
+        method: request.method,
+        path: url.pathname,
+        target,
+        preset,
+        userAgent: clientUserAgent,
+        inputLength: String(rawUrl).length,
+        hasToken: Boolean(requestToken),
+        cacheEnabled: enableCache,
+        filters: {
+          include: Boolean(includeRegex),
+          exclude: Boolean(excludeRegex),
+          rename: Boolean(renameRulesStr)
+        }
+      });
 
       // 严格鉴权校验：未配置 AUTH_TOKEN 或 Token 不匹配直接拒绝
       const authResult = checkAuthStatus(env.AUTH_TOKEN, requestToken);
@@ -689,7 +763,10 @@ export default {
           infoStrategy,
           globalAbortController.signal
         );
-        console.log('[DEBUG][PARSED_NODES]', JSON.stringify(rawNodes, null, 2));
+        console.log('[DEBUG][PARSED_NODES]', {
+          count: rawNodes.length,
+          protocols: countProtocols(rawNodes)
+        });
 
         clearTimeout(globalTimeout);
 
@@ -712,7 +789,11 @@ export default {
           addEmoji,
           enableUdp
         });
-        console.log('[DEBUG][PROCESSED_NODES]', JSON.stringify(processedNodes, null, 2));
+        console.log('[DEBUG][PROCESSED_NODES]', {
+          count: processedNodes.length,
+          dropped: rawNodes.length - processedNodes.length,
+          protocols: countProtocols(processedNodes)
+        });
 
         // 响应头构建：禁止私密订阅被中间缓存
         const responseHeaders: Record<string, string> = {

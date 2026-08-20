@@ -54,6 +54,7 @@ describe('VLESS Base64 Authority & Legacy Query Parameter Suite (yuyun.mhlnf.cn)
     expect(node!.port).toBe(50284);
     expect(node!.protocolData.uuid).toBe('32c1b4d3-84be-11ef-bb6b-bc241111d95d');
     expect(node!.protocolData.security).toBe('reality');
+    expect(node!.protocolData.flow).toBe('xtls-rprx-vision');
     expect(node!.protocolData.realityOpts?.publicKey).toBe('f6Hq_u8bL6ZtD3yL5p1bUv8tH9zQ6wK7nJ4mP2sE5rY');
     expect(node!.protocolData.realityOpts?.shortId).toBe('1a2b3c4d');
     expect(node!.protocolData.fingerprint).toBe('chrome');
@@ -76,6 +77,7 @@ describe('VLESS Base64 Authority & Legacy Query Parameter Suite (yuyun.mhlnf.cn)
       expect(node.port).toBe(50000 + i);
       expect(node.protocolData.uuid).toBe('32c1b4d3-84be-11ef-bb6b-bc241111d95d');
       expect(node.protocolData.security).toBe('reality');
+      expect(node.protocolData.flow).toBe('xtls-rprx-vision');
     }
   });
 
@@ -93,6 +95,7 @@ describe('VLESS Base64 Authority & Legacy Query Parameter Suite (yuyun.mhlnf.cn)
       expect(res.config!.port).toBe(node.port);
       expect(res.config!.uuid).toBe('32c1b4d3-84be-11ef-bb6b-bc241111d95d');
       expect(res.config!.tls).toBe(true);
+      expect(res.config!.flow).toBe('xtls-rprx-vision');
       expect(res.config!['reality-opts']).toBeDefined();
       expect(res.config!['reality-opts']['public-key']).toBe('f6Hq_u8bL6ZtD3yL5p1bUv8tH9zQ6wK7nJ4mP2sE5rY');
       expect(res.config!['client-fingerprint']).toBe('chrome');

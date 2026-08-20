@@ -39,8 +39,7 @@ export function toClashMeta(
         name: node.name,
         protocol: node.protocol,
         reason: res.skipReason || 'Adapter fatal or not emitted',
-        warnings: res.warnings,
-        node
+        warnings: res.warnings
       });
     }
   }
@@ -188,7 +187,7 @@ export function toClashMeta(
   }
 
   const yamlContent = yaml.dump(config, { indent: 2, lineWidth: -1, noRefs: true });
-  console.log('[DEBUG][CLASH_ALL]', yamlContent);
+  console.log('[DEBUG][CLASH_OUTPUT]', { yamlLength: yamlContent.length });
   return yamlContent;
 }
 

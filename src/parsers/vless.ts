@@ -103,13 +103,6 @@ export function parseVless(urlStr: string): VlessNode | null {
     // 标记已识别旧式/非标准安全参数，防止进入 invalidParams
     q.markRecognized('tls', 'xtls', 'security');
 
-    const rawFlow = q.get('flow');
-    let flow: string | undefined = undefined;
-    if (rawFlow) {
-      flow = q.getEnum(['xtls-rprx-vision', 'xtls-rprx-vision-udp443', 'none'], 'flow');
-      if (flow === 'none') flow = undefined;
-    }
-
     const rawPacketEncoding = q.get('packetEncoding', 'packet-encoding', 'packet_encoding', 'packetencoding', 'packet_addr', 'packetaddr', 'packet-addr');
     let packetEncoding: string | undefined = undefined;
     if (rawPacketEncoding) {
@@ -128,6 +121,18 @@ export function parseVless(urlStr: string): VlessNode | null {
 
     const isReality = security === 'reality' || !!pbk;
     const isTls = security === 'tls' || isReality;
+
+    const rawFlow = q.get('flow');
+    let flow: string | undefined = undefined;
+    if (rawFlow) {
+      flow = q.getEnum(['xtls-rprx-vision', 'xtls-rprx-vision-udp443', 'none'], 'flow');
+      if (flow === 'none') flow = undefined;
+    } else if (isReality && rawXtls === '2') {
+      // Legacy yuyun/Shadowrocket URI convention: xtls=2 represents Vision flow.
+      // Native Clash and v2rayN responses from the same upstream expose this as
+      // flow=xtls-rprx-vision, so preserve that connection-critical meaning.
+      flow = 'xtls-rprx-vision';
+    }
 
     const path = q.get('path', 'ws-path', 'ws_path', 'wspath') || (type === 'ws' || type === 'xhttp' ? '/' : undefined);
     const host = q.get('host', 'ws-host', 'ws_host', 'wshost', 'obfs-host', 'obfs_host', 'obfshost');
@@ -200,4 +205,3 @@ export function parseVless(urlStr: string): VlessNode | null {
     return null;
   }
 }
-

@@ -97,6 +97,8 @@ describe('Tower-Inspired Compatibility Gate Suite', () => {
 
     expect(doc.proxies.length).toBe(1);
     expect(doc.proxies[0].name).toBe('香港 VLESS Reality');
+    expect(doc.ipv6).toBe(true);
+    expect(doc.dns.ipv6).toBe(true);
     expect(doc.dns['proxy-server-nameserver']).toEqual(['223.5.5.5', '119.29.29.29']);
 
     // Proxy groups only reference healthy node name

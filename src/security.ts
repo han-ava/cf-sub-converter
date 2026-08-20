@@ -188,13 +188,13 @@ export function isAuthorized(authTokenInEnv?: string, requestToken?: string | nu
 export function sanitizeUrlForLog(urlStr: string): string {
   try {
     const parsed = new URL(urlStr);
-    return `${parsed.protocol}//${parsed.hostname}${parsed.pathname}`;
+    return `${parsed.protocol}//${parsed.hostname}`;
   } catch {
     return '[Invalid URL]';
   }
 }
 
-export const UPSTREAM_USER_AGENT = 'ClashMeta/1.19.0; Mihomo/1.19.0; Shadowrocket/1990; v2rayNG/1.9.0';
+export const UPSTREAM_USER_AGENT = 'ClashMeta/1.19.0';
 
 /**
  * 带有 302 重定向核验、精确 Cache Key（URL + 固定上游 UA）、流式体积截断与超时的安全订阅抓取
