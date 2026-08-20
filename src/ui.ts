@@ -529,7 +529,7 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
 
     .action-grid {
       display: grid;
-      grid-template-columns: repeat(4, 1fr);
+      grid-template-columns: repeat(5, 1fr);
       gap: 10px;
     }
 
@@ -1326,6 +1326,10 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
           <svg class="icon icon-sm" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
           <span>复制链接</span>
         </button>
+        <button class="btn btn-secondary btn-sm" id="btnShorten" onclick="generateShortLink()">
+          <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
+          <span>生成短链</span>
+        </button>
         <button class="btn btn-secondary btn-sm" onclick="downloadConfigFile()">
           <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
           <span>下载文件</span>
@@ -2073,6 +2077,46 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       }
       if (!outputInput.value) return;
       copyTextToClipboard(outputInput.value, '订阅链接已复制');
+    }
+
+    async function generateShortLink() {
+      const outputInput = document.getElementById('outputUrl');
+      if (!outputInput.value) generateLink();
+      if (!outputInput.value) return;
+
+      try {
+        const currentUrl = new URL(outputInput.value);
+        if (currentUrl.origin === window.location.origin && /^\\/s\\/[A-Za-z0-9_-]{12}$/.test(currentUrl.pathname)) {
+          showToast('当前链接已经是短链');
+          return;
+        }
+      } catch {
+        alert('当前订阅链接无效');
+        return;
+      }
+
+      const button = document.getElementById('btnShorten');
+      const originalHtml = button.innerHTML;
+      button.disabled = true;
+      button.textContent = '生成中...';
+
+      try {
+        const response = await fetch('/api/shorten', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: outputInput.value })
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || '短链生成失败');
+
+        outputInput.value = data.shortUrl;
+        showToast('短链已生成');
+      } catch (error) {
+        alert(error.message || '短链生成失败');
+      } finally {
+        button.disabled = false;
+        button.innerHTML = originalHtml;
+      }
     }
 
     function downloadConfigFile() {

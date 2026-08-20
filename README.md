@@ -1,6 +1,6 @@
 # 🛡️ SubConverter Pro (纯净安全加固版)
 
-基于 **Cloudflare Workers** 的轻量、无状态、高安全性 Serverless 订阅转换服务，专为个人私有部署设计。
+基于 **Cloudflare Workers** 的轻量、高安全性 Serverless 订阅转换服务，专为个人私有部署设计。
 
 [![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/han-ava/cf-sub-converter)
 
@@ -11,8 +11,8 @@
 | 安全/功能特性 | 原版 `cf-sub-converter` | 本项目 (纯净安全加固版) |
 | :--- | :--- | :--- |
 | **私有化与鉴权** | 🔴 任何人可无限制调用或滥用 | 🟢 **默认私有**：强制校验 `AUTH_TOKEN` Secret，杜绝沦为公开代理 |
-| **数据隐私与持久化** | 🔴 `/favs` 无鉴权公开，所有机场订阅 Token 裸奔 | 🟢 **纯无状态设计**：收藏夹仅保存在客户端本地 `localStorage`，服务端零存储 |
-| **未授权 KV 写入/篡改** | 🔴 `/save` 允许任意公网 IP 写入与污染 KV | 🟢 移除所有危险 KV 写入端点 |
+| **数据隐私与持久化** | 🔴 `/favs` 无鉴权公开，所有机场订阅 Token 裸奔 | 🟢 收藏夹仅保存在客户端；只有用户主动生成的短链会写入私有 KV |
+| **未授权 KV 写入/篡改** | 🔴 `/save` 允许任意公网 IP 写入与污染 KV | 🟢 短链写入强制校验 `AUTH_TOKEN`，且只接受当前域名下的订阅转换链接 |
 | **Argo 脚本远程注入** | 🔴 动态拉取未校验的 `argo.sh` 并诱导 VPS root 执行 | 🟢 **彻底移除 Argo 模块**，专注订阅转换，杜绝供应链与 RCE 风险 |
 | **外部规则模板依赖** | 🟠 每次转换动态请求 GitHub 仓库规则 | 🟢 **内置固化 Clash/Sing-box 规则模板**，无外部网络依赖与分流劫持风险 |
 | **SSRF 防护与逐跳检查** | 🟡 无内网 IP 过滤，容易被滥用为公网扫描代理 | 🟢 覆盖 RFC1918 私有 IP、本地回环与端口白名单，**手动拦截每一跳 302 重定向** 安全校验 |
@@ -58,6 +58,8 @@
    ```bash
    bun run deploy # 或 npm run deploy
    ```
+
+   项目使用 Wrangler 4.45+ 自动创建并绑定 `SHORT_LINKS` KV，无需手动填写 Namespace ID。
 
 ---
 
@@ -141,7 +143,27 @@ https://your-worker.workers.dev/sub?url=https://airport.com/sub?token=xxx&target
 
 ---
 
-### 3. 版本与健康检查接口：`GET /version`
+### 3. 短链接口：`POST /api/shorten`
+
+只接受当前 Worker 域名下的 `/sub` 或 `/api/convert` 链接，并使用同一域名返回 `/s/{code}` 短链。创建短链需要有效的 `AUTH_TOKEN`；短链本身应视为私密订阅凭证。
+
+**请求体 (JSON)**：
+```json
+{
+  "url": "https://your-worker.workers.dev/sub?url=...&target=auto&token=MyCustomSecretKey_999"
+}
+```
+
+**响应示例 (JSON)**：
+```json
+{
+  "shortUrl": "https://your-worker.workers.dev/s/AbCdEf123456"
+}
+```
+
+---
+
+### 4. 版本与健康检查接口：`GET /version`
 
 **响应示例**：
 ```json
@@ -149,7 +171,8 @@ https://your-worker.workers.dev/sub?url=https://airport.com/sub?token=xxx&target
   "name": "cf-sub-converter",
   "version": "3.0.0-hardened",
   "status": "ok",
-  "security": "hardened"
+  "security": "hardened",
+  "short_links_configured": true
 }
 ```
 
@@ -182,4 +205,3 @@ https://your-worker.workers.dev/sub?url=https://airport.com/sub?token=xxx&target
 ## 📄 License
 
 MIT License
-

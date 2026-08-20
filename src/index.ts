@@ -10,6 +10,30 @@ import { isAuthorized, checkAuthStatus, fetchSubscriptionWithTimeout, extractReq
 import { renderHtmlPage } from './ui';
 
 const APP_VERSION = packageJson.version || '3.0.0-hardened';
+const SHORT_LINK_PATH_PATTERN = /^\/s\/([A-Za-z0-9_-]{12})$/;
+
+function createShortCode(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(9));
+  return btoa(String.fromCharCode(...bytes))
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/g, '');
+}
+
+function parseStoredShortTarget(value: string, origin: string): URL | null {
+  try {
+    const target = new URL(value, origin);
+    if (
+      target.origin !== origin ||
+      (target.pathname !== '/sub' && target.pathname !== '/api/convert')
+    ) {
+      return null;
+    }
+    return target;
+  } catch {
+    return null;
+  }
+}
 
 function detectTargetFromUserAgent(userAgent: string): string {
   if (/Shadowrocket/i.test(userAgent)) return 'shadowrocket';
@@ -425,7 +449,30 @@ async function loadAllNodes(
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-    const url = new URL(request.url);
+    let url = new URL(request.url);
+
+    // 短链在 Worker 内部还原为订阅请求，避免 302 再次暴露完整长链接。
+    if (request.method === 'GET') {
+      const shortMatch = url.pathname.match(SHORT_LINK_PATH_PATTERN);
+      if (shortMatch) {
+        if (!env.SHORT_LINKS) {
+          return new Response('短链存储未配置', { status: 503, headers: CORS_HEADERS });
+        }
+
+        const storedTarget = await env.SHORT_LINKS.get(`short:${shortMatch[1]}`);
+        if (!storedTarget) {
+          return new Response('短链不存在', { status: 404, headers: CORS_HEADERS });
+        }
+
+        const resolvedTarget = parseStoredShortTarget(storedTarget, url.origin);
+        if (!resolvedTarget) {
+          return new Response('短链无效', { status: 404, headers: CORS_HEADERS });
+        }
+        // KV 中不保存服务鉴权密钥；短链作为私密能力 URL，解析时使用当前 Secret 完成内部鉴权。
+        if (env.AUTH_TOKEN) resolvedTarget.searchParams.set('token', env.AUTH_TOKEN.trim());
+        url = resolvedTarget;
+      }
+    }
 
     // 1. CORS 跨域预检处理
     if (request.method === 'OPTIONS') {
@@ -454,7 +501,8 @@ export default {
           status: 'ok',
           security: 'hardened',
           auth_token_configured: isTokenSet,
-          token_length: isTokenSet ? env.AUTH_TOKEN!.trim().length : 0
+          token_length: isTokenSet ? env.AUTH_TOKEN!.trim().length : 0,
+          short_links_configured: Boolean(env.SHORT_LINKS)
         }),
         {
           headers: {
@@ -466,7 +514,64 @@ export default {
       );
     }
 
-    // 4. 实时节点解析与流量预览接口 (/api/preview)
+    // 4. 使用当前域名生成短链 (/api/shorten)
+    if (request.method === 'POST' && url.pathname === '/api/shorten') {
+      if (!env.SHORT_LINKS) {
+        return new Response(JSON.stringify({ error: '短链存储未配置' }), {
+          status: 503,
+          headers: { 'Content-Type': 'application/json; charset=utf-8', ...CORS_HEADERS }
+        });
+      }
+
+      let body: any;
+      try {
+        body = await request.json();
+      } catch {
+        return new Response(JSON.stringify({ error: '无效的 JSON 请求体' }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json; charset=utf-8', ...CORS_HEADERS }
+        });
+      }
+
+      const target = parseStoredShortTarget(String(body.url || ''), url.origin);
+      if (!target) {
+        return new Response(JSON.stringify({ error: '只能缩短当前域名下的订阅转换链接' }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json; charset=utf-8', ...CORS_HEADERS }
+        });
+      }
+
+      const requestToken = extractRequestToken(request, target);
+      const authResult = checkAuthStatus(env.AUTH_TOKEN, requestToken);
+      if (!authResult.authorized) {
+        return new Response(JSON.stringify({ error: authResult.reason }), {
+          status: 401,
+          headers: { 'Content-Type': 'application/json; charset=utf-8', ...CORS_HEADERS }
+        });
+      }
+
+      try {
+        const code = createShortCode();
+        const storedTarget = new URL(target);
+        storedTarget.searchParams.delete('token');
+        await env.SHORT_LINKS.put(`short:${code}`, `${storedTarget.pathname}${storedTarget.search}`);
+
+        return new Response(JSON.stringify({ shortUrl: `${url.origin}/s/${code}` }), {
+          headers: {
+            'Content-Type': 'application/json; charset=utf-8',
+            'Cache-Control': 'no-store',
+            ...CORS_HEADERS
+          }
+        });
+      } catch {
+        return new Response(JSON.stringify({ error: '短链保存失败' }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json; charset=utf-8', ...CORS_HEADERS }
+        });
+      }
+    }
+
+    // 5. 实时节点解析与流量预览接口 (/api/preview)
     if (request.method === 'POST' && url.pathname === '/api/preview') {
       try {
         const body: any = await request.json();
@@ -646,7 +751,7 @@ export default {
       }
     }
 
-    // 5. 标准订阅转换接口 (/sub)
+    // 6. 标准订阅转换接口 (/sub)
     if (url.pathname === '/sub' || url.pathname === '/api/convert') {
       const clientUserAgent = request.headers.get('User-Agent') || '';
       const detectedTarget = detectTargetFromUserAgent(clientUserAgent);

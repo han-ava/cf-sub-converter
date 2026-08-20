@@ -2,6 +2,7 @@
 
 export interface Env {
   AUTH_TOKEN?: string;
+  SHORT_LINKS?: KVNamespace;
 }
 
 export type KnownProtocol =
