@@ -293,7 +293,7 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       color: var(--text-dim);
     }
 
-    textarea, input[type="text"], select {
+    textarea, input[type="text"], input[type="password"], select {
       width: 100%;
       height: 44px;
       background-color: var(--bg-input);
@@ -317,7 +317,7 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       line-height: 1.6;
     }
 
-    textarea:focus, input[type="text"]:focus, select:focus {
+    textarea:focus, input[type="text"]:focus, input[type="password"]:focus, select:focus {
       border-color: var(--border-focus);
       background-color: var(--bg-input-focus);
       box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.25);
@@ -1279,7 +1279,7 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
             <span>访问密钥 (AUTH_TOKEN)</span>
             <span class="label-hint">Cloudflare 后台安全密钥</span>
           </label>
-          <input type="text" id="authToken" placeholder="若配置了 AUTH_TOKEN 请填写" oninput="saveAuthToken()">
+          <input type="password" id="authToken" placeholder="若配置了 AUTH_TOKEN 请填写" oninput="saveAuthToken()">
         </div>
       </div>
 
@@ -1881,11 +1881,11 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       if (data.warningCount > 0 && aggregations.length > 0) {
         warnBox.classList.add('show');
         warnBadge.textContent = aggregations.length + ' 类 (' + data.warningCount + ' 节点)';
-        warnList.innerHTML = aggregations.map(agg => {
+        warnList.innerHTML = aggregations.map((agg, index) => {
           const isActive = currentWarningFilter === agg.param;
           return \`
-            <div class="warning-chip \${isActive ? 'active' : ''}" onclick="filterByWarningParam('\${escapeJsParam(agg.param)}')">
-              <span style="color: var(--accent); font-weight: 600;">\${agg.protocol}</span>
+            <div class="warning-chip \${isActive ? 'active' : ''}" onclick="filterByWarningParamAt(\${index})">
+              <span style="color: var(--accent); font-weight: 600;">\${escapeHtml(agg.protocol)}</span>
               <span>\${escapeHtml(agg.param)}</span>
               <span class="badge" style="padding: 1px 5px; font-size: 0.65rem;">\${agg.count}</span>
             </div>
@@ -1989,11 +1989,11 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
               <td>
                 <div class="node-name-cell">
                   <span class="node-name-text">\${escapeHtml(n.name)}</span>
-                  <span class="node-sub-text">\${n.server}:\${n.port}</span>
+                  <span class="node-sub-text">\${escapeHtml(n.server)}:\${escapeHtml(n.port)}</span>
                 </div>
               </td>
               <td>
-                <span class="protocol-badge">\${(n.type || '').toUpperCase()}</span>
+                <span class="protocol-badge">\${escapeHtml((n.type || '').toUpperCase())}</span>
               </td>
               <td>
                 <span class="latency-val \${latClass}">\${lat}</span>
@@ -2022,7 +2022,7 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
                     </div>
                     <div class="details-item">
                       <span class="details-item-label">服务器:</span>
-                      <span>\${n.server}:\${n.port} (\${(n.type || '').toUpperCase()})</span>
+                      <span>\${escapeHtml(n.server)}:\${escapeHtml(n.port)} (\${escapeHtml((n.type || '').toUpperCase())})</span>
                     </div>
                     \${conv.skipReason ? \`
                       <div class="details-item">
@@ -2103,6 +2103,11 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       currentGateFilter = 'warning';
       currentPage = 1;
       renderNodeTable();
+    }
+
+    function filterByWarningParamAt(index) {
+      const aggregation = currentPreviewData?.warningAggregations?.[index];
+      if (aggregation) filterByWarningParam(aggregation.param);
     }
 
     function resetWarningParamFilter() {
@@ -2316,11 +2321,6 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
         .replace(/'/g, '&#039;');
     }
 
-    function escapeJsParam(str) {
-      if (!str) return '';
-      return String(str).replace(/\\\\/g, '\\\\\\\\').replace(/'/g, "\\\\'");
-    }
-
     let inspectTimer = null;
     function debounceInspect() {
       clearTimeout(inspectTimer);
@@ -2447,14 +2447,19 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
 
     function saveAuthToken() {
       const token = document.getElementById('authToken').value.trim();
-      if (token) {
-        localStorage.setItem(TOKEN_STORAGE_KEY, token);
-      }
+      try {
+        if (token) sessionStorage.setItem(TOKEN_STORAGE_KEY, token);
+        else sessionStorage.removeItem(TOKEN_STORAGE_KEY);
+      } catch {}
     }
 
     function restoreAuthToken() {
       try {
-        const saved = localStorage.getItem(TOKEN_STORAGE_KEY);
+        localStorage.removeItem(TOKEN_STORAGE_KEY);
+      } catch {}
+
+      try {
+        const saved = sessionStorage.getItem(TOKEN_STORAGE_KEY);
         if (saved) {
           document.getElementById('authToken').value = saved;
         }
