@@ -1,13 +1,6 @@
 // src/security.ts
 
 /**
- * 允许请求的目标端口白名单（标准 Web 端口与常见 CDN/代理端口）
- */
-const ALLOWED_PORTS = new Set([
-  80, 443, 8080, 8443, 2052, 2053, 2082, 2083, 2086, 2087, 2095, 2096
-]);
-
-/**
  * 计算字符串的 SHA-256 哈希值
  */
 export async function sha256Hex(message: string): Promise<string> {
@@ -51,6 +44,20 @@ export function isPrivateIp(ip: string): boolean {
 
   // IPv6 检查
   const lower = cleanIp.toLowerCase();
+
+  // WHATWG URL 会将 ::ffff:127.0.0.1 规范化为 ::ffff:7f00:1
+  const mappedDottedIpv4 = lower.match(/^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/);
+  if (mappedDottedIpv4) {
+    return isPrivateIp(mappedDottedIpv4[1]!);
+  }
+
+  const mappedHexIpv4 = lower.match(/^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/);
+  if (mappedHexIpv4) {
+    const high = parseInt(mappedHexIpv4[1]!, 16);
+    const low = parseInt(mappedHexIpv4[2]!, 16);
+    return isPrivateIp(`${high >> 8}.${high & 0xff}.${low >> 8}.${low & 0xff}`);
+  }
+
   if (
     lower === '::1' ||
     lower === '::' ||
@@ -74,7 +81,7 @@ export function isSafeSubscriptionUrl(urlStr: string): boolean {
       return false;
     }
 
-    const hostname = parsed.hostname.toLowerCase();
+    const hostname = parsed.hostname.toLowerCase().replace(/\.+$/, '');
 
     // 检查主机名关键字
     if (

@@ -19,6 +19,7 @@ export function toClashMeta(
   testUrl: string = 'https://cp.cloudflare.com/generate_204'
 ): string {
   let config: any = null;
+  let usesDefaultTemplate = false;
 
   if (customTemplateYaml && customTemplateYaml.trim()) {
     try {
@@ -28,6 +29,7 @@ export function toClashMeta(
 
   if (!config || typeof config !== 'object') {
     config = JSON.parse(JSON.stringify(DEFAULT_CLASH_TEMPLATE));
+    usesDefaultTemplate = true;
   }
 
   const proxies: Record<string, any>[] = [];
@@ -140,7 +142,7 @@ export function toClashMeta(
         '⚡ 自动选择',
         'DIRECT',
         ...regionalGroupNames,
-        ...(proxyNames.length > 0 ? proxyNames : ['DIRECT'])
+        ...(proxyNames.length > 0 ? proxyNames : [])
       ]
     },
     {
@@ -176,15 +178,47 @@ export function toClashMeta(
   }
 
   if (isMinimal) {
-    // 极简模式：免下载庞大外部规则集，极速启动，仅保留核心国内直连与代理
+    // 极简模式：不使用 rule-provider，内联本地/LAN 与国内直连规则
     config.rules = [
+      'DOMAIN,localhost,🎯 全球直连',
+      'DOMAIN-SUFFIX,localhost,🎯 全球直连',
+      'DOMAIN-SUFFIX,local,🎯 全球直连',
+      'DOMAIN-SUFFIX,lan,🎯 全球直连',
+      'DOMAIN-SUFFIX,localdomain,🎯 全球直连',
+      'DOMAIN-SUFFIX,internal,🎯 全球直连',
+      'DOMAIN-SUFFIX,home.arpa,🎯 全球直连',
+      'IP-CIDR,0.0.0.0/8,🎯 全球直连,no-resolve',
+      'IP-CIDR,10.0.0.0/8,🎯 全球直连,no-resolve',
+      'IP-CIDR,100.64.0.0/10,🎯 全球直连,no-resolve',
+      'IP-CIDR,127.0.0.0/8,🎯 全球直连,no-resolve',
+      'IP-CIDR,169.254.0.0/16,🎯 全球直连,no-resolve',
+      'IP-CIDR,172.16.0.0/12,🎯 全球直连,no-resolve',
+      'IP-CIDR,192.168.0.0/16,🎯 全球直连,no-resolve',
+      'IP-CIDR,198.18.0.0/15,🎯 全球直连,no-resolve',
+      'IP-CIDR,224.0.0.0/3,🎯 全球直连,no-resolve',
+      'IP-CIDR6,::1/128,🎯 全球直连,no-resolve',
+      'IP-CIDR6,fc00::/7,🎯 全球直连,no-resolve',
+      'IP-CIDR6,fe80::/10,🎯 全球直连,no-resolve',
+      'IP-CIDR6,ff00::/8,🎯 全球直连,no-resolve',
       'GEOIP,LAN,🎯 全球直连,no-resolve',
+      'DOMAIN-SUFFIX,cn,🎯 全球直连',
+      'GEOSITE,CN,🎯 全球直连',
       'GEOIP,CN,🎯 全球直连',
       'MATCH,🚀 节点选择'
     ];
     delete config['rule-providers'];
   } else if (extraRules.length > 0 && Array.isArray(config.rules)) {
-    config.rules = [...extraRules, ...config.rules];
+    const rejectRuleIndex = usesDefaultTemplate
+      ? config.rules.findIndex((rule: unknown) =>
+          typeof rule === 'string' && rule.startsWith('RULE-SET,reject,')
+        )
+      : -1;
+    const insertionIndex = usesDefaultTemplate && rejectRuleIndex >= 0 ? rejectRuleIndex + 1 : 0;
+    config.rules = [
+      ...config.rules.slice(0, insertionIndex),
+      ...extraRules,
+      ...config.rules.slice(insertionIndex)
+    ];
   }
 
   const yamlContent = yaml.dump(config, { indent: 2, lineWidth: -1, noRefs: true });
@@ -216,27 +250,19 @@ export function toSingBox(nodes: NodeEnvelope[], customTemplateJson?: string): s
     {
       tag: '🚀 节点选择',
       type: 'selector',
-      outbounds: ['⚡ 自动选择', 'direct', ...(nodeTags.length > 0 ? nodeTags : ['direct'])]
+      outbounds: ['⚡ 自动选择', 'direct', ...(nodeTags.length > 0 ? nodeTags : [])]
     },
     {
       tag: '⚡ 自动选择',
       type: 'urltest',
       outbounds: nodeTags.length > 0 ? nodeTags : ['direct'],
-      url: 'http://cp.cloudflare.com/generate_204',
+      url: 'https://cp.cloudflare.com/generate_204',
       interval: '3m',
       tolerance: 50
     },
     {
       tag: 'direct',
       type: 'direct'
-    },
-    {
-      tag: 'block',
-      type: 'block'
-    },
-    {
-      tag: 'dns-out',
-      type: 'dns'
     },
     ...outbounds
   ];
@@ -280,8 +306,8 @@ export function toShadowrocketConf(nodes: NodeEnvelope[]): string {
     '',
     '[General]',
     'bypass-system = true',
-    'skip-proxy = 192.168.0.0/16, 10.0.0.0/8, 172.16.0.0/12, 127.0.0.1, localhost, *.local',
-    'bypass-tun = 10.0.0.0/8,100.64.0.0/10,127.0.0.0/8,169.254.0.0/16,172.16.0.0/12,192.0.0.0/24,192.0.2.0/24,192.88.99.0/24,192.168.0.0/16,198.18.0.0/15,198.51.100.0/24,203.0.113.0/24,224.0.0.0/4,255.255.255.255/32',
+    'skip-proxy = 10.0.0.0/8, 100.64.0.0/10, 127.0.0.0/8, 169.254.0.0/16, 172.16.0.0/12, 192.168.0.0/16, localhost, *.localhost, *.local, *.lan, *.home.arpa',
+    'bypass-tun = 10.0.0.0/8,100.64.0.0/10,127.0.0.0/8,169.254.0.0/16,172.16.0.0/12,192.0.0.0/24,192.0.2.0/24,192.88.99.0/24,192.168.0.0/16,198.18.0.0/15,198.51.100.0/24,203.0.113.0/24,224.0.0.0/4,255.255.255.255/32,::1/128,fc00::/7,fe80::/10',
     'dns-server = system, 223.5.5.5, 119.29.29.29',
     'ipv6 = false',
     'update-url = ',
@@ -312,15 +338,37 @@ export function toShadowrocketConf(nodes: NodeEnvelope[]): string {
     }
   }
 
-  const groupNodes = emittedNodes.length > 0 ? emittedNodes.map(n => n.name).join(', ') : 'DIRECT';
+  const groupNodes = [...new Set([...emittedNodes.map(n => n.name), 'DIRECT'])].join(', ');
 
   lines.push(
     '',
     '[Proxy Group]',
-    `🚀 节点选择 = select, ${groupNodes}, DIRECT`,
+    `🚀 节点选择 = select, ${groupNodes}`,
     '',
     '[Rule]',
+    'DOMAIN,localhost,DIRECT',
+    'DOMAIN-SUFFIX,localhost,DIRECT',
+    'DOMAIN-SUFFIX,local,DIRECT',
+    'DOMAIN-SUFFIX,lan,DIRECT',
+    'DOMAIN-SUFFIX,localdomain,DIRECT',
+    'DOMAIN-SUFFIX,internal,DIRECT',
+    'DOMAIN-SUFFIX,home.arpa,DIRECT',
+    'IP-CIDR,0.0.0.0/8,DIRECT,no-resolve',
+    'IP-CIDR,10.0.0.0/8,DIRECT,no-resolve',
+    'IP-CIDR,100.64.0.0/10,DIRECT,no-resolve',
+    'IP-CIDR,127.0.0.0/8,DIRECT,no-resolve',
+    'IP-CIDR,169.254.0.0/16,DIRECT,no-resolve',
+    'IP-CIDR,172.16.0.0/12,DIRECT,no-resolve',
+    'IP-CIDR,192.168.0.0/16,DIRECT,no-resolve',
+    'IP-CIDR,198.18.0.0/15,DIRECT,no-resolve',
+    'IP-CIDR,224.0.0.0/3,DIRECT,no-resolve',
+    'IP-CIDR,::/127,DIRECT,no-resolve',
+    'IP-CIDR,fc00::/7,DIRECT,no-resolve',
+    'IP-CIDR,fe80::/10,DIRECT,no-resolve',
+    'IP-CIDR,ff00::/8,DIRECT,no-resolve',
     'DOMAIN-SUFFIX,cn,DIRECT',
+    'DOMAIN-SET,https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Shadowrocket/China/China_Domain.list,DIRECT',
+    'RULE-SET,https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Shadowrocket/China/China.list,DIRECT',
     'DOMAIN-KEYWORD,google,🚀 节点选择',
     'DOMAIN-KEYWORD,github,🚀 节点选择',
     'DOMAIN-KEYWORD,telegram,🚀 节点选择',

@@ -1236,13 +1236,13 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
           </select>
         </div>
 
-        <div>
-          <label for="rulePreset">分流规则预设</label>
+        <div id="rulePresetField">
+          <label for="rulePreset">分流规则预设 <span class="label-hint">Clash 专用</span></label>
           <select id="rulePreset">
             <option value="standard" selected>标准全能分流 (国内直连+自动测速)</option>
             <option value="ai">智算 AI 增强 (ChatGPT/Claude/Copilot)</option>
             <option value="media">国际流媒体 (YouTube/Netflix/Disney+)</option>
-            <option value="minimal">极简纯节点 (仅节点输出)</option>
+            <option value="minimal">极简分流 (无 Rule Provider)</option>
           </select>
         </div>
       </div>
@@ -1631,7 +1631,9 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       params.set('target', target);
       if (authToken) params.set('token', authToken);
 
-      if (preset && preset !== 'standard') params.set('preset', preset);
+      if ((target === 'auto' || target === 'clash') && preset && preset !== 'standard') {
+        params.set('preset', preset);
+      }
       if (includeRegex) params.set('include', includeRegex);
       if (excludeRegex) params.set('exclude', excludeRegex);
       if (renameRules) params.set('rename', renameRules);
@@ -1680,11 +1682,23 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       }
     }
 
+    function syncRulePresetAvailability(target) {
+      const rulePreset = document.getElementById('rulePreset');
+      const rulePresetField = document.getElementById('rulePresetField');
+      const presetApplies = target === 'auto' || target === 'clash';
+      rulePreset.disabled = !presetApplies;
+      rulePreset.title = presetApplies
+        ? (target === 'auto' ? 'Auto 仅在识别为 Clash/Mihomo 时应用' : '')
+        : '该预设仅用于 Clash/Mihomo 输出';
+      if (rulePresetField) rulePresetField.style.opacity = presetApplies ? '1' : '0.55';
+    }
+
     function onTargetChange() {
       const target = document.getElementById('targetClient').value;
       const targetBadge = document.getElementById('targetBadge');
       if (targetBadge) targetBadge.textContent = target.toUpperCase();
       updateDynamicImportButton(target);
+      syncRulePresetAvailability(target);
 
       const outputInput = document.getElementById('outputUrl');
       if (outputInput && outputInput.value) {
@@ -1706,6 +1720,7 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       document.getElementById('renameRules').value = '';
       document.getElementById('targetClient').value = 'auto';
       document.getElementById('rulePreset').value = 'standard';
+      onTargetChange();
       document.getElementById('addEmoji').checked = true;
       document.getElementById('enableUdp').checked = true;
       document.getElementById('showInfo').checked = true;
@@ -2447,6 +2462,7 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       document.getElementById('showInfo').checked = item.showInfo !== false;
       document.getElementById('enableUdp').checked = item.enableUdp !== false;
 
+      syncRulePresetAvailability(document.getElementById('targetClient').value);
       generateLink();
       showToast('已成功加载配置: ' + item.name);
     }

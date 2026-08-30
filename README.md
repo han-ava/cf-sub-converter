@@ -14,7 +14,7 @@
 | **数据隐私与持久化** | 🔴 `/favs` 无鉴权公开，所有机场订阅 Token 裸奔 | 🟢 收藏夹仅保存在客户端；只有用户主动生成的短链会写入私有 KV |
 | **未授权 KV 写入/篡改** | 🔴 `/save` 允许任意公网 IP 写入与污染 KV | 🟢 短链写入强制校验 `AUTH_TOKEN`，且只接受当前域名下的订阅转换链接 |
 | **Argo 脚本远程注入** | 🔴 动态拉取未校验的 `argo.sh` 并诱导 VPS root 执行 | 🟢 **彻底移除 Argo 模块**，专注订阅转换，杜绝供应链与 RCE 风险 |
-| **外部规则模板依赖** | 🟠 每次转换动态请求 GitHub 仓库规则 | 🟢 **内置固化 Clash/Sing-box 规则模板**，无外部网络依赖与分流劫持风险 |
+| **外部规则模板依赖** | 🟠 每次转换动态请求 GitHub 仓库规则 | 🟢 **内置固定分流模板**：转换时不拉取外部模板；Mihomo/Sing-box 由客户端更新 MetaCubeX 核心规则集，Shadowrocket 使用专用规则源 |
 | **SSRF 防护与逐跳检查** | 🟡 无内网 IP 过滤，容易被滥用为公网扫描代理 | 🟢 阻断显式 RFC1918 私有 IP 与本地回环地址，保留公网 HTTP/HTTPS 非标准端口兼容，并对每一跳 3xx 重定向重新执行安全校验 |
 | **资源限额与防爆内存** | 🟡 无体积与并发限制 | 🟢 提前检查 `Content-Length`，限制 10MB 响应上限，并发池限制最大并发 6 |
 | **精准边缘缓存** | 🟡 无缓存或容易串号 | 🟢 结合 **URL + User-Agent** 计算 SHA-256 缓存键，防止不同客户端拉取到混淆格式 |
@@ -89,7 +89,7 @@ https://your-worker.workers.dev/sub?url=https://airport.com/sub?token=xxx&target
 | `url` | string | **是** | - | 原始机场订阅链接，或节点链接。支持 `\|` 或换行拼接多个订阅源 |
 | `token` | string | **是** | - | 访问鉴权 Token（需与 Worker 的 `AUTH_TOKEN` Secret 一致，亦支持 `Authorization: Bearer <token>` 请求头） |
 | `target` | string | 否 | `auto` | 目标格式：`auto` 会根据客户端 User-Agent 自动识别 Shadowrocket、Clash/Mihomo/Stash、Sing-box 或 Surge（未识别时返回 Clash Meta）；也可显式指定 `clash`, `singbox`, `shadowrocket`, `shadowrocket-conf`, `surge`, `base64`, `raw` |
-| `preset` | string | 否 | `standard` | Clash 规则分流预设：`standard` (标准全能), `ai` (增强 AI/OpenAI 分流), `media` (增强流媒体分流) |
+| `preset` | string | 否 | `standard` | 仅用于 Clash 的规则预设：`standard` (标准全能), `ai` (增强 AI/OpenAI 分流), `media` (增强流媒体分流), `minimal` (不使用远程 rule-provider，仅内联本地/局域网与 `.cn`，其余国内匹配依赖客户端内置 GeoSite/GeoIP) |
 | `test_url` | string | 否 | `https://cp.cloudflare.com/generate_204` | 自动选择/延迟测速使用的 URL |
 | `include` | string | 否 | - | 包含节点正则过滤，例如 `香港\|日本\|US` |
 | `exclude` | string | 否 | - | 排除节点正则过滤，例如 `剩余\|到期\|官网\|0.1x` |
@@ -200,11 +200,21 @@ https://your-worker.workers.dev/sub?url=https://airport.com/sub?token=xxx&target
 
 ## 📱 客户端支持与一键导入
 
-- **Clash 系列**：Clash Verge Rev、Clash Nyanpasu、Mihomo Party、Clash Meta for Android、ClashX.Meta
-- **Sing-Box**：Sing-Box 全平台客户端 (JSON 配置与订阅)
-- **Shadowrocket (小火箭)**：支持一键 URL Scheme 导入 (`shadowrocket://add/sub://...`) 或 `.conf` 配置文件
-- **Surge**：Surge iOS / Mac
-- **通用客户端**：Quantumult X, Loon, Stash, v2rayN, v2rayNG, sing-box 等
+- **Clash 系列**：Clash Verge Rev、Clash Nyanpasu、Mihomo Party、Clash Meta for Android、ClashX.Meta，以及支持 MRS 的 Stash 3.1+
+- **Sing-Box**：Sing-Box 1.12+ JSON 配置，国内域名/IP 与广告规则集由客户端定期更新
+- **Shadowrocket (小火箭)**：支持一键 URL Scheme 导入 (`shadowrocket://add/sub://...`) 或带完整分流的 `.conf` 配置文件
+- **Surge**：输出 Surge iOS / Mac 可引用的 `[Proxy]` 列表，不包含规则段
+- **通用客户端**：Quantumult X、Loon、v2rayN、v2rayNG、sing-box 等
+
+### 分流顺序与规则来源
+
+默认完整配置按“本地/局域网直连 → 广告拦截 → 预设专项分流 → 国内域名/IP 直连 → 未匹配流量代理”的顺序匹配。必须直连的本地域名、RFC1918/CGNAT、回环、链路本地和 IPv6 私网规则直接写入生成配置，不依赖远程下载。
+
+- **Mihomo / Clash Meta / Stash**：国内域名、国内 IP、私网与广告核心规则使用 [MetaCubeX/meta-rules-dat](https://github.com/MetaCubeX/meta-rules-dat) `meta` 分支的 MRS，由客户端每 24 小时检查更新。
+- **Sing-box 1.12+**：使用同一仓库 `sing` 分支的 SRS，确保与 Mihomo 的核心分类一致。
+- **Shadowrocket**：继续使用 [blackmatrix7/ios_rule_script](https://github.com/blackmatrix7/ios_rule_script) 的 Shadowrocket 专用中国域名/IP规则，避免跨客户端规则语法差异。
+
+规则集下载发生在客户端加载或更新配置时，Worker 转换请求本身不会抓取这些仓库。`minimal` 是例外：它不声明远程规则集，因此不会使用 MetaCubeX。
 
 ---
 
