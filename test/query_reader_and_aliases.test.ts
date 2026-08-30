@@ -293,8 +293,8 @@ describe('QueryParamReader & Universal Alias Suite', () => {
 
   test('11. UI Warning text verification', () => {
     const html = renderHtmlPage('3.0.0-hardened');
-    expect(html).toContain('节点仍输出到最终配置中');
-    expect(html).toContain('存在未映射参数，可能影响连接语义，请根据警告详情确认');
+    expect(html).toContain("节点仍输出到 ' + targetLabel + ' 配置中");
+    expect(html).toContain('当前映射存在兼容性警告，请根据详情确认');
     expect(html).not.toContain('已自动剔除未映射参数以确保连接不报错');
   });
 

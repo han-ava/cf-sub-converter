@@ -4,7 +4,7 @@ import { Env, ProxyNode, NodeEnvelope } from './types';
 import { parseContent } from './parser';
 import { toClashMeta, toSingBox, toSurge, toShadowrocketConf } from './generator';
 import { toRawLinks, toBase64 } from './adapters/raw';
-import { adaptNodeToMihomo } from './adapters/mihomo';
+import { adaptNodeToTarget, normalizeTarget } from './adapters/target';
 import { processNodes, createUserinfoNodes, parseUserinfo, getRegionByNodeName, parseRenameRules, formatContentDisposition, safeBase64Decode } from './utils';
 import { isAuthorized, checkAuthStatus, fetchSubscriptionWithTimeout, extractRequestToken, sanitizeUrlForLog } from './security';
 import { renderHtmlPage } from './ui';
@@ -577,11 +577,17 @@ export default {
         const body: any = await request.json();
         const rawUrl = body.url || '';
         const requestToken = body.token || extractRequestToken(request, url);
+        const userAgent = request.headers.get('User-Agent') || '';
+        const requestedTarget = typeof body.target === 'string'
+          ? body.target.trim().toLowerCase()
+          : 'auto';
+        const isAutoTarget = !requestedTarget || requestedTarget === 'auto';
+        const resolvedTarget = normalizeTarget(resolveTarget(requestedTarget, detectTargetFromUserAgent(userAgent)));
         console.log('[DEBUG][REQUEST]', {
           method: request.method,
           path: url.pathname,
-          target: 'preview',
-          userAgent: request.headers.get('User-Agent') || '',
+          target: resolvedTarget || requestedTarget,
+          userAgent,
           inputLength: String(rawUrl).length,
           hasToken: Boolean(requestToken),
           filters: {
@@ -596,6 +602,13 @@ export default {
         if (!authResult.authorized) {
           return new Response(JSON.stringify({ error: authResult.reason }), {
             status: 401,
+            headers: { 'Content-Type': 'application/json', ...CORS_HEADERS }
+          });
+        }
+
+        if (!resolvedTarget) {
+          return new Response(JSON.stringify({ error: `不支持的目标格式: ${requestedTarget || '空值'}` }), {
+            status: 400,
             headers: { 'Content-Type': 'application/json', ...CORS_HEADERS }
           });
         }
@@ -644,7 +657,7 @@ export default {
         let fatalCount = 0;
 
         const allConvResults = processedNodes.map(n => {
-          const adaptRes = adaptNodeToMihomo(n);
+          const adaptRes = adaptNodeToTarget(n, resolvedTarget);
           let status: 'perfect' | 'warning' | 'fatal' = 'perfect';
           if (adaptRes.fatal) { status = 'fatal'; fatalCount++; }
           else if (adaptRes.lossy || adaptRes.warnings.length > 0) { status = 'warning'; warningCount++; }
@@ -690,7 +703,7 @@ export default {
           conversion: {
             status,
             emitted: adaptRes.emitted,
-            target: 'mihomo',
+            target: resolvedTarget,
             lossy: adaptRes.lossy,
             warnings: adaptRes.warnings.map(w => `[${w.level.toUpperCase()}] ${w.message}`),
             unsupportedParams: adaptRes.unsupportedParams,
@@ -717,6 +730,9 @@ export default {
         return new Response(
           JSON.stringify({
             ok: true,
+            requestedTarget: isAutoTarget ? 'auto' : requestedTarget,
+            resolvedTarget,
+            autoTargetFallback: isAutoTarget,
             totalRaw: rawNodes.length,
             totalMatched: processedNodes.length,
             perfectCount,
@@ -818,10 +834,12 @@ export default {
         }
       }
 
+      const normalizedTarget = normalizeTarget(target);
+
       console.log('[DEBUG][REQUEST]', {
         method: request.method,
         path: url.pathname,
-        target,
+        target: normalizedTarget || target,
         preset,
         userAgent: clientUserAgent,
         inputLength: String(rawUrl).length,
@@ -848,6 +866,14 @@ export default {
           }
         );
       }
+
+      if (!normalizedTarget) {
+        return new Response(JSON.stringify({ error: `不支持的目标格式: ${target || '空值'}` }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json', ...CORS_HEADERS }
+        });
+      }
+      target = normalizedTarget;
 
       if (!rawUrl.trim()) {
         return new Response(JSON.stringify({ error: '参数缺失: 缺少 url 订阅链接' }), {

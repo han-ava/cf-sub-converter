@@ -1426,6 +1426,7 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
           <svg class="icon" viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
           <span>节点统计概览</span>
         </div>
+        <span id="gateTargetBadge" class="badge">目标: MIHOMO</span>
       </div>
 
       <div class="metrics-grid">
@@ -1566,7 +1567,7 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
         <p><strong style="color: var(--text-main);">1. 基础转换：</strong>在「订阅链接」输入机场给出的订阅地址或多个节点链接，选择目标客户端格式（如 Clash Meta），点击「开始转换」即可。</p>
         <p><strong style="color: var(--text-main);">2. 节点过滤：</strong>在「节点过滤模式」填入 <code style="color: var(--accent);">香港|日本|专线</code> 可只保留对应节点；在「节点排除模式」填入 <code style="color: var(--accent);">官网|到期|剩余</code> 可自动剔除提示类节点。</p>
         <p><strong style="color: var(--text-main);">3. 节点重命名：</strong>支持形如 <code style="color: var(--accent);">香港=HK, 日本=JP, DEL-官网</code> 批量规范化节点名称。</p>
-        <p><strong style="color: var(--text-main);">4. 严格兼容性门禁：</strong>内置门禁引擎，自动拦截非法参数与危险回退，确保生成的配置文件 100% 语法合法。</p>
+        <p><strong style="color: var(--text-main);">4. 目标兼容性门禁：</strong>预览会按当前目标格式识别无法输出的节点；非 Mihomo 格式在尚未完成逐参数验证时会明确标记警告。</p>
       </div>
       <button class="btn btn-primary" style="width: 100%; margin-top: 1.25rem;" onclick="closeGuideModal()">我知道了</button>
     </div>
@@ -1581,6 +1582,7 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
     let currentSearchTerm = '';
     let currentSortMode = 'default';
     let currentPage = 1;
+    let latestInspectRequestId = 0;
     const pageSize = 15;
     const openedNodeSet = new Set();
 
@@ -1589,6 +1591,19 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       toast.textContent = msg;
       toast.classList.add('show');
       setTimeout(() => toast.classList.remove('show'), 2200);
+    }
+
+    function formatTargetLabel(target) {
+      const labels = {
+        mihomo: 'Mihomo',
+        singbox: 'Sing-Box',
+        shadowrocket: 'Shadowrocket',
+        base64: 'Base64',
+        'shadowrocket-conf': 'Shadowrocket Conf',
+        raw: 'Raw Links',
+        surge: 'Surge'
+      };
+      return labels[target] || String(target || 'Unknown');
     }
 
     function buildConvertedUrl() {
@@ -1678,6 +1693,10 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
           outputInput.value = buildConvertedUrl();
         }
       }
+
+      if ((currentPreviewData || (outputInput && outputInput.value)) && document.getElementById('subUrl').value.trim()) {
+        inspectNodes(false);
+      }
     }
 
     function resetForm() {
@@ -1696,6 +1715,7 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
     async function inspectNodes(shouldScroll = true) {
       const rawUrl = document.getElementById('subUrl').value.trim();
       if (!rawUrl) return;
+      const requestId = ++latestInspectRequestId;
 
       const token = document.getElementById('authToken').value.trim();
       saveAuthToken();
@@ -1704,6 +1724,7 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
         const payload = {
           url: rawUrl,
           token,
+          target: document.getElementById('targetClient').value,
           include: document.getElementById('includeRegex').value.trim(),
           exclude: document.getElementById('excludeRegex').value.trim(),
           rename: document.getElementById('renameRules').value.trim(),
@@ -1718,12 +1739,23 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
         });
 
         const data = await resp.json();
-        if (!resp.ok || !data.ok) {
+        if (requestId !== latestInspectRequestId || !resp.ok || !data.ok) {
           return;
         }
 
         currentPreviewData = data;
         currentPage = 1;
+
+        const gateTargetBadge = document.getElementById('gateTargetBadge');
+        if (gateTargetBadge) {
+          const targetLabel = formatTargetLabel(data.resolvedTarget);
+          gateTargetBadge.textContent = data.autoTargetFallback
+            ? 'AUTO → ' + targetLabel.toUpperCase()
+            : '目标: ' + targetLabel.toUpperCase();
+          gateTargetBadge.title = data.autoTargetFallback
+            ? 'Auto 的实际输出会在订阅客户端请求时按 User-Agent 重新判定；此处展示浏览器预览的默认回退目标。'
+            : '当前兼容性分析目标';
+        }
 
         // 显示各面板
         document.getElementById('subInfoPanel').classList.add('show');
@@ -1775,7 +1807,7 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
           document.getElementById('nodeListPanel').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         }
       } catch (err) {
-        console.error('Inspect failed', err);
+        if (requestId === latestInspectRequestId) console.error('Inspect failed', err);
       }
     }
 
@@ -1953,6 +1985,7 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
           const idx = n.originalIndex;
           const conv = n.conversion || {};
           const status = conv.status || 'perfect';
+          const targetLabel = escapeHtml(formatTargetLabel(conv.target || data.resolvedTarget));
           const isOpen = openedNodeSet.has(idx);
           const lat = status === 'fatal' ? '-' : (getMockLatency(n.name, n.server) + ' ms');
           let statusBadge = '';
@@ -1974,11 +2007,15 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
 
           let actionDesc = '';
           if (status === 'fatal') {
-            actionDesc = '<span style="color: var(--danger);">[处理] 该节点未加入最终配置，策略组已自动剔除。</span>';
+            actionDesc = '<span style="color: var(--danger);">[处理] 该节点未加入最终输出。</span>';
           } else if (status === 'warning') {
-            actionDesc = '<span style="color: var(--warning);">[处理] 节点仍输出到最终配置中。<br>存在未映射参数，可能影响连接语义，请根据警告详情确认。</span>';
+            actionDesc = '<span style="color: var(--warning);">[处理] 节点仍输出到 ' + targetLabel + ' 配置中。<br>当前映射存在兼容性警告，请根据详情确认。</span>';
           } else {
-            actionDesc = '<span style="color: var(--success);">[处理] 所有参数均已忠实映射到 Mihomo，无任何丢失。</span>';
+            actionDesc = '<span style="color: var(--success);">[处理] 所有参数均已忠实映射到 ' + targetLabel + '，无任何丢失。</span>';
+          }
+
+          if (data.autoTargetFallback) {
+            actionDesc += '<br><span style="color: var(--text-dim);">Auto 实际目标将在订阅客户端请求时按 User-Agent 重新判定。</span>';
           }
 
           const unmappedList = (conv.unsupportedParams || []);
@@ -2244,11 +2281,12 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       const node = currentPreviewData.nodes[idx];
       if (!node) return;
       const conv = node.conversion || {};
+      const targetLabel = formatTargetLabel(conv.target || currentPreviewData.resolvedTarget);
       const lines = [
         '节点名称: ' + node.name,
-        '协议: ' + (node.type || '').toUpperCase() + ' ➔ Mihomo',
+        '协议: ' + (node.type || '').toUpperCase() + ' ➔ ' + targetLabel,
         '服务器: ' + node.server + ':' + node.port,
-        '转换质量: ' + (conv.status === 'perfect' ? '完整表达 (无损)' : conv.status === 'warning' ? '有损转换 (保留在原始节点)' : '无法安全转换 (Gate 拦截)'),
+        '转换质量: ' + (conv.status === 'perfect' ? '完整表达 (无损)' : conv.status === 'warning' ? '存在兼容性警告' : '无法安全转换 (Gate 拦截)'),
         '未映射参数: ' + ((conv.unsupportedParams || []).join(', ') || '无'),
         '警告信息: ' + ((conv.warnings || []).join('; ') || '无')
       ];
@@ -2267,6 +2305,7 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
 
       const lines = [
         '【SubConverter 转换警告诊断报告】',
+        '• 分析目标: ' + formatTargetLabel(data.resolvedTarget) + (data.autoTargetFallback ? ' (Auto 预览回退)' : ''),
         '• 原始节点: ' + (data.totalRaw || 0) + ' | 筛选匹配: ' + (data.totalMatched || 0),
         '• 转换状态: 完整 ' + (data.perfectCount || 0) + ' | 警告 ' + (data.warningCount || 0) + ' | 排除 ' + (data.fatalCount || 0),
         ''

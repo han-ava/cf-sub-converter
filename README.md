@@ -113,6 +113,7 @@ https://your-worker.workers.dev/sub?url=https://airport.com/sub?token=xxx&target
 {
   "url": "https://airport.com/sub?token=xxx",
   "token": "MyCustomSecretKey_999",
+  "target": "singbox",
   "include": "香港|日本",
   "exclude": "0.1x",
   "emoji": true
@@ -123,6 +124,9 @@ https://your-worker.workers.dev/sub?url=https://airport.com/sub?token=xxx&target
 ```json
 {
   "ok": true,
+  "requestedTarget": "singbox",
+  "resolvedTarget": "singbox",
+  "autoTargetFallback": false,
   "totalRaw": 68,
   "totalMatched": 24,
   "userinfo": {
@@ -140,6 +144,8 @@ https://your-worker.workers.dev/sub?url=https://airport.com/sub?token=xxx&target
   ]
 }
 ```
+
+预览会按 `target` 对每个节点给出 `perfect`、`warning` 或 `fatal` 状态，并保证 `fatal` 节点不会出现在相应目标的最终输出中。`target=auto` 无法预知将来拉取订阅的客户端，因此预览响应会通过 `autoTargetFallback: true` 明确标出当前请求所采用的回退目标；实际订阅仍会按客户端 User-Agent 重新判定。
 
 ---
 
