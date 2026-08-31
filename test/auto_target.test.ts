@@ -64,7 +64,7 @@ describe('automatic subscription target detection', () => {
 
   test('SFI receives a TUN inbound while generic sing-box output stays proxy-only', async () => {
     const sfiResponse = await worker.fetch(
-      createAutoRequest('SFI/1.12.2 (Build 2; language zh_CN)'),
+      createAutoRequest('SFI (sing-box 1.14.0; language zh_CN)'),
       ENV,
       CTX
     );

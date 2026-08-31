@@ -45,7 +45,7 @@ function detectTargetFromUserAgent(userAgent: string): string {
 }
 
 function isAppleSingBoxClient(userAgent: string): boolean {
-  return /\b(?:SFI|SFM|SFT)\//i.test(userAgent);
+  return /\b(?:SFI|SFM|SFT)(?:[/\s(]|$)/i.test(userAgent);
 }
 
 function resolveTarget(requestedTarget: unknown, detectedTarget: string): string {
