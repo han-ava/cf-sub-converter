@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import worker from '../src/index';
 import { renderHtmlPage } from '../src/ui';
+import { getRegionByNodeName } from '../src/utils';
 
 const ENV = { AUTH_TOKEN: 'test-token' };
 const CTX = { waitUntil: () => {}, passThroughOnException: () => {} } as any;
@@ -13,10 +14,21 @@ const VLESS_XHTTP =
   'vless://b831381d-6324-4d53-ad4f-8cda48b30811@1.2.3.4:443?type=xhttp&security=tls&sni=example.com&path=%2Fxhttp#VLESS%20XHTTP';
 const SSR =
   'ssr://' + Buffer.from('1.2.3.4:8388:origin:aes-128-cfb:plain:bXlwYXNz/?remarks=U1NSX05vZGU').toString('base64');
+const SHADOWSOCKS_AUTH = Buffer.from('chacha20-ietf-poly1305:secret').toString('base64');
 const SHADOWSOCKS =
-  'ss://' + Buffer.from('chacha20-ietf-poly1305:secret').toString('base64') + '@1.1.1.1:8388#Surge%20SS';
+  'ss://' + SHADOWSOCKS_AUTH + '@1.1.1.1:8388#Surge%20SS';
+const REGION_NODES = [
+  `ss://${SHADOWSOCKS_AUTH}@1.1.1.1:8388#HK-01`,
+  `ss://${SHADOWSOCKS_AUTH}@2.2.2.2:8388#${encodeURIComponent('香港-02')}`,
+  `ss://${SHADOWSOCKS_AUTH}@3.3.3.3:8388#Unknown%20Node`,
+].join('\n');
 
-async function preview(node: string, target: string, userAgent = 'Browser/1.0') {
+async function preview(
+  node: string,
+  target: string,
+  userAgent = 'Browser/1.0',
+  options: Record<string, unknown> = {},
+) {
   const response = await worker.fetch(
     new Request('http://localhost/api/preview', {
       method: 'POST',
@@ -28,7 +40,8 @@ async function preview(node: string, target: string, userAgent = 'Browser/1.0') 
         url: node,
         target,
         token: 'test-token',
-        emoji: false
+        emoji: false,
+        ...options,
       })
     }),
     ENV,
@@ -38,12 +51,15 @@ async function preview(node: string, target: string, userAgent = 'Browser/1.0') 
   return { response, json: await response.json() as any };
 }
 
-async function convert(node: string, target: string): Promise<Response> {
+async function convert(node: string, target: string, params: Record<string, string> = {}): Promise<Response> {
   const url = new URL('http://localhost/sub');
   url.searchParams.set('url', node);
   url.searchParams.set('target', target);
   url.searchParams.set('token', 'test-token');
   url.searchParams.set('emoji', '0');
+  for (const [key, value] of Object.entries(params)) {
+    url.searchParams.set(key, value);
+  }
   return worker.fetch(new Request(url), ENV, CTX);
 }
 
@@ -220,6 +236,70 @@ describe('target-aware preview contract', () => {
     expect(json.fatalCount).toBe(1);
   });
 
+  test('filters preview nodes by independent region codes, including OTHER', async () => {
+    const hkPreview = await preview(REGION_NODES, 'raw', 'Browser/1.0', { regions: ['HK'] });
+
+    expect(hkPreview.response.status).toBe(200);
+    expect(hkPreview.json.totalRaw).toBe(3);
+    expect(hkPreview.json.totalMatched).toBe(2);
+    expect(hkPreview.json.nodes.map((node: any) => node.name)).toEqual(['HK-01', '香港-02']);
+    expect(hkPreview.json.regions).toMatchObject({ '🇭🇰 香港': 2, '🌐 其他': 1 });
+    expect(hkPreview.json.regionOptions).toEqual(expect.arrayContaining([
+      { code: 'HK', label: '🇭🇰 香港', count: 2 },
+      { code: 'OTHER', label: '🌐 其他', count: 1 },
+    ]));
+
+    const otherPreview = await preview(REGION_NODES, 'raw', 'Browser/1.0', { regions: ['OTHER'] });
+
+    expect(otherPreview.response.status).toBe(200);
+    expect(otherPreview.json.totalRaw).toBe(3);
+    expect(otherPreview.json.totalMatched).toBe(1);
+    expect(otherPreview.json.nodes.map((node: any) => node.name)).toEqual(['Unknown Node']);
+  });
+
+  test('does not treat embedded short region codes as standalone aliases', () => {
+    expect(getRegionByNodeName('HK')?.code).toBe('HK');
+    expect(getRegionByNodeName('Australia')?.code).toBe('AU');
+    expect(getRegionByNodeName('Russia')?.code).toBe('RU');
+    expect(getRegionByNodeName('Netherlands')?.code).toBe('NL');
+    expect(getRegionByNodeName('Philippines')?.code).toBe('PH');
+    expect(getRegionByNodeName('Spain')?.code).toBe('ES');
+    expect(getRegionByNodeName('Unknown Node')).toBeNull();
+    expect(getRegionByNodeName('Belgium')).toBeNull();
+    expect(getRegionByNodeName('HK01')?.code).toBe('HK');
+  });
+
+  test('intersects the region selection with the independent name include regex', async () => {
+    const { response, json } = await preview(REGION_NODES, 'raw', 'Browser/1.0', {
+      regions: ['HK'],
+      include: '02',
+    });
+
+    expect(response.status).toBe(200);
+    expect(json.totalRaw).toBe(3);
+    expect(json.totalMatched).toBe(1);
+    expect(json.nodes.map((node: any) => node.name)).toEqual(['香港-02']);
+  });
+
+  test('applies the OTHER region code to GET /sub output', async () => {
+    const response = await convert(REGION_NODES, 'raw', { regions: 'OTHER' });
+    const output = decodeURIComponent(await response.text());
+
+    expect(response.status).toBe(200);
+    expect(output).toContain('#Unknown Node');
+    expect(output).not.toContain('#HK-01');
+    expect(output).not.toContain('#香港-02');
+  });
+
+  test('fails closed for a malformed explicit region selector', async () => {
+    const { response, json } = await preview(REGION_NODES, 'raw', 'Browser/1.0', { regions: true });
+
+    expect(response.status).toBe(200);
+    expect(json.totalRaw).toBe(3);
+    expect(json.totalMatched).toBe(0);
+    expect(json.nodes).toEqual([]);
+  });
+
   test('rejects an unknown preview target', async () => {
     const { response, json } = await preview(VLESS_GRPC, 'unknown-target');
     expect(response.status).toBe(400);
@@ -255,5 +335,22 @@ describe('target-aware preview contract', () => {
     expect(html).toContain('AUTO → ');
     expect(html).not.toContain('➔ Mihomo');
     expect(html).not.toContain('忠实映射到 Mihomo');
+
+    const renderRegionChips = html.match(
+      /function renderRegionChips\(data\)[\s\S]*?function filterByGateStatus/,
+    )?.[0] || '';
+    expect(renderRegionChips).toContain('currentRegionFilters');
+    expect(renderRegionChips).toContain('const isActiveNow = currentRegionFilters.includes(code)');
+    expect(renderRegionChips).toContain('refreshGeneratedLinkIfPresent()');
+    expect(renderRegionChips).not.toContain("document.getElementById('includeRegex').value");
+    expect(html).toContain("params.set('regions', currentRegionFilters.join('|'))");
+    expect(html).toContain('regions: [...currentRegionFilters]');
+
+    const metricAllAssignment = html.match(
+      /document\.getElementById\('metricAll'\)\.textContent = ([^;]+);/,
+    )?.[1] || '';
+    expect(metricAllAssignment).toContain('data.totalMatched');
+    expect(metricAllAssignment).not.toContain('||');
+    expect(html).toContain("? Math.min(...latencies) + ' ms'\n          : '--'");
   });
 });

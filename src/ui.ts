@@ -1584,6 +1584,7 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
     let currentWarningFilter = null;
     let currentSearchTerm = '';
     let currentSortMode = 'default';
+    let currentRegionFilters = [];
     let currentPage = 1;
     let latestInspectRequestId = 0;
     const pageSize = 15;
@@ -1643,11 +1644,19 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       if (includeRegex) params.set('include', includeRegex);
       if (excludeRegex) params.set('exclude', excludeRegex);
       if (renameRules) params.set('rename', renameRules);
+      if (currentRegionFilters.length > 0) params.set('regions', currentRegionFilters.join('|'));
       if (!addEmoji) params.set('emoji', '0');
       if (!showInfo) params.set('info', '0');
       if (!enableUdp) params.set('udp', '0');
 
       return \`\${origin}/sub?\${params.toString()}\`;
+    }
+
+    function refreshGeneratedLinkIfPresent() {
+      const outputInput = document.getElementById('outputUrl');
+      if (outputInput && outputInput.value) {
+        outputInput.value = buildConvertedUrl();
+      }
     }
 
     function generateLink() {
@@ -1732,6 +1741,7 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       document.getElementById('includeRegex').value = '';
       document.getElementById('excludeRegex').value = '';
       document.getElementById('renameRules').value = '';
+      currentRegionFilters = [];
       document.getElementById('targetClient').value = 'auto';
       document.getElementById('rulePreset').value = 'standard';
       onTargetChange();
@@ -1757,6 +1767,7 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
           include: document.getElementById('includeRegex').value.trim(),
           exclude: document.getElementById('excludeRegex').value.trim(),
           rename: document.getElementById('renameRules').value.trim(),
+          regions: [...currentRegionFilters],
           emoji: document.getElementById('addEmoji').checked,
           udp: document.getElementById('enableUdp').checked
         };
@@ -1816,15 +1827,16 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
         }
 
         // 填充 5 KPI Cards
-        document.getElementById('metricAll').textContent = data.totalMatched || data.totalRaw || 0;
+        document.getElementById('metricAll').textContent = data.totalMatched ?? data.totalRaw ?? 0;
         document.getElementById('metricPerfect').textContent = data.perfectCount || 0;
         document.getElementById('metricFatal').textContent = data.fatalCount || 0;
         document.getElementById('metricWarn').textContent = data.warningCount || 0;
 
         // 延迟渲染
         const latencies = (data.nodes || []).map(n => getMockLatency(n.name, n.server)).filter(l => l > 0);
-        const bestLat = latencies.length > 0 ? Math.min(...latencies) : 35;
-        document.getElementById('metricBestLatency').textContent = bestLat + ' ms';
+        document.getElementById('metricBestLatency').textContent = latencies.length > 0
+          ? Math.min(...latencies) + ' ms'
+          : '--';
 
         // 地区 Chips 渲染
         renderRegionChips(data);
@@ -1854,33 +1866,42 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       const chips = document.getElementById('regionChips');
       chips.innerHTML = '';
 
-      const curInclude = document.getElementById('includeRegex').value.trim();
-      const curTokens = curInclude ? curInclude.split('|').map(s => s.trim()).filter(Boolean) : [];
-
       const allChip = document.createElement('div');
-      allChip.className = 'region-chip' + (curTokens.length === 0 ? ' active' : '');
+      allChip.className = 'region-chip' + (currentRegionFilters.length === 0 ? ' active' : '');
       allChip.textContent = '全部 (' + (data.totalRaw || 0) + ')';
       allChip.onclick = () => {
-        document.getElementById('includeRegex').value = '';
+        currentRegionFilters = [];
+        refreshGeneratedLinkIfPresent();
         inspectNodes(false);
       };
       chips.appendChild(allChip);
 
-      for (const [region, count] of Object.entries(data.regions || {})) {
-        const rawReg = region.split(' ')[1] || region;
-        const isActive = curTokens.includes(rawReg);
+      const regionOptions = Array.isArray(data.regionOptions)
+        ? data.regionOptions
+        : Object.entries(data.regions || {}).map(([label, count]) => ({
+            code: label.split(' ')[1] || label,
+            label,
+            count
+          }));
+
+      for (const { code, label, count } of regionOptions) {
+        const isActive = currentRegionFilters.includes(code);
 
         const chip = document.createElement('div');
         chip.className = 'region-chip' + (isActive ? ' active' : '');
-        chip.textContent = \`\${region}: \${count}\`;
+        chip.textContent = \`\${label}: \${count}\`;
         chip.onclick = (e) => {
+          const isActiveNow = currentRegionFilters.includes(code);
           let nextTokens;
           if (e.ctrlKey || e.metaKey || e.shiftKey) {
-            nextTokens = isActive ? curTokens.filter(t => t !== rawReg) : [...curTokens, rawReg];
+            nextTokens = isActiveNow
+              ? currentRegionFilters.filter(item => item !== code)
+              : [...currentRegionFilters, code];
           } else {
-            nextTokens = (isActive && curTokens.length === 1) ? [] : [rawReg];
+            nextTokens = (isActiveNow && currentRegionFilters.length === 1) ? [] : [code];
           }
-          document.getElementById('includeRegex').value = nextTokens.join('|');
+          currentRegionFilters = [...new Set(nextTokens)];
+          refreshGeneratedLinkIfPresent();
           inspectNodes(false);
         };
         chips.appendChild(chip);
@@ -2450,6 +2471,7 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
         include: document.getElementById('includeRegex').value.trim(),
         exclude: document.getElementById('excludeRegex').value.trim(),
         rename: document.getElementById('renameRules').value.trim(),
+        regions: [...currentRegionFilters],
         addEmoji: document.getElementById('addEmoji').checked,
         showInfo: document.getElementById('showInfo').checked,
         enableUdp: document.getElementById('enableUdp').checked,
@@ -2481,6 +2503,7 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       document.getElementById('includeRegex').value = item.include || '';
       document.getElementById('excludeRegex').value = item.exclude || '';
       document.getElementById('renameRules').value = item.rename || '';
+      currentRegionFilters = Array.isArray(item.regions) ? [...item.regions] : [];
       document.getElementById('addEmoji').checked = item.addEmoji !== false;
       document.getElementById('showInfo').checked = item.showInfo !== false;
       document.getElementById('enableUdp').checked = item.enableUdp !== false;

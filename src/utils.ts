@@ -777,36 +777,36 @@ export interface RegionInfo {
 }
 
 export const REGIONS: RegionInfo[] = [
-  { code: 'HK', flag: '🇭🇰', name: '香港', regex: /(?:香港|Hong\s*Kong|HK|HKG|HongKong|深港|沪港|广港|穗港|HKT|HKBN|HGC|WTT)/i },
-  { code: 'TW', flag: '🇹🇼', name: '台湾', regex: /(?:台湾|臺灣|Taiwan|TW|TWN|Taipei|台中|台北|新北|HINET|APOL|Kbro)/i },
-  { code: 'JP', flag: '🇯🇵', name: '日本', regex: /(?:日本|Japan|JP|JPN|Tokyo|Osaka|东京|大阪|埼玉|名古|广岛|软银|Softbank|KDDI|DOCOMO)/i },
-  { code: 'SG', flag: '🇸🇬', name: '新加坡', regex: /(?:新加坡|Singapore|SG|SGP|狮城|星加坡)/i },
-  { code: 'US', flag: '🇺🇸', name: '美国', regex: /(?:美国|美國|United\s*States|US|USA|America|洛杉矶|硅谷|西雅图|芝加哥|纽约|达拉斯|波特兰|旧金山|圣何塞|凤凰城|俄勒冈|弗吉尼亚|Fremont|Los\s*Angeles|San\s*Jose|Silicon\s*Valley|Seattle|Chicago|New\s*York)/i },
-  { code: 'KR', flag: '🇰🇷', name: '韩国', regex: /(?:韩国|韓國|Korea|KR|KOR|Seoul|首尔|釜山|KT|SK|LG)/i },
-  { code: 'GB', flag: '🇬🇧', name: '英国', regex: /(?:英国|英國|United\s*Kingdom|UK|GB|GBR|London|伦敦|曼彻斯特)/i },
-  { code: 'DE', flag: '🇩🇪', name: '德国', regex: /(?:德国|德國|Germany|DE|DEU|Frankfurt|法兰克福|柏林|慕尼黑)/i },
-  { code: 'FR', flag: '🇫🇷', name: '法国', regex: /(?:法国|法國|France|FR|FRA|Paris|巴黎)/i },
-  { code: 'CA', flag: '🇨🇦', name: '加拿大', regex: /(?:加拿大|Canada|CA|CAN|Toronto|Vancouver|多伦多|温哥华|蒙特利尔)/i },
-  { code: 'AU', flag: '🇦🇺', name: '澳大利亚', regex: /(?:澳大利亚|澳洲|Australia|AU|AUS|Sydney|Melbourne|悉尼|墨尔本|堪培拉)/i },
-  { code: 'RU', flag: '🇷🇺', name: '俄罗斯', regex: /(?:俄罗斯|Russia|RU|RUS|Moscow|莫斯科|圣彼得堡|海参崴)/i },
-  { code: 'IN', flag: '🇮🇳', name: '印度', regex: /(?:印度|India|IN|IND|Mumbai|孟买|新德里)/i },
-  { code: 'MY', flag: '🇲🇾', name: '马来西亚', regex: /(?:马来西亚|马来|大马|Malaysia|MY|MYS|Kuala\s*Lumpur|吉隆坡)/i },
-  { code: 'TH', flag: '🇹🇭', name: '泰国', regex: /(?:泰国|泰國|Thailand|TH|THA|Bangkok|曼谷)/i },
-  { code: 'PH', flag: '🇵🇭', name: '菲律宾', regex: /(?:菲律宾|Philippines|PH|PHL|Manila|马尼拉)/i },
-  { code: 'VN', flag: '🇻🇳', name: '越南', regex: /(?:越南|Vietnam|VN|VNM|Ho\s*Chi\s*Minh|胡志明|河内)/i },
-  { code: 'ID', flag: '🇮🇩', name: '印尼', regex: /(?:印尼|印度尼西亚|Indonesia|ID|IDN|Jakarta|雅加达)/i },
-  { code: 'TR', flag: '🇹🇷', name: '土耳其', regex: /(?:土耳其|Turkey|TR|TUR|Istanbul|伊斯坦布尔)/i },
-  { code: 'AR', flag: '🇦🇷', name: '阿根廷', regex: /(?:阿根廷|Argentina|AR|ARG)/i },
-  { code: 'BR', flag: '🇧🇷', name: '巴西', regex: /(?:巴西|Brazil|BR|BRA|Sao\s*Paulo|圣保罗)/i },
-  { code: 'ZA', flag: '🇿🇦', name: '南非', regex: /(?:南非|South\s*Africa|ZA|ZAF|Johannesburg)/i },
-  { code: 'NL', flag: '🇳🇱', name: '荷兰', regex: /(?:荷兰|荷蘭|Netherlands|NL|NLD|Amsterdam|阿姆斯特丹)/i },
-  { code: 'CH', flag: '🇨🇭', name: '瑞士', regex: /(?:瑞士|Switzerland|CH|CHE|Zurich|苏黎世)/i },
-  { code: 'SE', flag: '🇸🇪', name: '瑞典', regex: /(?:瑞典|Sweden|SE|SWE|Stockholm|斯德哥尔摩)/i },
-  { code: 'IT', flag: '🇮🇹', name: '意大利', regex: /(?:意大利|Italy|IT|ITA|Milan|米兰|罗马)/i },
-  { code: 'ES', flag: '🇪🇸', name: '西班牙', regex: /(?:西班牙|Spain|ES|ESP|Madrid|马德里)/i },
-  { code: 'IE', flag: '🇮🇪', name: '爱尔兰', regex: /(?:爱尔兰|愛爾蘭|Ireland|IE|IRL|Dublin|都柏林)/i },
-  { code: 'AE', flag: '🇦🇪', name: '阿联酋', regex: /(?:阿联酋|迪拜|UAE|AE|ARE|Dubai)/i },
-  { code: 'CN', flag: '🇨🇳', name: '中国', regex: /(?:中国|中國|China|CN|CHN|回国|北京|上海|广州|深圳|杭州)/i },
+  { code: 'HK', flag: '🇭🇰', name: '香港', regex: /(?:香港|Hong\s*Kong|HongKong|深港|沪港|广港|穗港|(?<![A-Za-z])(?:HK|HKG|HKT|HKBN|HGC|WTT)(?![A-Za-z]))/i },
+  { code: 'TW', flag: '🇹🇼', name: '台湾', regex: /(?:台湾|臺灣|Taiwan|Taipei|台中|台北|新北|(?<![A-Za-z])(?:TW|TWN|HINET|APOL|Kbro)(?![A-Za-z]))/i },
+  { code: 'JP', flag: '🇯🇵', name: '日本', regex: /(?:日本|Japan|Tokyo|Osaka|东京|大阪|埼玉|名古|广岛|软银|(?<![A-Za-z])(?:JP|JPN|Softbank|KDDI|DOCOMO)(?![A-Za-z]))/i },
+  { code: 'SG', flag: '🇸🇬', name: '新加坡', regex: /(?:新加坡|Singapore|狮城|星加坡|(?<![A-Za-z])(?:SG|SGP)(?![A-Za-z]))/i },
+  { code: 'US', flag: '🇺🇸', name: '美国', regex: /(?:美国|美國|United\s*States|America|洛杉矶|硅谷|西雅图|芝加哥|纽约|达拉斯|波特兰|旧金山|圣何塞|凤凰城|俄勒冈|弗吉尼亚|Fremont|Los\s*Angeles|San\s*Jose|Silicon\s*Valley|Seattle|Chicago|New\s*York|(?<![A-Za-z])(?:US|USA)(?![A-Za-z]))/i },
+  { code: 'KR', flag: '🇰🇷', name: '韩国', regex: /(?:韩国|韓國|Korea|Seoul|首尔|釜山|(?<![A-Za-z])(?:KR|KOR|KT|SK|LG)(?![A-Za-z]))/i },
+  { code: 'GB', flag: '🇬🇧', name: '英国', regex: /(?:英国|英國|United\s*Kingdom|London|伦敦|曼彻斯特|(?<![A-Za-z])(?:UK|GB|GBR)(?![A-Za-z]))/i },
+  { code: 'DE', flag: '🇩🇪', name: '德国', regex: /(?:德国|德國|Germany|Frankfurt|法兰克福|柏林|慕尼黑|(?<![A-Za-z])(?:DE|DEU)(?![A-Za-z]))/i },
+  { code: 'FR', flag: '🇫🇷', name: '法国', regex: /(?:法国|法國|France|Paris|巴黎|(?<![A-Za-z])(?:FR|FRA)(?![A-Za-z]))/i },
+  { code: 'CA', flag: '🇨🇦', name: '加拿大', regex: /(?:加拿大|Canada|Toronto|Vancouver|多伦多|温哥华|蒙特利尔|(?<![A-Za-z])(?:CA|CAN)(?![A-Za-z]))/i },
+  { code: 'AU', flag: '🇦🇺', name: '澳大利亚', regex: /(?:澳大利亚|澳洲|Australia|Sydney|Melbourne|悉尼|墨尔本|堪培拉|(?<![A-Za-z])(?:AU|AUS)(?![A-Za-z]))/i },
+  { code: 'RU', flag: '🇷🇺', name: '俄罗斯', regex: /(?:俄罗斯|Russia|Moscow|莫斯科|圣彼得堡|海参崴|(?<![A-Za-z])(?:RU|RUS)(?![A-Za-z]))/i },
+  { code: 'IN', flag: '🇮🇳', name: '印度', regex: /(?:印度|India|Mumbai|孟买|新德里|(?<![A-Za-z])(?:IN|IND)(?![A-Za-z]))/i },
+  { code: 'MY', flag: '🇲🇾', name: '马来西亚', regex: /(?:马来西亚|马来|大马|Malaysia|Kuala\s*Lumpur|吉隆坡|(?<![A-Za-z])(?:MY|MYS)(?![A-Za-z]))/i },
+  { code: 'TH', flag: '🇹🇭', name: '泰国', regex: /(?:泰国|泰國|Thailand|Bangkok|曼谷|(?<![A-Za-z])(?:TH|THA)(?![A-Za-z]))/i },
+  { code: 'PH', flag: '🇵🇭', name: '菲律宾', regex: /(?:菲律宾|Philippines|Manila|马尼拉|(?<![A-Za-z])(?:PH|PHL)(?![A-Za-z]))/i },
+  { code: 'VN', flag: '🇻🇳', name: '越南', regex: /(?:越南|Vietnam|Ho\s*Chi\s*Minh|胡志明|河内|(?<![A-Za-z])(?:VN|VNM)(?![A-Za-z]))/i },
+  { code: 'ID', flag: '🇮🇩', name: '印尼', regex: /(?:印尼|印度尼西亚|Indonesia|Jakarta|雅加达|(?<![A-Za-z])(?:ID|IDN)(?![A-Za-z]))/i },
+  { code: 'TR', flag: '🇹🇷', name: '土耳其', regex: /(?:土耳其|Turkey|Istanbul|伊斯坦布尔|(?<![A-Za-z])(?:TR|TUR)(?![A-Za-z]))/i },
+  { code: 'AR', flag: '🇦🇷', name: '阿根廷', regex: /(?:阿根廷|Argentina|(?<![A-Za-z])(?:AR|ARG)(?![A-Za-z]))/i },
+  { code: 'BR', flag: '🇧🇷', name: '巴西', regex: /(?:巴西|Brazil|Sao\s*Paulo|圣保罗|(?<![A-Za-z])(?:BR|BRA)(?![A-Za-z]))/i },
+  { code: 'ZA', flag: '🇿🇦', name: '南非', regex: /(?:南非|South\s*Africa|Johannesburg|(?<![A-Za-z])(?:ZA|ZAF)(?![A-Za-z]))/i },
+  { code: 'NL', flag: '🇳🇱', name: '荷兰', regex: /(?:荷兰|荷蘭|Netherlands|Amsterdam|阿姆斯特丹|(?<![A-Za-z])(?:NL|NLD)(?![A-Za-z]))/i },
+  { code: 'CH', flag: '🇨🇭', name: '瑞士', regex: /(?:瑞士|Switzerland|Zurich|苏黎世|(?<![A-Za-z])(?:CH|CHE)(?![A-Za-z]))/i },
+  { code: 'SE', flag: '🇸🇪', name: '瑞典', regex: /(?:瑞典|Sweden|Stockholm|斯德哥尔摩|(?<![A-Za-z])(?:SE|SWE)(?![A-Za-z]))/i },
+  { code: 'IT', flag: '🇮🇹', name: '意大利', regex: /(?:意大利|Italy|Milan|米兰|罗马|(?<![A-Za-z])(?:IT|ITA)(?![A-Za-z]))/i },
+  { code: 'ES', flag: '🇪🇸', name: '西班牙', regex: /(?:西班牙|Spain|Madrid|马德里|(?<![A-Za-z])(?:ES|ESP)(?![A-Za-z]))/i },
+  { code: 'IE', flag: '🇮🇪', name: '爱尔兰', regex: /(?:爱尔兰|愛爾蘭|Ireland|Dublin|都柏林|(?<![A-Za-z])(?:IE|IRL)(?![A-Za-z]))/i },
+  { code: 'AE', flag: '🇦🇪', name: '阿联酋', regex: /(?:阿联酋|迪拜|Dubai|(?<![A-Za-z])(?:UAE|AE|ARE)(?![A-Za-z]))/i },
+  { code: 'CN', flag: '🇨🇳', name: '中国', regex: /(?:中国|中國|China|回国|北京|上海|广州|深圳|杭州|(?<![A-Za-z])(?:CN|CHN)(?![A-Za-z]))/i },
 ];
 
 /**
@@ -819,6 +819,44 @@ export function getRegionByNodeName(name: string): RegionInfo | null {
     }
   }
   return null;
+}
+
+export const OTHER_REGION_CODE = 'OTHER';
+
+/**
+ * 按地区分类筛选节点。地区码与 getRegionByNodeName 的统计口径保持一致，
+ * OTHER 表示未被任何已知地区规则识别的节点。
+ */
+export function filterNodesByRegions(nodes: NodeEnvelope[], selectors: unknown): NodeEnvelope[] {
+  if (selectors !== undefined && selectors !== null && typeof selectors !== 'string' && !Array.isArray(selectors)) {
+    return [];
+  }
+  const rawSelectors = Array.isArray(selectors)
+    ? selectors
+    : (typeof selectors === 'string' ? selectors.split(/[|,]/) : []);
+  const tokens = rawSelectors.map(value => String(value).trim()).filter(Boolean);
+  if (tokens.length === 0) return nodes;
+
+  const selectedCodes = new Set<string>();
+  for (const token of tokens) {
+    if (/^(?:OTHER|其他|🌐\s*其他)$/i.test(token)) {
+      selectedCodes.add(OTHER_REGION_CODE);
+      continue;
+    }
+
+    const upperToken = token.toUpperCase();
+    const region = REGIONS.find(item => (
+      item.code === upperToken ||
+      item.name === token ||
+      `${item.flag} ${item.name}` === token
+    ));
+    if (region) selectedCodes.add(region.code);
+  }
+
+  return nodes.filter(node => {
+    const code = getRegionByNodeName(node.name)?.code || OTHER_REGION_CODE;
+    return selectedCodes.has(code);
+  });
 }
 
 /**

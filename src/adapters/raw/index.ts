@@ -13,10 +13,10 @@ export function formatHost(server: string): string {
 export function toRawLinks(nodes: NodeEnvelope[]): string {
   const links: string[] = [];
   let skippedCount = 0;
+  let serializationErrorCount = 0;
+  const droppedNodeSamples: Array<{ name: string; protocol: string; error?: string }> = [];
 
   for (const node of nodes) {
-    const before = links.length;
-
     try {
       // 1. 如果来源本身是 URI 格式，直接原样透传 + 仅改 #节点名称
       if (node.source.format === 'uri' && node.source.raw) {
@@ -331,29 +331,37 @@ export function toRawLinks(nodes: NodeEnvelope[]): string {
           links.push(`${scheme}://${auth}${host}:${node.port}#${encodeURIComponent(node.name)}`);
         } else {
           skippedCount++;
-          console.warn(`[toRawLinks] Skipped unsupported protocol for Raw/Base64 serialization: "${node.name}" (${proto || 'unknown'})`);
+          if (droppedNodeSamples.length < 3) {
+            droppedNodeSamples.push({ name: node.name, protocol: proto || 'unknown' });
+          }
         }
       }
     } catch (error: any) {
       skippedCount++;
-      console.error(
-        '[DEBUG][RAW_NODE_ERROR]',
-        {
+      serializationErrorCount++;
+      if (droppedNodeSamples.length < 3) {
+        droppedNodeSamples.push({
           name: node.name,
           protocol: node.protocol,
           error: error instanceof Error ? error.message : String(error)
-        }
-      );
-      console.warn(`[toRawLinks] Failed to serialize node "${node.name}" (${node.protocol}):`, error?.message || error);
-    }
-
-    if (links.length === before) {
-      console.warn('[DEBUG][RAW_NODE_DROPPED]', { name: node.name, protocol: node.protocol });
+        });
+      }
     }
   }
 
   if (skippedCount > 0) {
-    console.warn(`[toRawLinks] Serialized ${links.length}/${nodes.length} nodes (${skippedCount} unsupported/skipped)`);
+    const summary = {
+      input: nodes.length,
+      serialized: links.length,
+      dropped: skippedCount,
+      serializationErrors: serializationErrorCount,
+      samples: droppedNodeSamples
+    };
+    if (serializationErrorCount > 0) {
+      console.error('[RAW_NODES_DROPPED]', summary);
+    } else {
+      console.warn('[RAW_NODES_DROPPED]', summary);
+    }
   }
 
   return links.join('\n');
@@ -369,15 +377,5 @@ export function toBase64(nodes: NodeEnvelope[]): string {
     throw new Error('Base64 output is empty: no nodes could be serialized');
   }
   const base64 = safeBase64Encode(raw);
-
-  console.log(
-    '[DEBUG][SUMMARY]',
-    JSON.stringify({
-      nodesCount: nodes.length,
-      rawLines: raw.split('\n').filter(Boolean).length,
-      base64Length: base64.length
-    })
-  );
-
   return base64;
 }

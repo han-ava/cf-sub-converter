@@ -6,7 +6,7 @@ import { toClashMeta, toSingBox, toSurge, toSurgeConf, toShadowrocketConf, toQua
 import { toRawLinks, toBase64 } from './adapters/raw';
 import { adaptNodeToTarget, normalizeTarget } from './adapters/target';
 import { adaptNodesToSingBox } from './adapters/singbox';
-import { processNodes, createUserinfoNodes, parseUserinfo, getRegionByNodeName, parseRenameRules, formatContentDisposition, safeBase64Decode } from './utils';
+import { processNodes, filterNodesByRegions, createUserinfoNodes, parseUserinfo, getRegionByNodeName, OTHER_REGION_CODE, parseRenameRules, formatContentDisposition, safeBase64Decode, safeBase64Encode } from './utils';
 import { isAuthorized, checkAuthStatus, fetchSubscriptionWithTimeout, extractRequestToken, sanitizeUrlForLog } from './security';
 import { renderHtmlPage } from './ui';
 
@@ -56,22 +56,6 @@ function resolveTarget(requestedTarget: unknown, detectedTarget: string): string
     ? requestedTarget.trim().toLowerCase()
     : '';
   return !normalizedTarget || normalizedTarget === 'auto' ? detectedTarget : normalizedTarget;
-}
-
-function countProtocols(nodes: Array<Pick<ProxyNode, 'protocol'>>): Record<string, number> {
-  return nodes.reduce((counts, node) => {
-    const protocol = node.protocol || 'unknown';
-    counts[protocol] = (counts[protocol] || 0) + 1;
-    return counts;
-  }, {} as Record<string, number>);
-}
-
-function countProtocolNames(protocols: string[]): Record<string, number> {
-  return protocols.reduce((counts, protocol) => {
-    const name = protocol || 'unknown';
-    counts[name] = (counts[name] || 0) + 1;
-    return counts;
-  }, {} as Record<string, number>);
 }
 
 // 基础跨域响应头
@@ -159,6 +143,33 @@ export interface SourceSummary {
   protocols: string[];
 }
 
+type SourceIssue = {
+  kind: 'fetch_failed' | 'parse_error' | 'parse_empty';
+  index: number;
+  source: string;
+  status?: number;
+  error?: string;
+};
+
+function logSourceIssueSummary(issues: SourceIssue[]): void {
+  if (issues.length === 0) return;
+
+  const counts = issues.reduce<Record<SourceIssue['kind'], number>>(
+    (acc, issue) => {
+      acc[issue.kind]++;
+      return acc;
+    },
+    { fetch_failed: 0, parse_error: 0, parse_empty: 0 }
+  );
+  const summary = { count: issues.length, counts, samples: issues.slice(0, 5) };
+
+  if (counts.fetch_failed > 0 || counts.parse_error > 0) {
+    console.error('[SOURCE_ISSUES]', summary);
+  } else {
+    console.warn('[SOURCE_ISSUES]', summary);
+  }
+}
+
 /**
  * 核心节点聚合与并发控制抓取逻辑
  */
@@ -177,44 +188,17 @@ async function loadAllNodes(
 
   // 若输入不包含任何 http/https 远程订阅地址（即为用户直接粘贴的 Base64 订阅、YAML、JSON 或多行节点列表），优先作为整段配置解析，避免被行分割破坏 MIME Base64 或截断
   if (!trimmedUrlParam.includes('http://') && !trimmedUrlParam.includes('https://')) {
-    console.log('[SOURCE_START]', { index: 0, source: 'direct_input' });
-    console.log('[SOURCE_RESPONSE]', {
-      index: 0,
-      source: 'direct_input',
-      status: 200,
-      contentType: 'text/plain',
-      length: trimmedUrlParam.length
-    });
-
     let decoded = '';
     try {
       const candidate = safeBase64Decode(trimmedUrlParam);
       if (candidate && candidate !== trimmedUrlParam && candidate.trim() !== trimmedUrlParam.trim()) {
         decoded = candidate;
-        console.log('[SOURCE_BASE64_DECODED]', {
-          index: 0,
-          source: 'direct_input',
-          inputLength: trimmedUrlParam.length,
-          decodedLength: decoded.length
-        });
       }
-    } catch {
-      console.warn('[SOURCE_BASE64_DECODE_FAILED]', {
-        index: 0,
-        source: 'direct_input',
-        inputLength: trimmedUrlParam.length
-      });
-    }
+    } catch {}
 
     try {
       const parsed = await parseContent(trimmedUrlParam);
       const protocols = parsed.map(n => n.protocol);
-      console.log('[SOURCE_PARSE_RESULT]', {
-        index: 0,
-        source: 'direct_input',
-        nodes: parsed.length,
-        protocols: countProtocols(parsed)
-      });
 
       const singleSummary: SourceSummary[] = [{
         index: 0,
@@ -228,28 +212,17 @@ async function loadAllNodes(
         protocols
       }];
 
-      console.log('[ALL_SOURCES_SUMMARY]', singleSummary.map(s => ({
-        index: s.index,
-        source: s.url,
-        status: s.status,
-        rawLength: s.rawLength,
-        decodedLength: s.decodedLength,
-        nodeCount: s.nodeCount,
-        protocols: countProtocolNames(s.protocols)
-      })));
-
       if (parsed.length > 0) {
         return { nodes: parsed, userinfo: undefined, sources: singleSummary };
       }
-    } catch (err: any) {
-      console.error('[SOURCE_PARSE_ERROR]', { index: 0, source: 'direct_input', error: err?.message || err });
-    }
+    } catch {}
   }
 
   const inputs = urlParam.split(/[\n\r|]+/);
   const allNodes: ProxyNode[] = [];
   const fetchedUserinfos: string[] = [];
   const sourceSummaries: SourceSummary[] = [];
+  const sourceIssues: SourceIssue[] = [];
 
   const remoteUrls: string[] = [];
   const rawTexts: string[] = [];
@@ -270,12 +243,10 @@ async function loadAllNodes(
     const fetchResults = await pMap(
       safeRemoteUrls.map((url, i) => ({ url, index: i })),
       async ({ url, index }) => {
-        console.log('[SOURCE_START]', { index, source: sanitizeUrlForLog(url) });
         try {
           const res = await fetchSubscriptionWithTimeout(url, customUserAgent, enableCache, cacheTtl, outerSignal);
           return { index, url, ...res };
         } catch (err: any) {
-          console.error(`Fetch subscription failed for: ${sanitizeUrlForLog(url)} - ${err.message}`);
           return { index, url, ok: false, status: 500, text: '', userinfo: undefined, contentType: undefined, error: err.message };
         }
       },
@@ -284,13 +255,6 @@ async function loadAllNodes(
 
     for (const res of fetchResults) {
       const { index, url, ok, status, text, userinfo, contentType } = res;
-      console.log('[SOURCE_RESPONSE]', {
-        index,
-        source: sanitizeUrlForLog(url),
-        status,
-        contentType,
-        length: text ? text.length : 0
-      });
 
       if (userinfo) {
         fetchedUserinfos.push(userinfo);
@@ -302,43 +266,33 @@ async function loadAllNodes(
           const candidate = safeBase64Decode(text);
           if (candidate && candidate !== text && candidate.trim() !== text.trim()) {
             decoded = candidate;
-            console.log('[SOURCE_BASE64_DECODED]', {
-              index,
-              source: sanitizeUrlForLog(url),
-              inputLength: text.length,
-              decodedLength: decoded.length
-            });
           }
-        } catch {
-          console.warn('[SOURCE_BASE64_DECODE_FAILED]', {
-            index,
-            source: sanitizeUrlForLog(url),
-            inputLength: text.length
-          });
-        }
+        } catch {}
 
         let parsedNodes: NodeEnvelope[] = [];
+        let parseFailed = false;
         try {
           parsedNodes = await parseContent(text);
           allNodes.push(...parsedNodes);
         } catch (err: any) {
-          console.error('[SOURCE_PARSE_ERROR]', { index, source: sanitizeUrlForLog(url), error: err?.message || err });
-        }
-
-        const protocols = parsedNodes.map(n => n.protocol);
-        console.log('[SOURCE_PARSE_RESULT]', {
-          index,
-          source: sanitizeUrlForLog(url),
-          nodes: parsedNodes.length,
-          protocols: countProtocols(parsedNodes)
-        });
-
-        if (parsedNodes.length === 0) {
-          console.warn('[SOURCE_PARSE_EMPTY]', {
+          parseFailed = true;
+          sourceIssues.push({
+            kind: 'parse_error',
             index,
             source: sanitizeUrlForLog(url),
             status,
-            length: text.length
+            error: String(err?.message || err).slice(0, 200)
+          });
+        }
+
+        const protocols = parsedNodes.map(n => n.protocol);
+
+        if (!parseFailed && parsedNodes.length === 0) {
+          sourceIssues.push({
+            kind: 'parse_empty',
+            index,
+            source: sanitizeUrlForLog(url),
+            status
           });
         }
 
@@ -354,6 +308,14 @@ async function loadAllNodes(
           protocols
         });
       } else {
+        const fetchError = 'error' in res ? res.error : undefined;
+        sourceIssues.push({
+          kind: 'fetch_failed',
+          index,
+          source: sanitizeUrlForLog(url),
+          status,
+          error: fetchError ? String(fetchError).slice(0, 200) : undefined
+        });
         sourceSummaries.push({
           index,
           url,
@@ -373,53 +335,34 @@ async function loadAllNodes(
     let directIdx = safeRemoteUrls.length;
     for (const rawText of rawTexts) {
       const idx = directIdx++;
-      console.log('[SOURCE_START]', { index: idx, source: 'direct_input' });
-      console.log('[SOURCE_RESPONSE]', {
-        index: idx,
-        source: 'direct_input',
-        status: 200,
-        contentType: 'text/plain',
-        length: rawText.length
-      });
 
       let decoded = '';
       try {
         const candidate = safeBase64Decode(rawText);
         if (candidate && candidate !== rawText && candidate.trim() !== rawText.trim()) {
           decoded = candidate;
-          console.log('[SOURCE_BASE64_DECODED]', {
-            index: idx,
-            source: 'direct_input',
-            inputLength: rawText.length,
-            decodedLength: decoded.length
-          });
         }
-      } catch {
-        console.warn('[SOURCE_BASE64_DECODE_FAILED]', {
-          index: idx,
-          source: 'direct_input',
-          inputLength: rawText.length
-        });
-      }
+      } catch {}
 
       let parsedNodes: NodeEnvelope[] = [];
+      let parseFailed = false;
       try {
         parsedNodes = await parseContent(rawText);
         allNodes.push(...parsedNodes);
       } catch (err: any) {
-        console.error('[SOURCE_PARSE_ERROR]', { index: idx, source: 'direct_input', error: err?.message || err });
+        parseFailed = true;
+        sourceIssues.push({
+          kind: 'parse_error',
+          index: idx,
+          source: 'direct_input',
+          error: String(err?.message || err).slice(0, 200)
+        });
       }
 
       const protocols = parsedNodes.map(n => n.protocol);
-      console.log('[SOURCE_PARSE_RESULT]', {
-        index: idx,
-        source: 'direct_input',
-        nodes: parsedNodes.length,
-        protocols: countProtocols(parsedNodes)
-      });
 
-      if (parsedNodes.length === 0) {
-        console.warn('[SOURCE_PARSE_EMPTY]', { index: idx, source: 'direct_input', length: rawText.length });
+      if (!parseFailed && parsedNodes.length === 0) {
+        sourceIssues.push({ kind: 'parse_empty', index: idx, source: 'direct_input' });
       }
 
       sourceSummaries.push({
@@ -436,22 +379,10 @@ async function loadAllNodes(
     }
   }
 
-  console.log(
-    '[ALL_SOURCES_SUMMARY]',
-    sourceSummaries.map(s => ({
-      index: s.index,
-      source: s.type === 'remote' ? sanitizeUrlForLog(s.url) : s.url,
-      status: s.status,
-      rawLength: s.rawLength,
-      decodedLength: s.decodedLength,
-      nodeCount: s.nodeCount,
-      protocols: countProtocolNames(s.protocols)
-    }))
-  );
-
   // 多订阅默认不混淆流量（none），单订阅保留原样（first）
   const strategy = userinfoStrategy || (remoteUrls.length > 1 ? 'none' : 'first');
   const mergedUserinfo = mergeUserinfos(fetchedUserinfos, strategy);
+  logSourceIssueSummary(sourceIssues);
   return { nodes: allNodes, userinfo: mergedUserinfo, sources: sourceSummaries };
 }
 
@@ -591,20 +522,6 @@ export default {
           : 'auto';
         const isAutoTarget = !requestedTarget || requestedTarget === 'auto';
         const resolvedTarget = normalizeTarget(resolveTarget(requestedTarget, detectTargetFromUserAgent(userAgent)));
-        console.log('[DEBUG][REQUEST]', {
-          method: request.method,
-          path: url.pathname,
-          target: resolvedTarget || requestedTarget,
-          userAgent,
-          inputLength: String(rawUrl).length,
-          hasToken: Boolean(requestToken),
-          filters: {
-            include: Boolean(body.include),
-            exclude: Boolean(body.exclude),
-            rename: Boolean(body.rename)
-          }
-        });
-
         // 详细 Token 鉴权诊断
         const authResult = checkAuthStatus(env.AUTH_TOKEN, requestToken);
         if (!authResult.authorized) {
@@ -629,32 +546,26 @@ export default {
         }
 
         const { nodes: rawNodes, userinfo, sources } = await loadAllNodes(rawUrl, undefined, true, 180, 'first');
-        console.log('[DEBUG][PARSED_NODES]', {
-          count: rawNodes.length,
-          protocols: countProtocols(rawNodes)
-        });
 
         // 过滤与重命名
         const renameRules = parseRenameRules(body.rename ? String(body.rename) : '');
 
-        const processedNodes = processNodes(rawNodes, {
-          includeRegex: body.include,
-          excludeRegex: body.exclude,
-          renameRules,
-          addEmoji: body.emoji !== false,
-          enableUdp: body.udp !== false
-        });
-        console.log('[DEBUG][PROCESSED_NODES]', {
-          count: processedNodes.length,
-          dropped: rawNodes.length - processedNodes.length,
-          protocols: countProtocols(processedNodes)
-        });
+        const processedNodes = filterNodesByRegions(
+          processNodes(rawNodes, {
+            includeRegex: body.include,
+            excludeRegex: body.exclude,
+            renameRules,
+            addEmoji: body.emoji !== false,
+            enableUdp: body.udp !== false
+          }),
+          body.regions
+        );
 
         let debugRaw = '';
         let debugBase64 = '';
         try {
           debugRaw = toRawLinks(processedNodes);
-          debugBase64 = toBase64(processedNodes);
+          debugBase64 = safeBase64Encode(debugRaw);
         } catch (e: any) {
           console.warn('[DEBUG] Failed to serialize debug raw/base64 in preview:', e?.message || e);
         }
@@ -730,9 +641,11 @@ export default {
         });
 
         const regionStats: Record<string, number> = {};
+        const regionCodes: Record<string, string> = {};
         for (const n of preFilteredNodes) {
           const reg = getRegionByNodeName(n.name);
           const key = reg ? `${reg.flag} ${reg.name}` : '🌐 其他';
+          regionCodes[key] = reg?.code || OTHER_REGION_CODE;
           regionStats[key] = (regionStats[key] || 0) + 1;
         }
 
@@ -752,6 +665,11 @@ export default {
             finalCount,
             userinfo: userinfoObj,
             regions: regionStats,
+            regionOptions: Object.entries(regionStats).map(([label, count]) => ({
+              code: regionCodes[label]!,
+              label,
+              count
+            })),
             warningAggregations,
             nodes: nodeItems,
             debug: {
@@ -788,6 +706,7 @@ export default {
       let includeRegex = '';
       let excludeRegex = '';
       let renameRulesStr = '';
+      let regionSelectors: unknown = '';
       let addEmoji = true;
       let enableUdp = true;
       let showInfo = true;
@@ -805,6 +724,7 @@ export default {
         includeRegex = url.searchParams.get('include') || '';
         excludeRegex = url.searchParams.get('exclude') || '';
         renameRulesStr = url.searchParams.get('rename') || '';
+        regionSelectors = url.searchParams.get('regions') || '';
         addEmoji = url.searchParams.get('emoji') !== '0' && url.searchParams.get('flag') !== '0';
         enableUdp = url.searchParams.get('udp') !== '0';
         showInfo = url.searchParams.get('info') !== '0' && url.searchParams.get('show_info') !== '0';
@@ -827,6 +747,7 @@ export default {
           includeRegex = body.include || '';
           excludeRegex = body.exclude || '';
           renameRulesStr = body.rename || '';
+          regionSelectors = body.regions ?? '';
           addEmoji = body.emoji !== false && body.flag !== false;
           enableUdp = body.udp !== false;
           showInfo = body.info !== false && body.show_info !== false;
@@ -846,22 +767,6 @@ export default {
       }
 
       const normalizedTarget = normalizeTarget(target);
-
-      console.log('[DEBUG][REQUEST]', {
-        method: request.method,
-        path: url.pathname,
-        target: normalizedTarget || target,
-        preset,
-        userAgent: clientUserAgent,
-        inputLength: String(rawUrl).length,
-        hasToken: Boolean(requestToken),
-        cacheEnabled: enableCache,
-        filters: {
-          include: Boolean(includeRegex),
-          exclude: Boolean(excludeRegex),
-          rename: Boolean(renameRulesStr)
-        }
-      });
 
       // 严格鉴权校验：未配置 AUTH_TOKEN 或 Token 不匹配直接拒绝
       const authResult = checkAuthStatus(env.AUTH_TOKEN, requestToken);
@@ -910,10 +815,6 @@ export default {
           infoStrategy,
           globalAbortController.signal
         );
-        console.log('[DEBUG][PARSED_NODES]', {
-          count: rawNodes.length,
-          protocols: countProtocols(rawNodes)
-        });
 
         clearTimeout(globalTimeout);
 
@@ -936,11 +837,7 @@ export default {
           addEmoji,
           enableUdp
         });
-        console.log('[DEBUG][PROCESSED_NODES]', {
-          count: processedNodes.length,
-          dropped: rawNodes.length - processedNodes.length,
-          protocols: countProtocols(processedNodes)
-        });
+        processedNodes = filterNodesByRegions(processedNodes, regionSelectors);
 
         // 响应头构建：禁止私密订阅被中间缓存
         const responseHeaders: Record<string, string> = {

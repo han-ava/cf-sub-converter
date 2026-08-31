@@ -33,32 +33,26 @@ export function toClashMeta(
   }
 
   const proxies: Record<string, any>[] = [];
+  const droppedNodeSamples: Array<{ name: string; protocol: string; reason: string }> = [];
+  let droppedNodeCount = 0;
   for (const node of nodes) {
     const res = adaptNodeToMihomo(node);
     if (res.emitted && res.config) {
       proxies.push(res.config);
     } else {
-      console.warn('[DEBUG][CLASH_NODE_DROPPED]', {
-        name: node.name,
-        protocol: node.protocol,
-        reason: res.skipReason || 'Adapter fatal or not emitted',
-        warnings: res.warnings
-      });
+      droppedNodeCount++;
+      if (droppedNodeSamples.length < 3) {
+        droppedNodeSamples.push({
+          name: node.name,
+          protocol: node.protocol,
+          reason: res.skipReason || 'Adapter fatal or not emitted'
+        });
+      }
     }
   }
-
-  const protocolStats = nodes.reduce((acc, node) => {
-    const proto = node.protocol || 'unknown';
-    acc[proto] = (acc[proto] || 0) + 1;
-    return acc;
-  }, {} as Record<string, number>);
-
-  console.log('[DEBUG][CLASH_SUMMARY]', {
-    inputNodes: nodes.length,
-    outputProxies: proxies.length,
-    skipped: nodes.length - proxies.length,
-    protocols: protocolStats
-  });
+  if (droppedNodeCount > 0) {
+    console.warn('[CLASH_NODES_DROPPED]', { count: droppedNodeCount, samples: droppedNodeSamples });
+  }
 
   const proxyNames = proxies.map(p => p.name);
 
@@ -221,9 +215,7 @@ export function toClashMeta(
     ];
   }
 
-  const yamlContent = yaml.dump(config, { indent: 2, lineWidth: -1, noRefs: true });
-  console.log('[DEBUG][CLASH_OUTPUT]', { yamlLength: yamlContent.length });
-  return yamlContent;
+  return yaml.dump(config, { indent: 2, lineWidth: -1, noRefs: true });
 }
 
 /**

@@ -92,6 +92,7 @@ https://your-worker.workers.dev/sub?url=https://airport.com/sub?token=xxx&target
 | `preset` | string | 否 | `standard` | 仅用于 Clash 的规则预设：`standard` (标准全能), `ai` (增强 AI/OpenAI 分流), `media` (增强流媒体分流), `minimal` (不使用远程 rule-provider，仅内联本地/局域网与 `.cn`，其余国内匹配依赖客户端内置 GeoSite/GeoIP) |
 | `test_url` | string | 否 | `https://cp.cloudflare.com/generate_204` | 自动选择/延迟测速使用的 URL |
 | `include` | string | 否 | - | 包含节点正则过滤，例如 `香港\|日本\|US` |
+| `regions` | string | 否 | - | 按地区分类码过滤，多个值用 `\|` 分隔，例如 `HK\|JP\|OTHER`；`OTHER` 表示未识别地区 |
 | `exclude` | string | 否 | - | 排除节点正则过滤，例如 `剩余\|到期\|官网\|0.1x` |
 | `rename` | string | 否 | - | 节点重命名规则，格式为 `查找=替换`，多个规则可用换行或逗号隔开 |
 | `emoji` / `flag` | boolean | 否 | `1` | 是否自动为节点名称添加国旗 Emoji（`1` 开启，`0` 关闭） |
@@ -115,6 +116,7 @@ https://your-worker.workers.dev/sub?url=https://airport.com/sub?token=xxx&target
   "token": "MyCustomSecretKey_999",
   "target": "singbox",
   "include": "香港|日本",
+  "regions": ["HK", "JP"],
   "exclude": "0.1x",
   "emoji": true
 }
@@ -139,6 +141,10 @@ https://your-worker.workers.dev/sub?url=https://airport.com/sub?token=xxx&target
     "🇭🇰 香港": 12,
     "🇯🇵 日本": 12
   },
+  "regionOptions": [
+    { "code": "HK", "label": "🇭🇰 香港", "count": 12 },
+    { "code": "JP", "label": "🇯🇵 日本", "count": 12 }
+  ],
   "nodes": [
     { "name": "🇭🇰 香港 01 [BGP]", "type": "vless", "server": "hk.example.com", "port": 443 }
   ]
