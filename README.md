@@ -217,7 +217,7 @@ https://your-worker.workers.dev/sub?url=https://airport.com/sub?token=xxx&target
 
 - **Clash 系列**：Clash Verge Rev、Clash Nyanpasu、Mihomo Party、Clash Meta for Android、ClashX.Meta，以及支持 MRS 的 Stash 3.1+
 - **Sing-Box**：面向最新稳定版 v1.13.21 的 JSON 配置，国内域名/IP 与广告规则集由客户端定期更新
-- **SFI / SFM / SFT**：订阅请求会按客户端 User-Agent 自动加入 TUN 入站以接管系统流量，同时保留 mixed 本地代理入口；普通 Sing-box CLI 输出不强制启用 TUN
+- **SFI / SFM / SFT / SFA / SFW / SFL**：官方 Apple、Android、Windows 与 Linux 图形客户端的订阅请求会按 User-Agent 自动加入 TUN 入站以接管系统流量，同时保留 mixed 本地代理入口；普通 Sing-box CLI 输出不强制启用 TUN
 - **Shadowrocket (小火箭)**：支持一键 URL Scheme 导入 (`shadowrocket://add/sub://...`) 或带完整分流的 `.conf` 配置文件
 - **Surge**：输出 Surge iOS / Mac 可引用的 `[Proxy]` 列表，不包含规则段
 - **通用客户端**：Quantumult X、Loon、v2rayN、v2rayNG、sing-box 等

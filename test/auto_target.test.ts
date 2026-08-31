@@ -19,6 +19,8 @@ describe('automatic subscription target detection', () => {
     const cases = [
       { userAgent: 'Shadowrocket/2.2.60', contentType: 'text/plain', marker: 'base64' },
       { userAgent: 'Mihomo/1.19.0', contentType: 'text/yaml', marker: 'proxies:' },
+      { userAgent: 'Clash Verge/2.4.0', contentType: 'text/yaml', marker: 'proxies:' },
+      { userAgent: 'Stash/3.1.0', contentType: 'text/yaml', marker: 'proxies:' },
       { userAgent: 'sing-box 1.13.21', contentType: 'application/json', marker: '"outbounds"' },
       { userAgent: 'Surge/5.9.0', contentType: 'text/plain', marker: '[Proxy]' }
     ];
@@ -62,30 +64,38 @@ describe('automatic subscription target detection', () => {
     expect(await response.text()).toContain('"outbounds"');
   });
 
-  test('SFI receives a TUN inbound while generic sing-box output stays proxy-only', async () => {
-    const sfiResponse = await worker.fetch(
-      createAutoRequest('SFI (sing-box 1.14.0; language zh_CN)'),
-      ENV,
-      CTX
-    );
-    const sfiConfig = await sfiResponse.json() as any;
+  test('official graphical sing-box clients receive a TUN inbound while generic CLI stays proxy-only', async () => {
+    const graphicalClientUserAgents = [
+      'SFI (sing-box 1.14.0; language zh_CN)',
+      'SFI/1.12.1 (Build 1; sing-box 1.11.3; language en_US)',
+      'SFM (sing-box 1.14.0; language zh_CN)',
+      'SFT (sing-box 1.14.0; language zh_CN)',
+      'SFA (sing-box 1.14.0; language zh_CN)',
+      'SFW (sing-box 1.14.0; language zh_CN)',
+      'SFL (sing-box 1.14.0; language zh_CN)'
+    ];
 
-    expect(sfiResponse.status).toBe(200);
-    expect(sfiConfig.inbounds).toEqual(expect.arrayContaining([
-      {
-        type: 'tun',
-        tag: 'tun-in',
-        address: ['172.19.0.1/30', 'fdfe:dcba:9876::1/126'],
-        auto_route: true,
-        stack: 'system'
-      },
-      {
-        type: 'mixed',
-        tag: 'mixed-in',
-        listen: '127.0.0.1',
-        listen_port: 2080
-      }
-    ]));
+    for (const userAgent of graphicalClientUserAgents) {
+      const response = await worker.fetch(createAutoRequest(userAgent), ENV, CTX);
+      const config = await response.json() as any;
+
+      expect(response.status).toBe(200);
+      expect(config.inbounds).toEqual(expect.arrayContaining([
+        {
+          type: 'tun',
+          tag: 'tun-in',
+          address: ['172.19.0.1/30', 'fdfe:dcba:9876::1/126'],
+          auto_route: true,
+          stack: 'system'
+        },
+        {
+          type: 'mixed',
+          tag: 'mixed-in',
+          listen: '127.0.0.1',
+          listen_port: 2080
+        }
+      ]));
+    }
 
     const genericResponse = await worker.fetch(
       createAutoRequest('sing-box 1.13.21'),
