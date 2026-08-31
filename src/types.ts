@@ -26,6 +26,10 @@ export type KnownProtocol =
 export interface NodeSource {
   format: 'uri' | 'vmess-json' | 'clash' | 'singbox';
   raw: string;
+  /** Identifies the original native Sing-box configuration for reference scoping. */
+  configId?: string;
+  /** All tags declared by that native config, including unsupported/group outbounds. */
+  nativeOutboundTags?: string[];
 }
 
 export interface RawQueryEntry {
@@ -231,6 +235,7 @@ export interface TuicNode extends BaseNode {
     maxUdpRelayPacketSize?: number;
     congestionController?: string;
     udpRelayMode?: string;
+    udpOverStream?: boolean;
     alpn?: string[];
     sni?: string;
     skipCertVerify?: boolean;

@@ -143,6 +143,7 @@ describe('generated routing rules', () => {
     expect(config.inbounds.every((inbound: any) => inbound.sniff === undefined)).toBe(true);
     expect(config.outbounds.some((outbound: any) => ['block', 'dns'].includes(outbound.type))).toBe(false);
     expect(config.dns.servers.map((server: any) => server.type)).toEqual(['local', 'udp', 'https']);
+    expect(config.dns.servers.find((server: any) => server.tag === 'dns-cn').detour).toBeUndefined();
     expect(config.dns.final).toBe('dns-remote');
     expect(config.route.rules[0]).toEqual({ action: 'sniff' });
     expect(config.route.rules[1]).toEqual({ protocol: 'dns', action: 'hijack-dns' });

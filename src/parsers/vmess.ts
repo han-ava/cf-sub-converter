@@ -22,7 +22,10 @@ export function parseVmess(urlStr: string): VmessNode | null {
     r.markRecognized('v', 'version');
 
     const alterId = r.getStrictInt('aid', 'alterId', 'alter_id') ?? 0;
-    const cipher = r.getEnum(['auto', 'aes-128-gcm', 'chacha20-poly1305', 'none', 'zero'], 'scy', 'cipher', 'security') || 'auto';
+    const cipher = r.getEnum(
+      ['auto', 'aes-128-gcm', 'aes-128-cfb', 'chacha20-poly1305', 'none', 'zero'],
+      'scy', 'cipher', 'security'
+    ) || 'auto';
     const net = (r.getString('net', 'network', 'transport') || 'tcp').toLowerCase();
 
     const rawTls = r.getRaw('tls');
@@ -60,8 +63,11 @@ export function parseVmess(urlStr: string): VmessNode | null {
     const authenticatedLength = r.getStrictBool('authenticatedLength', 'authenticated-length', 'authenticated_length');
 
     const isKcpOrMekya = net === 'mkcp' || net === 'kcp' || net === 'mekya';
+    const supportsHeaderTypeInput = net === 'tcp' || isKcpOrMekya;
     const rawType = r.getString('type');
-    const headerType = isKcpOrMekya ? (rawType && rawType !== 'none' ? rawType : undefined) : undefined;
+    const headerType = supportsHeaderTypeInput
+      ? (rawType && rawType !== 'none' ? rawType : undefined)
+      : undefined;
 
     const path = r.getString('path');
     const host = r.getString('host');

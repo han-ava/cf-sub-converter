@@ -1,6 +1,7 @@
 import { AdapterResult, ConversionWarning, NodeEnvelope } from '../types';
 import { adaptNodeToMihomo } from './mihomo';
 import { toRawLinks } from './raw';
+import { adaptNodeToSingBox } from './singbox';
 
 export const CANONICAL_TARGETS = [
   'mihomo',
@@ -28,17 +29,6 @@ const TARGET_ALIASES: Record<string, CanonicalTarget> = {
   surge: 'surge'
 };
 
-const SINGBOX_PROTOCOLS = new Set([
-  'ss',
-  'shadowsocks',
-  'vmess',
-  'vless',
-  'trojan',
-  'hysteria2',
-  'hy2',
-  'anytls',
-  'tuic'
-]);
 const SURGE_PROTOCOLS = new Set(['ss', 'shadowsocks', 'trojan', 'vmess']);
 const SHADOWROCKET_CONF_PROTOCOLS = new Set([
   'ss',
@@ -122,22 +112,6 @@ function adaptToRawLinkTarget(node: NodeEnvelope, target: CanonicalTarget): Adap
   );
 }
 
-function adaptToSingBox(node: NodeEnvelope): AdapterResult {
-  const protocol = (node.protocol || '').toLowerCase();
-  if (!SINGBOX_PROTOCOLS.has(protocol)) {
-    return fatalResult(
-      `Sing-box 生成器没有节点 [${node.name}] 协议 [${protocol || 'unknown'}] 的显式输出支持`
-    );
-  }
-
-  if (node.source.format === 'singbox') return perfectResult();
-
-  return warningResult(
-    `节点 [${node.name}] 将由 Sing-box 生成器重建；仅确认协议可输出，无法保证所有参数逐项无损`,
-    'target-parameter-mapping'
-  );
-}
-
 function adaptToGeneratedTarget(
   node: NodeEnvelope,
   target: 'surge' | 'shadowrocket-conf',
@@ -165,7 +139,7 @@ export function adaptNodeToTarget(node: NodeEnvelope, target: CanonicalTarget): 
     case 'shadowrocket':
       return adaptToRawLinkTarget(node, target);
     case 'singbox':
-      return adaptToSingBox(node);
+      return adaptNodeToSingBox(node);
     case 'surge':
       return adaptToGeneratedTarget(node, target, SURGE_PROTOCOLS);
     case 'shadowrocket-conf':

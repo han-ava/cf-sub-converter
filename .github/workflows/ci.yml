@@ -59,6 +59,24 @@ jobs:
       - name: Verify Mihomo
         run: mihomo -v
 
+      - name: Install Sing-box
+        env:
+          SING_BOX_VERSION: v1.13.21
+          SING_BOX_SHA256: 24f9ef8e7234e13e71e74c3598a4164c5fe07b7b67ccc6e96cf68b54789f72cd
+        run: |
+          archive="${RUNNER_TEMP}/sing-box-${SING_BOX_VERSION}-linux-amd64.tar.gz"
+          bin_dir="${RUNNER_TEMP}/sing-box-bin"
+          mkdir -p "${bin_dir}"
+          curl --fail --location --retry 3 --retry-delay 2 \
+            --output "${archive}" \
+            "https://github.com/SagerNet/sing-box/releases/download/${SING_BOX_VERSION}/sing-box-${SING_BOX_VERSION#v}-linux-amd64.tar.gz"
+          echo "${SING_BOX_SHA256}  ${archive}" | sha256sum --check -
+          tar --extract --gzip --file "${archive}" --strip-components=1 --directory "${bin_dir}"
+          echo "${bin_dir}" >> "${GITHUB_PATH}"
+
+      - name: Verify Sing-box
+        run: sing-box version
+
       - name: Build
         run: bun run build
 

@@ -8,6 +8,10 @@ const VLESS_KCP_URI =
   'vless://b831381d-6324-4d53-ad4f-8cda48b30811@1.2.3.4:443?type=kcp&security=tls#VLESS%20KCP';
 const SSR_URI =
   'ssr://' + Buffer.from('1.2.3.4:8388:origin:aes-128-cfb:plain:bXlwYXNz/?remarks=U1NSX05vZGU').toString('base64');
+const HY2_GECKO_URI =
+  'hysteria2://password@1.2.3.4:443?obfs=gecko&obfs-password=secret#HY2%20Gecko';
+const TUIC_V4_URI =
+  'tuic://legacy-token@1.2.3.4:443?sni=example.com#TUIC%20v4';
 
 describe('target-aware compatibility adapter', () => {
   test('normalizes canonical targets and supported aliases', () => {
@@ -116,14 +120,66 @@ describe('target-aware compatibility adapter', () => {
     expect(result.warnings.length).toBeGreaterThan(0);
   });
 
-  test('warns for supported non-native Sing-box conversion', () => {
+  test('reports a fully mapped non-native Sing-box conversion as perfect', () => {
     const node = parseSingleNode(VLESS_GRPC_URI)!;
     const result = adaptNodeToTarget(node, 'singbox');
 
     expect(result.emitted).toBe(true);
     expect(result.fatal).toBe(false);
+    expect(result.lossy).toBe(false);
+    expect(result.warnings).toEqual([]);
+  });
+
+  test('lists concrete optional parameters that cannot be mapped to Sing-box', () => {
+    const node = parseSingleNode(
+      VLESS_GRPC_URI.replace('&serviceName=', '&customSingboxOption=1&serviceName=')
+    )!;
+    const result = adaptNodeToTarget(node, 'singbox');
+
+    expect(result.emitted).toBe(true);
+    expect(result.fatal).toBe(false);
     expect(result.lossy).toBe(true);
-    expect(result.warnings.length).toBeGreaterThan(0);
+    expect(result.unsupportedParams).toContain('customSingboxOption');
+    expect(result.warnings.some(warning => warning.message.includes('customSingboxOption'))).toBe(true);
+  });
+
+  test('rejects Sing-box 1.14-only or unsupported connection-critical parameters', () => {
+    const cases = [
+      { node: parseSingleNode(VLESS_KCP_URI)!, param: 'transport.type' },
+      { node: parseSingleNode(HY2_GECKO_URI)!, param: 'obfs' },
+      { node: parseSingleNode(TUIC_V4_URI)!, param: 'token' }
+    ];
+
+    for (const { node, param } of cases) {
+      const result = adaptNodeToTarget(node, 'singbox');
+      expect(result.emitted).toBe(false);
+      expect(result.fatal).toBe(true);
+      expect(result.unsupportedParams).toContain(param);
+      expect(result.skipReason).toBeTruthy();
+    }
+  });
+
+  test('prioritizes native Sing-box outbounds over the cross-format protocol whitelist', () => {
+    const nativeSocks = {
+      name: 'Native SOCKS',
+      protocol: 'socks',
+      server: '1.2.3.4',
+      port: 1080,
+      source: { format: 'singbox', raw: '' },
+      protocolData: {
+        type: 'socks',
+        tag: 'Native SOCKS',
+        server: '1.2.3.4',
+        server_port: 1080,
+        version: '5'
+      }
+    } as any;
+
+    const result = adaptNodeToTarget(nativeSocks, 'singbox');
+    expect(result.emitted).toBe(true);
+    expect(result.fatal).toBe(false);
+    expect(result.skipReason).toBeUndefined();
+    expect(result.config).toMatchObject({ type: 'socks', server: '1.2.3.4', server_port: 1080 });
   });
 
   test('turns an unsupported raw serializer protocol into a fatal result', () => {

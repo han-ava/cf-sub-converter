@@ -870,6 +870,12 @@ export function deduplicateNodesByFingerprint(nodes: NodeEnvelope[]): NodeEnvelo
   const unique: NodeEnvelope[] = [];
 
   for (const node of nodes) {
+    // 原生 Sing-box outbound 的完整字段与 configId 共同决定 detour/TLS/认证语义。
+    // 通用启发式指纹无法证明两个原生 outbound 等价，也不能隐藏源配置中的重复 tag。
+    if (node.source?.format === 'singbox') {
+      unique.push(node);
+      continue;
+    }
     const fp = getNodeFingerprint(node);
     if (!seen.has(fp)) {
       seen.add(fp);

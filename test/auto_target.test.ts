@@ -19,7 +19,7 @@ describe('automatic subscription target detection', () => {
     const cases = [
       { userAgent: 'Shadowrocket/2.2.60', contentType: 'text/plain', marker: 'base64' },
       { userAgent: 'Mihomo/1.19.0', contentType: 'text/yaml', marker: 'proxies:' },
-      { userAgent: 'sing-box 1.12.0', contentType: 'application/json', marker: '"outbounds"' },
+      { userAgent: 'sing-box 1.13.21', contentType: 'application/json', marker: '"outbounds"' },
       { userAgent: 'Surge/5.9.0', contentType: 'text/plain', marker: '[Proxy]' }
     ];
 
@@ -51,7 +51,7 @@ describe('automatic subscription target detection', () => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'User-Agent': 'sing-box 1.12.0'
+        'User-Agent': 'sing-box 1.13.21'
       },
       body: JSON.stringify({ url: SOURCE_NODE, target: 'auto', token: 'test-token' })
     });

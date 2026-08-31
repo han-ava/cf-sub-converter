@@ -5,6 +5,7 @@ import { parseContent } from './parser';
 import { toClashMeta, toSingBox, toSurge, toShadowrocketConf } from './generator';
 import { toRawLinks, toBase64 } from './adapters/raw';
 import { adaptNodeToTarget, normalizeTarget } from './adapters/target';
+import { adaptNodesToSingBox } from './adapters/singbox';
 import { processNodes, createUserinfoNodes, parseUserinfo, getRegionByNodeName, parseRenameRules, formatContentDisposition, safeBase64Decode } from './utils';
 import { isAuthorized, checkAuthStatus, fetchSubscriptionWithTimeout, extractRequestToken, sanitizeUrlForLog } from './security';
 import { renderHtmlPage } from './ui';
@@ -656,8 +657,11 @@ export default {
         let warningCount = 0;
         let fatalCount = 0;
 
-        const allConvResults = processedNodes.map(n => {
-          const adaptRes = adaptNodeToTarget(n, resolvedTarget);
+        const batchAdaptationResults = resolvedTarget === 'singbox'
+          ? adaptNodesToSingBox(processedNodes)
+          : undefined;
+        const allConvResults = processedNodes.map((n, index) => {
+          const adaptRes = batchAdaptationResults?.[index] || adaptNodeToTarget(n, resolvedTarget);
           let status: 'perfect' | 'warning' | 'fatal' = 'perfect';
           if (adaptRes.fatal) { status = 'fatal'; fatalCount++; }
           else if (adaptRes.lossy || adaptRes.warnings.length > 0) { status = 'warning'; warningCount++; }
@@ -960,6 +964,35 @@ export default {
         }
 
         if (target === 'singbox' || target === 'sing-box') {
+          const adaptationResults = adaptNodesToSingBox(processedNodes);
+          const fatalCount = adaptationResults.filter(result => result.fatal).length;
+
+          if (processedNodes.length > 0 && fatalCount === processedNodes.length) {
+            const reasons = Array.from(new Set(
+              adaptationResults.flatMap(result =>
+                result.skipReason ? [result.skipReason] : result.warnings.map(warning => warning.message)
+              )
+            ));
+            const unsupportedParams = Array.from(new Set(
+              adaptationResults.flatMap(result => result.unsupportedParams)
+            ));
+
+            return new Response(JSON.stringify({
+              error: '没有节点可安全转换为 Sing-box 配置',
+              target: 'singbox',
+              totalMatched: processedNodes.length,
+              fatalCount,
+              reasons,
+              unsupportedParams
+            }), {
+              status: 422,
+              headers: {
+                ...responseHeaders,
+                'Content-Type': 'application/json; charset=utf-8'
+              }
+            });
+          }
+
           const jsonOutput = toSingBox(processedNodes);
           responseHeaders['Content-Type'] = 'application/json; charset=utf-8';
           responseHeaders['Content-Disposition'] = formatContentDisposition(filename, 'json');

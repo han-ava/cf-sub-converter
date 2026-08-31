@@ -29,6 +29,8 @@ export function parseTuic(urlStr: string): TuicNode | null {
 
     const rawQuery = parseRawQuery(queryPart);
     const q = new QueryParamReader(rawQuery.entries);
+    const versionValue = q.getEnum(['4', '5'], 'version');
+    const version = versionValue ? Number(versionValue) as 4 | 5 : undefined;
 
     let uuid: string | undefined;
     let password: string | undefined;
@@ -44,13 +46,15 @@ export function parseTuic(urlStr: string): TuicNode | null {
       const qUuid = q.get('uuid');
       const qToken = q.get('token');
 
-      if (qPass) {
+      if (version === 4 || qToken) {
+        token = qToken || decodedUser;
+      } else if (qPass) {
         uuid = decodedUser;
         password = qPass;
-      } else if (qUuid) {
+      } else if (qUuid || version === 5) {
         uuid = decodedUser || qUuid;
-      } else if (qToken) {
-        token = qToken || decodedUser;
+      } else if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(decodedUser)) {
+        uuid = decodedUser;
       } else {
         token = decodedUser;
       }
@@ -72,7 +76,8 @@ export function parseTuic(urlStr: string): TuicNode | null {
     const maxOpenStreams = q.getInt('max-open-streams', 'max_open_streams', 'maxopenstreams');
     const maxUdpRelayPacketSize = q.getInt('max-udp-relay-packet-size', 'max_udp_relay_packet_size', 'maxudprelaypacketsize');
     const congestionController = q.getEnum(['bbr', 'cubic', 'new_reno'], 'congestion_controller', 'congestion-controller', 'congestionController', 'congestioncontroller', 'congestion_control', 'congestion-control', 'congestionControl', 'congestioncontrol', 'cc') || 'bbr';
-    const udpRelayMode = q.getEnum(['native', 'quic'], 'udp_relay_mode', 'udp-relay-mode', 'udpRelayMode', 'udprelaymode', 'udp-relay', 'udp_relay', 'udprelay') || 'native';
+    const udpRelayMode = q.getEnum(['native', 'quic'], 'udp_relay_mode', 'udp-relay-mode', 'udpRelayMode', 'udprelaymode', 'udp-relay', 'udp_relay', 'udprelay');
+    const udpOverStream = q.getBool('udp-over-stream', 'udp_over_stream', 'udpOverStream', 'udpoverstream');
     const alpnStr = q.get('alpn');
     const alpn = alpnStr ? alpnStr.split(',').map(s => s.trim()).filter(Boolean) : undefined;
     const insecure = q.getBool('allow_insecure', 'allowinsecure', 'allowInsecure', 'insecure', 'skip-cert-verify', 'skip_cert_verify', 'skipcertverify');
@@ -104,6 +109,7 @@ export function parseTuic(urlStr: string): TuicNode | null {
         uuid,
         password,
         token,
+        version,
         ip,
         heartbeatInterval,
         reduceRtt,
@@ -114,6 +120,7 @@ export function parseTuic(urlStr: string): TuicNode | null {
         maxUdpRelayPacketSize,
         congestionController,
         udpRelayMode,
+        udpOverStream,
         alpn: alpn || ['h3'],
         sni,
         skipCertVerify: insecure,

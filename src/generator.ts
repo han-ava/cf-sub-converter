@@ -4,7 +4,7 @@ import { NodeEnvelope } from './types';
 import { DEFAULT_CLASH_TEMPLATE, DEFAULT_SINGBOX_TEMPLATE } from './templates';
 import { getRegionByNodeName, REGIONS } from './utils';
 import { nodeToClashProxy, adaptNodeToMihomo } from './adapters/mihomo';
-import { nodeToSingBoxOutbound } from './adapters/singbox';
+import { adaptNodesToSingBox, nodeToSingBoxOutbound } from './adapters/singbox';
 import { adaptNodeToTarget } from './adapters/target';
 
 export { nodeToClashProxy, nodeToSingBoxOutbound };
@@ -242,9 +242,55 @@ export function toSingBox(nodes: NodeEnvelope[], customTemplateJson?: string): s
     config = JSON.parse(JSON.stringify(DEFAULT_SINGBOX_TEMPLATE));
   }
 
-  const emittedNodes = nodes.filter(n => adaptNodeToTarget(n, 'singbox').emitted);
-  const outbounds = emittedNodes.map(n => nodeToSingBoxOutbound(n));
-  const nodeTags = emittedNodes.map(n => n.name);
+  const allowedDomainResolvers = new Set<string>(
+    Array.isArray(config.dns?.servers)
+      ? config.dns.servers
+          .map((server: unknown) => (
+            server && typeof server === 'object'
+              ? (server as Record<string, unknown>).tag
+              : undefined
+          ))
+          .filter((tag: unknown): tag is string => typeof tag === 'string' && tag.length > 0)
+      : []
+  );
+  const adaptationResults = adaptNodesToSingBox(nodes, { allowedDomainResolvers });
+  const emittedNodes = nodes.filter((_, index) => adaptationResults[index]?.emitted);
+  const usedTags = new Set(['🚀 节点选择', '⚡ 自动选择', 'direct']);
+  const outboundTagMap = new Map<string, string>();
+  const nativeScopedTag = (node: NodeEnvelope, tag: string): string => (
+    `${node.source.configId || `legacy:${node.source.raw}`}\u0000${tag}`
+  );
+  const taggedNodes = emittedNodes.map(node => {
+    const baseTag = node.name.trim() || 'Node';
+    let tag = baseTag;
+    let suffix = 2;
+    while (usedTags.has(tag)) {
+      tag = `${baseTag} ${String(suffix).padStart(2, '0')}`;
+      suffix++;
+    }
+    usedTags.add(tag);
+
+    if (node.source.format === 'singbox') {
+      const nativeData = node.protocolData as Record<string, any>;
+      if (typeof nativeData.tag === 'string' && nativeData.tag.length > 0) {
+        const scopedTag = nativeScopedTag(node, nativeData.tag);
+        if (!outboundTagMap.has(scopedTag)) outboundTagMap.set(scopedTag, tag);
+      }
+    }
+    return { node, tag };
+  });
+
+  const outbounds = taggedNodes.map(({ node, tag }) => {
+    const protocolData: Record<string, any> = node.source.format === 'singbox'
+      ? { ...(node.protocolData as Record<string, any>) }
+      : node.protocolData as Record<string, any>;
+    if (node.source.format === 'singbox' && typeof protocolData.detour === 'string') {
+      protocolData.detour = outboundTagMap.get(nativeScopedTag(node, protocolData.detour))
+        || protocolData.detour;
+    }
+    return nodeToSingBoxOutbound({ ...node, name: tag, protocolData } as NodeEnvelope);
+  });
+  const nodeTags = taggedNodes.map(({ tag }) => tag);
 
   const defaultOutbounds = [
     {

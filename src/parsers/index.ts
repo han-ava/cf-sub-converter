@@ -14,6 +14,13 @@ import { parseShadowsocksR } from './ssr';
 import { parseClashProxy } from './clash';
 import { parseSingboxOutbound } from './singbox';
 
+let singboxConfigSequence = 0;
+
+function nextSingboxConfigId(): string {
+  singboxConfigSequence += 1;
+  return `singbox-config-${singboxConfigSequence}`;
+}
+
 export {
   parseVless,
   parseVmess,
@@ -102,8 +109,16 @@ export function parseSingleNode(link: string): NodeEnvelope | null {
             const clashNode = parseClashProxy(obj);
             if (isValidNode(clashNode)) return clashNode;
           }
-          if (obj.outbounds || obj.tag) {
-            const singboxNode = parseSingboxOutbound(obj);
+          if (
+            obj.outbounds
+            || obj.tag
+            || (
+              obj.type
+              && obj.server
+              && (obj.server_port !== undefined || String(obj.type).toLowerCase() === 'ssh')
+            )
+          ) {
+            const singboxNode = parseSingboxOutbound(obj, nextSingboxConfigId());
             if (isValidNode(singboxNode)) return singboxNode;
           }
           if (obj.v === '2' || obj.aid !== undefined || (obj.add && obj.port)) {
@@ -151,6 +166,7 @@ export function parseSingleNode(link: string): NodeEnvelope | null {
 export async function parseContent(text: string, depth = 0): Promise<NodeEnvelope[]> {
   if (depth > 5) return [];
   const nodes: NodeEnvelope[] = [];
+  const nativeConfigId = nextSingboxConfigId();
   const trimmed = text.replace(/^﻿/, '').trim();
   if (!trimmed) return nodes;
 
@@ -220,8 +236,15 @@ export async function parseContent(text: string, depth = 0): Promise<NodeEnvelop
       const json = JSON.parse(trimmed);
       const outbounds = Array.isArray(json) ? json : json.outbounds;
       if (Array.isArray(outbounds)) {
+        const nativeOutboundTags = outbounds
+          .map((outbound: unknown) => (
+            outbound && typeof outbound === 'object'
+              ? (outbound as Record<string, unknown>).tag
+              : undefined
+          ))
+          .filter((tag: unknown): tag is string => typeof tag === 'string' && tag.length > 0);
         for (const ob of outbounds) {
-          const node = parseSingboxOutbound(ob);
+          const node = parseSingboxOutbound(ob, nativeConfigId, nativeOutboundTags);
           if (isValidNode(node)) {
             nodes.push(node!);
           }

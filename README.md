@@ -186,6 +186,8 @@ https://your-worker.workers.dev/sub?url=https://airport.com/sub?token=xxx&target
 
 ## 🧩 支持的代理协议
 
+协议能否无损输出取决于目标客户端。预览接口会逐节点返回 `perfect`、`warning` 或 `fatal`；转换不会静默输出已判定为 `fatal` 的节点。
+
 - **VLESS** (支持 TLS、Reality、XTLS-rprx-vision、XHTTP、WebSocket、gRPC)
 - **VMess** (支持 WebSocket、gRPC、HTTP/H2、自定义 alterId、PacketEncoding、GlobalPadding)
 - **Shadowsocks** (支持标准 SIP002、SS2022 以及 v2ray-plugin / obfs / shadow-tls 等多种插件)
@@ -196,12 +198,25 @@ https://your-worker.workers.dev/sub?url=https://airport.com/sub?token=xxx&target
 - **ShadowsocksR** (SSR)
 - **Clash YAML 订阅** (100% 原始透传解析与重构)
 
+### Sing-box 目标兼容范围
+
+当前生成器以最新稳定版 [**sing-box v1.13.21**](https://github.com/SagerNet/sing-box/releases/tag/v1.13.21) 为目标：
+
+- URI / Clash 节点可转换 Shadowsocks、VMess、VLESS、Trojan、Hysteria 2、AnyTLS 与 TUIC v5；V2Ray transport 支持 TCP、WebSocket、gRPC、HTTP/H2、HTTPUpgrade 与 QUIC。
+- 输入为 Sing-box JSON 时，完整保留 v1.13.21 的 13 类服务器型 outbound：SOCKS、HTTP、Shadowsocks、VMess、Trojan、Naive、Hysteria、SSH、ShadowTLS、VLESS、AnyTLS、TUIC 与 Hysteria 2；字段、类型、嵌套选项和引用通过版本门禁后原样输出，不受上述跨格式协议白名单限制。`detour` 仅允许引用同一份原生配置中仍被保留的 outbound。
+- Linux / Android 平台专属字段（如 `routing_mark`、`bind_address_no_port`、`netns`、`protect_path` 与 kTLS）会保留并在预览中明确提示平台限制；在不支持的平台导入，官方 Sing-box 也会拒绝。证书、私钥或 ECH 配置的本地文件路径仍由最终运行设备负责提供。
+- 内联 X.509 与未加密私钥会做结构和可推导的公钥配对校验（包括 Ed25519）；证书扩展和密钥的完整密码学语义仍以最终 Sing-box 为准。加密 SSH 私钥会校验封装、cipher/KDF 与口令是否提供，但 Worker 不执行 bcrypt/AES 解密，口令正确性、密文完整性及解密后的密钥由最终 Sing-box 校验；这些延期校验会在预览中标为 `warning`。
+- 为限制恶意输入的解析成本，原生 duration 文本最长 128 个字符；官方 Go duration 解析器可接受但最终截断为零的超长极小数会被本服务拒绝。仅含空白的 outbound `tag` / `detour` 也会作为歧义配置拒绝，而不是按官方宽松解码继续输出。
+- ShadowsocksR（sing-box 已于 1.6 移除）、不受支持的 Shadowsocks 插件、XHTTP / SplitHTTP、mKCP / MeKya、Hysteria 2 `gecko`（1.14 才引入）、无法等价为公钥指纹的 Hysteria 2 `pinSHA256`，以及 TUIC v4/token-only 节点不会降级输出，而会在预览中列为 `fatal` 并注明不支持的参数。
+- 未识别或无法映射的可选参数会列入 `unsupportedParams`；若全部节点均为 `fatal`，`/sub` 返回 HTTP 422，不会生成看似成功但只有 `direct` 的配置。
+- CI 固定下载并校验官方 v1.13.21 Linux 二进制；协议矩阵、原生 schema 与默认完整配置都必须通过 `sing-box check`，默认配置还会执行短时 `sing-box run` 启动验证。
+
 ---
 
 ## 📱 客户端支持与一键导入
 
 - **Clash 系列**：Clash Verge Rev、Clash Nyanpasu、Mihomo Party、Clash Meta for Android、ClashX.Meta，以及支持 MRS 的 Stash 3.1+
-- **Sing-Box**：Sing-Box 1.12+ JSON 配置，国内域名/IP 与广告规则集由客户端定期更新
+- **Sing-Box**：面向最新稳定版 v1.13.21 的 JSON 配置，国内域名/IP 与广告规则集由客户端定期更新
 - **Shadowrocket (小火箭)**：支持一键 URL Scheme 导入 (`shadowrocket://add/sub://...`) 或带完整分流的 `.conf` 配置文件
 - **Surge**：输出 Surge iOS / Mac 可引用的 `[Proxy]` 列表，不包含规则段
 - **通用客户端**：Quantumult X、Loon、v2rayN、v2rayNG、sing-box 等
@@ -211,7 +226,7 @@ https://your-worker.workers.dev/sub?url=https://airport.com/sub?token=xxx&target
 默认完整配置按“本地/局域网直连 → 广告拦截 → 预设专项分流 → 国内域名/IP 直连 → 未匹配流量代理”的顺序匹配。必须直连的本地域名、RFC1918/CGNAT、回环、链路本地和 IPv6 私网规则直接写入生成配置，不依赖远程下载。
 
 - **Mihomo / Clash Meta / Stash**：国内域名、国内 IP、私网与广告核心规则使用 [MetaCubeX/meta-rules-dat](https://github.com/MetaCubeX/meta-rules-dat) `meta` 分支的 MRS，由客户端每 24 小时检查更新。
-- **Sing-box 1.12+**：使用同一仓库 `sing` 分支的 SRS，确保与 Mihomo 的核心分类一致。
+- **Sing-box v1.13.21**：使用同一仓库 `sing` 分支的 SRS，确保与 Mihomo 的核心分类一致。
 - **Shadowrocket**：继续使用 [blackmatrix7/ios_rule_script](https://github.com/blackmatrix7/ios_rule_script) 的 Shadowrocket 专用中国域名/IP规则，避免跨客户端规则语法差异。
 
 规则集下载发生在客户端加载或更新配置时，Worker 转换请求本身不会抓取这些仓库。`minimal` 是例外：它不声明远程规则集，因此不会使用 MetaCubeX。

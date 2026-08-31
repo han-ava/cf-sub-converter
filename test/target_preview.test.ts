@@ -85,31 +85,109 @@ describe('target-aware preview contract', () => {
     expect(output).toContain('type=kcp');
   });
 
-  test('warns instead of claiming a perfect Sing-box XHTTP mapping', async () => {
+  test('rejects XHTTP because Sing-box 1.13 has no XHTTP transport', async () => {
     const { response, json } = await preview(VLESS_XHTTP, 'singbox');
 
     expect(response.status).toBe(200);
     expect(json.resolvedTarget).toBe('singbox');
     expect(json.perfectCount).toBe(0);
-    expect(json.warningCount).toBe(1);
-    expect(json.finalCount).toBe(1);
+    expect(json.warningCount).toBe(0);
+    expect(json.fatalCount).toBe(1);
+    expect(json.finalCount).toBe(0);
     expect(json.nodes[0].conversion).toMatchObject({
       target: 'singbox',
-      status: 'warning',
-      emitted: true
+      status: 'fatal',
+      emitted: false,
+      unsupportedParams: ['transport.type']
+    });
+
+    const conversionResponse = await convert(VLESS_XHTTP, 'singbox');
+    expect(conversionResponse.status).toBe(422);
+    expect(await conversionResponse.json()).toMatchObject({
+      target: 'singbox',
+      totalMatched: 1,
+      fatalCount: 1,
+      unsupportedParams: ['transport.type']
     });
   });
 
-  test('filters unsupported SSR from Sing-box outbounds and selectors', async () => {
+  test('still returns a Sing-box config when at least one node is safely convertible', async () => {
+    const response = await convert(`${VLESS_XHTTP}\n${VLESS_GRPC}`, 'singbox');
+    expect(response.status).toBe(200);
+
+    const output = await response.json() as any;
+    expect(output.outbounds).toContainEqual(expect.objectContaining({ tag: 'VLESS gRPC' }));
+    expect(output.outbounds).not.toContainEqual(expect.objectContaining({ tag: 'VLESS XHTTP' }));
+  });
+
+  test('keeps same-endpoint native outbounds from separate configs isolated end to end', async () => {
+    const input = [
+      {
+        outbounds: [
+          {
+            type: 'http', tag: 'shared', server: '127.0.0.1', server_port: 18080,
+            username: 'alpha'
+          },
+          {
+            type: 'socks', tag: 'chain', server: '127.0.0.1', server_port: 11080,
+            detour: 'shared'
+          }
+        ]
+      },
+      {
+        outbounds: [
+          {
+            type: 'http', tag: 'shared', server: '127.0.0.1', server_port: 18080,
+            username: 'beta'
+          },
+          {
+            type: 'socks', tag: 'chain', server: '127.0.0.1', server_port: 11080,
+            detour: 'shared'
+          }
+        ]
+      }
+    ].map(config => btoa(JSON.stringify(config))).join('\n');
+
+    const { response, json } = await preview(input, 'singbox');
+    expect(response.status).toBe(200);
+    expect(json.totalRaw).toBe(4);
+    expect(json.totalMatched).toBe(4);
+    expect(json.finalCount).toBe(4);
+    expect(json.debug.processedNodes.map((node: any) => node.protocolData.username).filter(Boolean)).toEqual([
+      'alpha', 'beta'
+    ]);
+
+    const conversionResponse = await convert(input, 'singbox');
+    expect(conversionResponse.status).toBe(200);
+    const config = await conversionResponse.json() as any;
+    const nativeOutbounds = config.outbounds.filter((outbound: any) => (
+      outbound.type === 'http' || outbound.type === 'socks'
+    ));
+    expect(nativeOutbounds.map((outbound: any) => outbound.tag)).toEqual([
+      'shared', 'chain', 'shared 02', 'chain 02'
+    ]);
+    expect(nativeOutbounds.filter((outbound: any) => outbound.type === 'http').map((outbound: any) => (
+      outbound.username
+    ))).toEqual(['alpha', 'beta']);
+    expect(nativeOutbounds.filter((outbound: any) => outbound.type === 'socks').map((outbound: any) => (
+      outbound.detour
+    ))).toEqual(['shared', 'shared 02']);
+  });
+
+  test('rejects SSR because Sing-box removed the ShadowsocksR outbound', async () => {
     const { json } = await preview(SSR, 'singbox');
     expect(json.fatalCount).toBe(1);
     expect(json.finalCount).toBe(0);
 
     const response = await convert(SSR, 'singbox');
-    const output = await response.json() as any;
-    expect(output.outbounds.some((outbound: any) => outbound.tag === 'SSR_Node')).toBe(false);
-    const selectors = output.outbounds.filter((outbound: any) => Array.isArray(outbound.outbounds));
-    expect(selectors.every((outbound: any) => !outbound.outbounds.includes('SSR_Node'))).toBe(true);
+    expect(response.status).toBe(422);
+    expect(await response.json()).toMatchObject({
+      error: expect.stringContaining('没有节点可安全转换'),
+      target: 'singbox',
+      totalMatched: 1,
+      fatalCount: 1,
+      unsupportedParams: ['protocol']
+    });
   });
 
   test('reports the concrete fallback used for auto preview', async () => {
