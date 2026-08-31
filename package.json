@@ -19,6 +19,7 @@
     "@cloudflare/workers-types": "^4.20241127.0",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "26.4.0",
+    "acorn": "^8.18.0",
     "typescript": "^5.7.2",
     "wrangler": "^4.45.0"
   },
