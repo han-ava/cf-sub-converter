@@ -36,6 +36,25 @@ describe('Sing-box CLI validation', () => {
     }
   });
 
+  test('generated Apple client config with TUN passes the official syntax check', () => {
+    const workDir = mkdtempSync(join(tmpdir(), 'cf-sub-singbox-tun-check-'));
+    const configPath = join(workDir, 'config.json');
+
+    try {
+      writeFileSync(configPath, toSingBox([], undefined, { includeTun: true }), 'utf8');
+      const result = spawnSync(
+        singBoxBin,
+        ['check', '--disable-color', '-D', workDir, '-c', configPath],
+        { encoding: 'utf8' }
+      );
+
+      expect(result.stderr).toBe('');
+      expect(result.status).toBe(0);
+    } finally {
+      rmSync(workDir, { recursive: true, force: true });
+    }
+  });
+
   test('generated node tags cannot collide with built-in outbounds', () => {
     const workDir = mkdtempSync(join(tmpdir(), 'cf-sub-singbox-tags-'));
     const configPath = join(workDir, 'config.json');

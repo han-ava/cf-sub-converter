@@ -229,8 +229,13 @@ export function toClashMeta(
 /**
  * 转换为 Sing-Box 配置文件 (JSON)
  */
-export function toSingBox(nodes: NodeEnvelope[], customTemplateJson?: string): string {
+export function toSingBox(
+  nodes: NodeEnvelope[],
+  customTemplateJson?: string,
+  options: { includeTun?: boolean } = {}
+): string {
   let config: any = null;
+  let usesDefaultTemplate = false;
 
   if (customTemplateJson && customTemplateJson.trim()) {
     try {
@@ -240,6 +245,17 @@ export function toSingBox(nodes: NodeEnvelope[], customTemplateJson?: string): s
 
   if (!config || typeof config !== 'object') {
     config = JSON.parse(JSON.stringify(DEFAULT_SINGBOX_TEMPLATE));
+    usesDefaultTemplate = true;
+  }
+
+  if (usesDefaultTemplate && options.includeTun) {
+    config.inbounds.unshift({
+      type: 'tun',
+      tag: 'tun-in',
+      address: ['172.19.0.1/30', 'fdfe:dcba:9876::1/126'],
+      auto_route: true,
+      stack: 'system'
+    });
   }
 
   const allowedDomainResolvers = new Set<string>(

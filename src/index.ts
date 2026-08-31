@@ -39,9 +39,13 @@ function parseStoredShortTarget(value: string, origin: string): URL | null {
 function detectTargetFromUserAgent(userAgent: string): string {
   if (/Shadowrocket/i.test(userAgent)) return 'shadowrocket';
   if (/Clash|Mihomo|Stash/i.test(userAgent)) return 'clash';
-  if (/sing-box/i.test(userAgent)) return 'singbox';
+  if (isAppleSingBoxClient(userAgent) || /sing-box/i.test(userAgent)) return 'singbox';
   if (/Surge/i.test(userAgent)) return 'surge';
   return 'clash';
+}
+
+function isAppleSingBoxClient(userAgent: string): boolean {
+  return /\b(?:SFI|SFM|SFT)\//i.test(userAgent);
 }
 
 function resolveTarget(requestedTarget: unknown, detectedTarget: string): string {
@@ -993,7 +997,9 @@ export default {
             });
           }
 
-          const jsonOutput = toSingBox(processedNodes);
+          const jsonOutput = toSingBox(processedNodes, undefined, {
+            includeTun: isAppleSingBoxClient(clientUserAgent)
+          });
           responseHeaders['Content-Type'] = 'application/json; charset=utf-8';
           responseHeaders['Content-Disposition'] = formatContentDisposition(filename, 'json');
           return new Response(jsonOutput, { headers: responseHeaders });

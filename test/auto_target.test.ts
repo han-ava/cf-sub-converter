@@ -61,4 +61,40 @@ describe('automatic subscription target detection', () => {
     expect(response.headers.get('Content-Type')).toContain('application/json');
     expect(await response.text()).toContain('"outbounds"');
   });
+
+  test('SFI receives a TUN inbound while generic sing-box output stays proxy-only', async () => {
+    const sfiResponse = await worker.fetch(
+      createAutoRequest('SFI/1.12.2 (Build 2; language zh_CN)'),
+      ENV,
+      CTX
+    );
+    const sfiConfig = await sfiResponse.json() as any;
+
+    expect(sfiResponse.status).toBe(200);
+    expect(sfiConfig.inbounds).toEqual(expect.arrayContaining([
+      {
+        type: 'tun',
+        tag: 'tun-in',
+        address: ['172.19.0.1/30', 'fdfe:dcba:9876::1/126'],
+        auto_route: true,
+        stack: 'system'
+      },
+      {
+        type: 'mixed',
+        tag: 'mixed-in',
+        listen: '127.0.0.1',
+        listen_port: 2080
+      }
+    ]));
+
+    const genericResponse = await worker.fetch(
+      createAutoRequest('sing-box 1.13.21'),
+      ENV,
+      CTX
+    );
+    const genericConfig = await genericResponse.json() as any;
+
+    expect(genericConfig.inbounds.some((inbound: any) => inbound.type === 'tun')).toBe(false);
+    expect(genericConfig.inbounds.some((inbound: any) => inbound.type === 'mixed')).toBe(true);
+  });
 });
