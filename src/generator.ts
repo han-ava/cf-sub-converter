@@ -358,6 +358,339 @@ export function toSurge(nodes: NodeEnvelope[]): string {
 }
 
 /**
+ * 转换为可直接导入 Surge 的完整配置文件。
+ * 保留 toSurge() 作为仅含 [Proxy] 的可引用片段，避免破坏现有订阅。
+ */
+export function toSurgeConf(nodes: NodeEnvelope[]): string {
+  const emittedNodes = nodes.filter(node => adaptNodeToTarget(node, 'surge-conf').emitted);
+  const proxySection = toSurge(nodes);
+  const groupNodes = [...new Set([...emittedNodes.map(node => node.name), 'DIRECT'])].join(', ');
+
+  return [
+    '[General]',
+    'loglevel = notify',
+    'dns-server = system, 223.5.5.5, 119.29.29.29',
+    '',
+    proxySection,
+    '',
+    '[Proxy Group]',
+    `🚀 节点选择 = select, ${groupNodes}`,
+    '',
+    '[Rule]',
+    'DOMAIN,localhost,DIRECT',
+    'DOMAIN-SUFFIX,localhost,DIRECT',
+    'DOMAIN-SUFFIX,local,DIRECT',
+    'DOMAIN-SUFFIX,lan,DIRECT',
+    'DOMAIN-SUFFIX,localdomain,DIRECT',
+    'DOMAIN-SUFFIX,internal,DIRECT',
+    'DOMAIN-SUFFIX,home.arpa,DIRECT',
+    'IP-CIDR,0.0.0.0/8,DIRECT,no-resolve',
+    'IP-CIDR,10.0.0.0/8,DIRECT,no-resolve',
+    'IP-CIDR,100.64.0.0/10,DIRECT,no-resolve',
+    'IP-CIDR,127.0.0.0/8,DIRECT,no-resolve',
+    'IP-CIDR,169.254.0.0/16,DIRECT,no-resolve',
+    'IP-CIDR,172.16.0.0/12,DIRECT,no-resolve',
+    'IP-CIDR,192.168.0.0/16,DIRECT,no-resolve',
+    'IP-CIDR,198.18.0.0/15,DIRECT,no-resolve',
+    'IP-CIDR,224.0.0.0/3,DIRECT,no-resolve',
+    'IP-CIDR6,::1/128,DIRECT,no-resolve',
+    'IP-CIDR6,fc00::/7,DIRECT,no-resolve',
+    'IP-CIDR6,fe80::/10,DIRECT,no-resolve',
+    'IP-CIDR6,ff00::/8,DIRECT,no-resolve',
+    'RULE-SET,SYSTEM,DIRECT',
+    'RULE-SET,https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Surge/AdvertisingLite/AdvertisingLite.list,REJECT,update-interval=86400',
+    'DOMAIN-SUFFIX,cn,DIRECT',
+    'DOMAIN-SET,https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Surge/China/China_Domain.list,DIRECT,update-interval=86400',
+    'RULE-SET,https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Surge/China/China.list,DIRECT,update-interval=86400',
+    'GEOIP,CN,DIRECT',
+    'FINAL,🚀 节点选择,dns-failed'
+  ].join('\n');
+}
+
+function clientLineName(name: string): string {
+  return String(name || 'Proxy')
+    .replace(/[\r\n]+/g, ' ')
+    .replace(/,/g, '，')
+    .replace(/=/g, '-')
+    .trim() || 'Proxy';
+}
+
+function clientEndpoint(node: NodeEnvelope): string {
+  const host = node.server.includes(':') && !node.server.startsWith('[')
+    ? `[${node.server}]`
+    : node.server;
+  return `${host}:${node.port}`;
+}
+
+function cleanClientValue(value: unknown): string {
+  return String(value ?? '').replace(/[\r\n]+/g, ' ').trim();
+}
+
+function quantumultValue(value: unknown): string {
+  const cleaned = cleanClientValue(value);
+  return /[,\"]/.test(cleaned)
+    ? `"${cleaned.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`
+    : cleaned;
+}
+
+function loonValue(value: unknown): string {
+  return `"${cleanClientValue(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+}
+
+function nativeTransport(node: NodeEnvelope): { type: string; path: string; host: string } {
+  const p: any = node.protocolData || {};
+  const type = String(p.transport?.type || p.network || p.net || 'tcp').toLowerCase();
+  const path = cleanClientValue(
+    p.transport?.path
+    || p.path
+    || p['ws-opts']?.path
+    || (type === 'ws' || type === 'http' ? '/' : '')
+  );
+  const host = cleanClientValue(
+    p.transport?.headers?.Host
+    || p.transport?.headers?.host
+    || p.host
+    || p['ws-opts']?.headers?.Host
+    || ''
+  );
+  return { type, path, host };
+}
+
+function nativeTls(node: NodeEnvelope): boolean {
+  const protocol = (node.protocol || '').toLowerCase();
+  const p: any = node.protocolData || {};
+  if (protocol === 'trojan' || protocol === 'hysteria2' || protocol === 'hy2') return true;
+  if (protocol === 'vless') return p.security === 'tls' || p.security === 'reality' || !!p.realityOpts;
+  if (p.tls?.enabled !== undefined) return !!p.tls.enabled;
+  return p.tls === true || p.tls === 'tls' || p.tls === 'true' || p.tls === 1;
+}
+
+function simpleObfsOptions(protocolData: any): { name: string; host: string; uri: string } | null {
+  if (!protocolData.plugin) return null;
+  const options = protocolData.pluginOpts || {};
+  return {
+    name: cleanClientValue(options.obfs || options.mode || ''),
+    host: cleanClientValue(options['obfs-host'] || options.host || ''),
+    uri: cleanClientValue(options['obfs-uri'] || options.path || '')
+  };
+}
+
+/**
+ * Quantumult X server_remote 节点片段，不包含完整配置段。
+ */
+export function toQuantumultX(nodes: NodeEnvelope[]): string {
+  const lines: string[] = [];
+
+  for (const node of nodes) {
+    if (!adaptNodeToTarget(node, 'quantumult-x').emitted) continue;
+    const protocol = (node.protocol || '').toLowerCase();
+    const p: any = node.protocolData || {};
+    const endpoint = clientEndpoint(node);
+    const name = clientLineName(node.name);
+    const udp = node.udp === false ? 'false' : 'true';
+
+    if (protocol === 'ss' || protocol === 'shadowsocks') {
+      const parts = [
+        `shadowsocks=${endpoint}`,
+        `method=${quantumultValue(p.cipher || p.method)}`,
+        `password=${quantumultValue(p.password)}`
+      ];
+      const obfs = simpleObfsOptions(p);
+      if (obfs?.name) parts.push(`obfs=${quantumultValue(obfs.name)}`);
+      if (obfs?.host) parts.push(`obfs-host=${quantumultValue(obfs.host)}`);
+      if (obfs?.uri) parts.push(`obfs-uri=${quantumultValue(obfs.uri)}`);
+      parts.push('fast-open=false', `udp-relay=${udp}`, `tag=${quantumultValue(name)}`);
+      lines.push(parts.join(', '));
+      continue;
+    }
+
+    const transport = nativeTransport(node);
+    const tls = nativeTls(node);
+    const sni = cleanClientValue(p.sni || p.servername || p['server-name'] || node.server);
+    const tlsVerification = p.skipCertVerify || p.insecure ? 'false' : 'true';
+    const parts: string[] = [];
+
+    if (protocol === 'vmess') {
+      const cipher = ['auto', 'zero'].includes(String(p.cipher || p.security || '').toLowerCase())
+        ? 'none'
+        : (p.cipher || p.security || 'none');
+      parts.push(
+        `vmess=${endpoint}`,
+        `method=${quantumultValue(cipher)}`,
+        `password=${quantumultValue(p.uuid || p.id)}`
+      );
+    } else if (protocol === 'vless') {
+      parts.push(
+        `vless=${endpoint}`,
+        'method=none',
+        `password=${quantumultValue(p.uuid || p.id)}`
+      );
+    } else if (protocol === 'trojan') {
+      parts.push(`trojan=${endpoint}`, `password=${quantumultValue(p.password)}`);
+    }
+
+    if (transport.type === 'ws') {
+      parts.push(`obfs=${tls ? 'wss' : 'ws'}`);
+      const wsHost = transport.host || (tls ? sni : '');
+      if (wsHost) parts.push(`obfs-host=${quantumultValue(wsHost)}`);
+      if (transport.path) parts.push(`obfs-uri=${quantumultValue(transport.path)}`);
+      if (tls) parts.push(`tls-verification=${tlsVerification}`);
+    } else if (transport.type === 'http') {
+      parts.push('obfs=http');
+      if (transport.host) parts.push(`obfs-host=${quantumultValue(transport.host)}`);
+      if (transport.path) parts.push(`obfs-uri=${quantumultValue(transport.path)}`);
+    } else if (tls) {
+      if (protocol === 'trojan') {
+        parts.push('over-tls=true', `tls-host=${quantumultValue(sni)}`);
+      } else {
+        parts.push('obfs=over-tls', `obfs-host=${quantumultValue(sni)}`);
+      }
+      parts.push(`tls-verification=${tlsVerification}`);
+    }
+
+    if (p.realityOpts) {
+      parts.push(`reality-base64-pubkey=${quantumultValue(p.realityOpts.publicKey)}`);
+      if (p.realityOpts.shortId) {
+        parts.push(`reality-hex-shortid=${quantumultValue(p.realityOpts.shortId)}`);
+      }
+    }
+    if (protocol === 'vless' && p.flow) parts.push(`vless-flow=${quantumultValue(p.flow)}`);
+    parts.push('fast-open=false', `udp-relay=${udp}`, `tag=${quantumultValue(name)}`);
+    lines.push(parts.join(', '));
+  }
+
+  return lines.join('\n');
+}
+
+/**
+ * Loon nodelist 节点片段，不包含完整配置段。
+ */
+export function toLoon(nodes: NodeEnvelope[]): string {
+  const lines: string[] = [];
+
+  for (const node of nodes) {
+    if (!adaptNodeToTarget(node, 'loon').emitted) continue;
+    const protocol = (node.protocol || '').toLowerCase();
+    const p: any = node.protocolData || {};
+    const name = clientLineName(node.name);
+    const server = cleanClientValue(node.server);
+    const udp = node.udp === false ? 'false' : 'true';
+
+    if (protocol === 'ss' || protocol === 'shadowsocks') {
+      const parts = [
+        `${name} = Shadowsocks`,
+        server,
+        String(node.port),
+        cleanClientValue(p.cipher || p.method),
+        loonValue(p.password)
+      ];
+      const obfs = simpleObfsOptions(p);
+      if (obfs?.name) parts.push(`obfs-name=${cleanClientValue(obfs.name)}`);
+      if (obfs?.host) parts.push(`obfs-host=${cleanClientValue(obfs.host)}`);
+      if (obfs?.uri) parts.push(`obfs-uri=${cleanClientValue(obfs.uri)}`);
+      parts.push('fast-open=false', `udp=${udp}`);
+      lines.push(parts.join(','));
+      continue;
+    }
+
+    if (protocol === 'ssr' || protocol === 'shadowsocksr') {
+      const parts = [
+        `${name} = ShadowsocksR`,
+        server,
+        String(node.port),
+        cleanClientValue(p.cipher),
+        loonValue(p.password),
+        `protocol=${cleanClientValue(p.protocol || 'origin')}`
+      ];
+      if (p.protoParam) parts.push(`protocol-param=${cleanClientValue(p.protoParam)}`);
+      parts.push(`obfs=${cleanClientValue(p.obfs || 'plain')}`);
+      if (p.obfsParam) parts.push(`obfs-param=${cleanClientValue(p.obfsParam)}`);
+      parts.push('fast-open=false', `udp=${udp}`);
+      lines.push(parts.join(','));
+      continue;
+    }
+
+    if (protocol === 'hysteria2' || protocol === 'hy2') {
+      lines.push([
+        `${name} = Hysteria2`,
+        server,
+        String(node.port),
+        loonValue(p.password),
+        `skip-cert-verify=${p.skipCertVerify || p.insecure ? 'true' : 'false'}`,
+        `tls-name=${cleanClientValue(p.sni || node.server)}`,
+        `udp=${udp}`,
+        'fast-open=false'
+      ].join(','));
+      continue;
+    }
+
+    if (protocol === 'http' || protocol === 'https') {
+      const tls = protocol === 'https' || nativeTls(node);
+      const parts = [`${name} = ${tls ? 'https' : 'http'}`, server, String(node.port)];
+      if (p.username || p.password) parts.push(cleanClientValue(p.username), loonValue(p.password));
+      if (tls) {
+        parts.push(
+          `skip-cert-verify=${p.skipCertVerify || p.insecure ? 'true' : 'false'}`,
+          `tls-name=${cleanClientValue(p.sni || node.server)}`
+        );
+      }
+      lines.push(parts.join(','));
+      continue;
+    }
+
+    const transport = nativeTransport(node);
+    const tls = nativeTls(node);
+    const sni = cleanClientValue(p.sni || p.servername || p['server-name'] || node.server);
+    const host = transport.host;
+    const parts: string[] = [];
+
+    if (protocol === 'vmess') {
+      parts.push(
+        `${name} = vmess`,
+        server,
+        String(node.port),
+        cleanClientValue(p.cipher || p.security || 'auto'),
+        loonValue(p.uuid || p.id),
+        `transport=${transport.type}`,
+        `alterId=${Number(p.alterId ?? p.aid ?? 0)}`
+      );
+    } else if (protocol === 'vless') {
+      parts.push(
+        `${name} = VLESS`,
+        server,
+        String(node.port),
+        loonValue(p.uuid || p.id),
+        `transport=${transport.type}`
+      );
+    } else if (protocol === 'trojan') {
+      parts.push(
+        `${name} = trojan`,
+        server,
+        String(node.port),
+        loonValue(p.password)
+      );
+      if (transport.type !== 'tcp') parts.push(`transport=${transport.type}`);
+    }
+
+    if (transport.type !== 'tcp') {
+      if (transport.path) parts.push(`path=${transport.path}`);
+      if (host) parts.push(`host=${host}`);
+    }
+    if (protocol !== 'trojan') parts.push(`over-tls=${tls ? 'true' : 'false'}`);
+    if (tls) {
+      parts.push(
+        `skip-cert-verify=${p.skipCertVerify || p.insecure ? 'true' : 'false'}`,
+        `tls-name=${sni}`
+      );
+    }
+    parts.push(`udp=${udp}`);
+    lines.push(parts.join(','));
+  }
+
+  return lines.join('\n');
+}
+
+/**
  * 转换为 Shadowrocket 配置文件 (.conf)
  */
 export function toShadowrocketConf(nodes: NodeEnvelope[]): string {

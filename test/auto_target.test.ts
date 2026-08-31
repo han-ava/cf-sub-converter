@@ -21,6 +21,10 @@ describe('automatic subscription target detection', () => {
       { userAgent: 'Mihomo/1.19.0', contentType: 'text/yaml', marker: 'proxies:' },
       { userAgent: 'Clash Verge/2.4.0', contentType: 'text/yaml', marker: 'proxies:' },
       { userAgent: 'Stash/3.1.0', contentType: 'text/yaml', marker: 'proxies:' },
+      { userAgent: 'v2rayN/7.15.6', contentType: 'text/plain', marker: 'base64' },
+      { userAgent: 'v2rayNG/1.10.29', contentType: 'text/plain', marker: 'base64' },
+      { userAgent: 'Quantumult X/1.5.1', contentType: 'text/plain', marker: 'vless=' },
+      { userAgent: 'Loon/3.4.0', contentType: 'text/plain', marker: 'VLESS,' },
       { userAgent: 'sing-box 1.13.21', contentType: 'application/json', marker: '"outbounds"' },
       { userAgent: 'Surge/5.9.0', contentType: 'text/plain', marker: '[Proxy]' }
     ];

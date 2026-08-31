@@ -306,7 +306,7 @@ export interface NodeConversionInfo {
 
 export interface ConvertOptions {
   urls: string[];
-  target: 'clash' | 'singbox' | 'base64' | 'shadowrocket' | 'shadowrocket-conf' | 'surge' | 'raw';
+  target: 'clash' | 'singbox' | 'base64' | 'shadowrocket' | 'shadowrocket-conf' | 'surge' | 'surge-conf' | 'quantumult-x' | 'loon' | 'raw';
   includeRegex?: string;
   excludeRegex?: string;
   renameRules?: Array<{ search: string; replace: string }>;

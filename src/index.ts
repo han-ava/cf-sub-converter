@@ -2,7 +2,7 @@
 import packageJson from '../package.json';
 import { Env, ProxyNode, NodeEnvelope } from './types';
 import { parseContent } from './parser';
-import { toClashMeta, toSingBox, toSurge, toShadowrocketConf } from './generator';
+import { toClashMeta, toSingBox, toSurge, toSurgeConf, toShadowrocketConf, toQuantumultX, toLoon } from './generator';
 import { toRawLinks, toBase64 } from './adapters/raw';
 import { adaptNodeToTarget, normalizeTarget } from './adapters/target';
 import { adaptNodesToSingBox } from './adapters/singbox';
@@ -38,6 +38,9 @@ function parseStoredShortTarget(value: string, origin: string): URL | null {
 
 function detectTargetFromUserAgent(userAgent: string): string {
   if (/Shadowrocket/i.test(userAgent)) return 'shadowrocket';
+  if (/\bv2ray(?:NG|N)(?:[/\s(]|$)/i.test(userAgent)) return 'base64';
+  if (/Quantumult\s*X/i.test(userAgent)) return 'quantumult-x';
+  if (/\bLoon(?:[/\s(]|$)/i.test(userAgent)) return 'loon';
   if (/Clash|Mihomo|Stash/i.test(userAgent)) return 'clash';
   if (isGraphicalSingBoxClient(userAgent) || /sing-box/i.test(userAgent)) return 'singbox';
   if (/Surge/i.test(userAgent)) return 'surge';
@@ -1022,6 +1025,46 @@ export default {
           const surgeOutput = toSurge(processedNodes);
           responseHeaders['Content-Type'] = 'text/plain; charset=utf-8';
           return new Response(surgeOutput, { headers: responseHeaders });
+        }
+
+        if (target === 'surge-conf') {
+          const surgeOutput = toSurgeConf(processedNodes);
+          responseHeaders['Content-Type'] = 'text/plain; charset=utf-8';
+          responseHeaders['Content-Disposition'] = formatContentDisposition(filename, 'conf');
+          return new Response(surgeOutput, { headers: responseHeaders });
+        }
+
+        if (target === 'quantumult-x' || target === 'loon') {
+          const nativeOutput = target === 'quantumult-x'
+            ? toQuantumultX(processedNodes)
+            : toLoon(processedNodes);
+
+          if (processedNodes.length > 0 && !nativeOutput.trim()) {
+            const adaptationResults = processedNodes.map(node => adaptNodeToTarget(node, target));
+            const reasons = Array.from(new Set(
+              adaptationResults.flatMap(result => result.skipReason ? [result.skipReason] : [])
+            ));
+            const unsupportedParams = Array.from(new Set(
+              adaptationResults.flatMap(result => result.unsupportedParams)
+            ));
+            return new Response(JSON.stringify({
+              error: `没有节点可安全转换为 ${target} 节点订阅`,
+              target,
+              totalMatched: processedNodes.length,
+              fatalCount: adaptationResults.filter(result => result.fatal).length,
+              reasons,
+              unsupportedParams
+            }), {
+              status: 422,
+              headers: {
+                ...responseHeaders,
+                'Content-Type': 'application/json; charset=utf-8'
+              }
+            });
+          }
+
+          responseHeaders['Content-Type'] = 'text/plain; charset=utf-8';
+          return new Response(nativeOutput, { headers: responseHeaders });
         }
 
         if (target === 'raw') {

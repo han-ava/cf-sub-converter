@@ -13,6 +13,8 @@ const VLESS_XHTTP =
   'vless://b831381d-6324-4d53-ad4f-8cda48b30811@1.2.3.4:443?type=xhttp&security=tls&sni=example.com&path=%2Fxhttp#VLESS%20XHTTP';
 const SSR =
   'ssr://' + Buffer.from('1.2.3.4:8388:origin:aes-128-cfb:plain:bXlwYXNz/?remarks=U1NSX05vZGU').toString('base64');
+const SHADOWSOCKS =
+  'ss://' + Buffer.from('chacha20-ietf-poly1305:secret').toString('base64') + '@1.1.1.1:8388#Surge%20SS';
 
 async function preview(node: string, target: string, userAgent = 'Browser/1.0') {
   const response = await worker.fetch(
@@ -63,6 +65,24 @@ describe('target-aware preview contract', () => {
     const output = await (await convert(VLESS_GRPC, 'surge')).text();
     expect(output.trim()).toBe('[Proxy]');
     expect(output).not.toContain('VLESS gRPC');
+  });
+
+  test('keeps the Surge proxy list compatible and exposes a separate full config target', async () => {
+    const listResponse = await convert(SHADOWSOCKS, 'surge');
+    const listOutput = await listResponse.text();
+    expect(listOutput).toStartWith('[Proxy]\n');
+    expect(listOutput).not.toContain('[General]');
+    expect(listOutput).not.toContain('[Rule]');
+
+    const confResponse = await convert(SHADOWSOCKS, 'surge-conf');
+    const confOutput = await confResponse.text();
+    expect(confResponse.status).toBe(200);
+    expect(confResponse.headers.get('Content-Disposition')).toContain('SubConverter.conf');
+    expect(confOutput).toContain('[General]\n');
+    expect(confOutput).toContain('[Proxy]\nSurge SS = ss,');
+    expect(confOutput).toContain('[Proxy Group]\n🚀 节点选择 = select, Surge SS, DIRECT');
+    expect(confOutput).toContain('[Rule]\n');
+    expect(confOutput).toContain('FINAL,🚀 节点选择,dns-failed');
   });
 
   test('preserves a KCP URI for Raw even though Mihomo rejects it', async () => {
@@ -215,6 +235,17 @@ describe('target-aware preview contract', () => {
     const onTargetChange = html.match(/function onTargetChange\(\)[\s\S]*?function resetForm\(\)/)?.[0] || '';
 
     expect(html).toContain("target: document.getElementById('targetClient').value");
+    expect(html).toContain('<option value="surge-conf">Surge (.conf 完整分流配置)</option>');
+    expect(html).toContain("target === 'surge-conf'");
+    expect(html).toContain('复制 Surge Proxy 列表链接');
+    expect(html).toContain('导入 Surge 完整配置');
+    expect(html).toContain('<option value="quantumult-x">Quantumult X (节点订阅)</option>');
+    expect(html).toContain('<option value="loon">Loon (节点订阅)</option>');
+    expect(html).toContain('quantumult-x:///add-resource?remote-resource=');
+    expect(html).toContain('server_remote: [url + \'');
+    expect(html).toContain('loon://import?nodelist=');
+    expect(html).toContain('导入 Quantumult X 节点订阅');
+    expect(html).toContain('导入 Loon 节点订阅');
     expect(onTargetChange).toContain('inspectNodes(false)');
     expect(html).toContain('const requestId = ++latestInspectRequestId');
     expect(html).toContain('requestId !== latestInspectRequestId');

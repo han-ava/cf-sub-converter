@@ -88,7 +88,7 @@ https://your-worker.workers.dev/sub?url=https://airport.com/sub?token=xxx&target
 | :--- | :--- | :--- | :--- | :--- |
 | `url` | string | **是** | - | 原始机场订阅链接，或节点链接。支持 `\|` 或换行拼接多个订阅源 |
 | `token` | string | **是** | - | 访问鉴权 Token（需与 Worker 的 `AUTH_TOKEN` Secret 一致，亦支持 `Authorization: Bearer <token>` 请求头） |
-| `target` | string | 否 | `auto` | 目标格式：`auto` 会根据客户端 User-Agent 自动识别 Shadowrocket、Clash/Mihomo/Stash、Sing-box 或 Surge（未识别时返回 Clash Meta）；也可显式指定 `clash`, `singbox`, `shadowrocket`, `shadowrocket-conf`, `surge`, `base64`, `raw` |
+| `target` | string | 否 | `auto` | 目标格式：`auto` 会根据客户端 User-Agent 自动识别 Shadowrocket、v2rayN/v2rayNG、Quantumult X、Loon、Clash/Mihomo/Stash、Sing-box 或 Surge（未识别时返回 Clash Meta）；也可显式指定 `clash`, `singbox`, `shadowrocket`, `shadowrocket-conf`, `surge`, `surge-conf`, `quantumult-x`, `loon`, `base64`, `raw` |
 | `preset` | string | 否 | `standard` | 仅用于 Clash 的规则预设：`standard` (标准全能), `ai` (增强 AI/OpenAI 分流), `media` (增强流媒体分流), `minimal` (不使用远程 rule-provider，仅内联本地/局域网与 `.cn`，其余国内匹配依赖客户端内置 GeoSite/GeoIP) |
 | `test_url` | string | 否 | `https://cp.cloudflare.com/generate_204` | 自动选择/延迟测速使用的 URL |
 | `include` | string | 否 | - | 包含节点正则过滤，例如 `香港\|日本\|US` |
@@ -218,9 +218,13 @@ https://your-worker.workers.dev/sub?url=https://airport.com/sub?token=xxx&target
 - **Clash 系列**：Clash Verge Rev、Clash Nyanpasu、Mihomo Party、Clash Meta for Android、ClashX.Meta，以及支持 MRS 的 Stash 3.1+
 - **Sing-Box**：面向最新稳定版 v1.13.21 的 JSON 配置，国内域名/IP 与广告规则集由客户端定期更新
 - **SFI / SFM / SFT / SFA / SFW / SFL**：官方 Apple、Android、Windows 与 Linux 图形客户端的订阅请求会按 User-Agent 自动加入 TUN 入站以接管系统流量，同时保留 mixed 本地代理入口；普通 Sing-box CLI 输出不强制启用 TUN
-- **Shadowrocket (小火箭)**：支持一键 URL Scheme 导入 (`shadowrocket://add/sub://...`) 或带完整分流的 `.conf` 配置文件
-- **Surge**：输出 Surge iOS / Mac 可引用的 `[Proxy]` 列表，不包含规则段
-- **通用客户端**：Quantumult X、Loon、v2rayN、v2rayNG、sing-box 等
+- **Shadowrocket (小火箭)**：`shadowrocket` 输出标准节点订阅，`shadowrocket-conf` 输出带完整分流的 `.conf` 配置；两者在页面中使用不同入口说明
+- **Surge**：`surge` 保留为可被现有配置引用的 `[Proxy]` 列表，`surge-conf` 输出可直接安装的完整配置
+- **v2rayN / v2rayNG**：`auto` 按客户端 User-Agent 返回 Base64 协议 URI 订阅
+- **Quantumult X**：`quantumult-x` 输出官方 `server_remote` 可加载的原生节点行；`auto` 会识别客户端 User-Agent，页面通过 `add-resource` 添加远程节点资源
+- **Loon**：`loon` 输出官方原生节点行；`auto` 会识别客户端 User-Agent，页面通过 `nodelist` 导入节点订阅
+
+Quantumult X 与 Loon 当前提供的是节点订阅，不包含策略组和分流规则。转换器只输出各客户端官方语法能够明确表达的协议与传输组合；若全部节点均不兼容，`/sub` 返回 HTTP 422，避免导入空订阅。Quantumult X 的 WSS `obfs-host` 同时用于 TLS SNI 与 WebSocket Host，因此两者不同的节点不会被有损合并；Loon 当前不输出官方节点文档未声明的 Reality 参数。
 
 ### 分流顺序与规则来源
 
@@ -229,6 +233,7 @@ https://your-worker.workers.dev/sub?url=https://airport.com/sub?token=xxx&target
 - **Mihomo / Clash Meta / Stash**：国内域名、国内 IP、私网与广告核心规则使用 [MetaCubeX/meta-rules-dat](https://github.com/MetaCubeX/meta-rules-dat) `meta` 分支的 MRS，由客户端每 24 小时检查更新。
 - **Sing-box v1.13.21**：使用同一仓库 `sing` 分支的 SRS，确保与 Mihomo 的核心分类一致。
 - **Shadowrocket**：继续使用 [blackmatrix7/ios_rule_script](https://github.com/blackmatrix7/ios_rule_script) 的 Shadowrocket 专用中国域名/IP规则，避免跨客户端规则语法差异。
+- **Surge 完整配置**：使用同一仓库的 Surge 专用广告与中国域名/IP规则，并保留内联的本地/局域网直连规则；`surge` Proxy 列表本身不包含分流。
 
 规则集下载发生在客户端加载或更新配置时，Worker 转换请求本身不会抓取这些仓库。`minimal` 是例外：它不声明远程规则集，因此不会使用 MetaCubeX。
 

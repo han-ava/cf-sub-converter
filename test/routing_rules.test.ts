@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import yaml from 'js-yaml';
-import { toClashMeta, toShadowrocketConf, toSingBox } from '../src/generator';
+import { toClashMeta, toShadowrocketConf, toSingBox, toSurgeConf } from '../src/generator';
 
 function indexOfRule(rules: string[], prefix: string): number {
   return rules.findIndex(rule => rule.startsWith(prefix));
@@ -210,5 +210,37 @@ describe('generated routing rules', () => {
     expect(ruleSection.at(-1)).toBe('FINAL,🚀 节点选择');
     expect(config).toContain('🚀 节点选择 = select, DIRECT');
     expect(config).not.toContain('🚀 节点选择 = select, DIRECT, DIRECT');
+  });
+
+  test('Surge full config sends local/LAN and China rules direct before proxy fallback', () => {
+    const config = toSurgeConf([]);
+    const ruleSection = config.split('[Rule]\n')[1]!.trim().split('\n');
+
+    expect(config).toContain('[General]\n');
+    expect(config).toContain('[Proxy]\n');
+    expect(config).toContain('[Proxy Group]\n🚀 节点选择 = select, DIRECT');
+    expect(ruleSection.slice(0, 4)).toEqual([
+      'DOMAIN,localhost,DIRECT',
+      'DOMAIN-SUFFIX,localhost,DIRECT',
+      'DOMAIN-SUFFIX,local,DIRECT',
+      'DOMAIN-SUFFIX,lan,DIRECT'
+    ]);
+    expect(ruleSection).toEqual(expect.arrayContaining([
+      'RULE-SET,SYSTEM,DIRECT',
+      'IP-CIDR,10.0.0.0/8,DIRECT,no-resolve',
+      'IP-CIDR,172.16.0.0/12,DIRECT,no-resolve',
+      'IP-CIDR,192.168.0.0/16,DIRECT,no-resolve',
+      'IP-CIDR6,fc00::/7,DIRECT,no-resolve',
+      'DOMAIN-SUFFIX,cn,DIRECT',
+      'GEOIP,CN,DIRECT'
+    ]));
+
+    const advertising = indexOfRule(ruleSection, 'RULE-SET,https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Surge/AdvertisingLite/AdvertisingLite.list,REJECT');
+    const chinaDomains = indexOfRule(ruleSection, 'DOMAIN-SET,https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Surge/China/China_Domain.list,DIRECT');
+    const chinaRules = indexOfRule(ruleSection, 'RULE-SET,https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Surge/China/China.list,DIRECT');
+    expect(advertising).toBeGreaterThan(-1);
+    expect(chinaDomains).toBeGreaterThan(advertising);
+    expect(chinaRules).toBeGreaterThan(chinaDomains);
+    expect(ruleSection.at(-1)).toBe('FINAL,🚀 节点选择,dns-failed');
   });
 });

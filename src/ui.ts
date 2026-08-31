@@ -1233,6 +1233,9 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
             <option value="shadowrocket-conf">Shadowrocket (.conf 规则配置)</option>
             <option value="raw">Raw Links (明文列表)</option>
             <option value="surge">Surge (Proxy 列表)</option>
+            <option value="surge-conf">Surge (.conf 完整分流配置)</option>
+            <option value="quantumult-x">Quantumult X (节点订阅)</option>
+            <option value="loon">Loon (节点订阅)</option>
           </select>
         </div>
 
@@ -1601,7 +1604,10 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
         base64: 'Base64',
         'shadowrocket-conf': 'Shadowrocket Conf',
         raw: 'Raw Links',
-        surge: 'Surge'
+        surge: 'Surge Proxy List',
+        'surge-conf': 'Surge Conf',
+        'quantumult-x': 'Quantumult X',
+        loon: 'Loon'
       };
       return labels[target] || String(target || 'Unknown');
     }
@@ -1671,12 +1677,20 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
         btnImport.innerHTML = '<svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg><span>复制自动订阅链接</span>';
       } else if (target === 'clash') {
         btnImport.innerHTML = '<svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg><span>导入 Clash</span>';
-      } else if (target === 'shadowrocket' || target === 'shadowrocket-conf') {
-        btnImport.innerHTML = '<svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg><span>导入小火箭</span>';
+      } else if (target === 'shadowrocket') {
+        btnImport.innerHTML = '<svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg><span>导入小火箭节点订阅</span>';
+      } else if (target === 'shadowrocket-conf') {
+        btnImport.innerHTML = '<svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg><span>导入小火箭完整配置</span>';
       } else if (target === 'singbox') {
         btnImport.innerHTML = '<svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg><span>导入 Sing-Box</span>';
       } else if (target === 'surge') {
-        btnImport.innerHTML = '<svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg><span>导入 Surge</span>';
+        btnImport.innerHTML = '<svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg><span>复制 Surge Proxy 列表链接</span>';
+      } else if (target === 'surge-conf') {
+        btnImport.innerHTML = '<svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg><span>导入 Surge 完整配置</span>';
+      } else if (target === 'quantumult-x') {
+        btnImport.innerHTML = '<svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg><span>导入 Quantumult X 节点订阅</span>';
+      } else if (target === 'loon') {
+        btnImport.innerHTML = '<svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg><span>导入 Loon 节点订阅</span>';
       } else {
         btnImport.innerHTML = '<svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg><span>一键导入</span>';
       }
@@ -2245,8 +2259,17 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
         }
       } else if (target === 'singbox') {
         window.location.href = \`sing-box://import-remote-profile?url=\${encodeURIComponent(url)}#SubConverter\`;
-      } else if (target === 'surge') {
+      } else if (target === 'surge-conf') {
         window.location.href = \`surge3:///install-config?url=\${encodeURIComponent(url)}\`;
+      } else if (target === 'surge') {
+        copyLink();
+      } else if (target === 'quantumult-x') {
+        const remoteResource = encodeURIComponent(JSON.stringify({
+          server_remote: [url + ', tag=SubConverter']
+        }));
+        window.location.href = 'quantumult-x:///add-resource?remote-resource=' + remoteResource;
+      } else if (target === 'loon') {
+        window.location.href = 'loon://import?nodelist=' + encodeURIComponent(url);
       } else {
         copyLink();
       }

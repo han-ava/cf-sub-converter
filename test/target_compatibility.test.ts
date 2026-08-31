@@ -22,13 +22,20 @@ describe('target-aware compatibility adapter', () => {
       'base64',
       'shadowrocket-conf',
       'raw',
-      'surge'
+      'surge',
+      'surge-conf',
+      'quantumult-x',
+      'loon'
     ]);
     expect(normalizeTarget('clash')).toBe('mihomo');
     expect(normalizeTarget(' META ')).toBe('mihomo');
     expect(normalizeTarget('sing-box')).toBe('singbox');
     expect(normalizeTarget('rocket')).toBe('shadowrocket');
     expect(normalizeTarget('surge')).toBe('surge');
+    expect(normalizeTarget('surge-conf')).toBe('surge-conf');
+    expect(normalizeTarget('quantumultx')).toBe('quantumult-x');
+    expect(normalizeTarget('qx')).toBe('quantumult-x');
+    expect(normalizeTarget('loon')).toBe('loon');
   });
 
   test('leaves auto to the caller and rejects unknown values', () => {
@@ -90,7 +97,10 @@ describe('target-aware compatibility adapter', () => {
       base64: true,
       'shadowrocket-conf': false,
       raw: true,
-      surge: false
+      surge: false,
+      'surge-conf': false,
+      'quantumult-x': false,
+      loon: true
     };
 
     for (const target of CANONICAL_TARGETS) {

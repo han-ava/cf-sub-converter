@@ -10,7 +10,10 @@ export const CANONICAL_TARGETS = [
   'base64',
   'shadowrocket-conf',
   'raw',
-  'surge'
+  'surge',
+  'surge-conf',
+  'quantumult-x',
+  'loon'
 ] as const;
 
 export type CanonicalTarget = typeof CANONICAL_TARGETS[number];
@@ -26,7 +29,12 @@ const TARGET_ALIASES: Record<string, CanonicalTarget> = {
   base64: 'base64',
   'shadowrocket-conf': 'shadowrocket-conf',
   raw: 'raw',
-  surge: 'surge'
+  surge: 'surge',
+  'surge-conf': 'surge-conf',
+  'quantumult-x': 'quantumult-x',
+  quantumultx: 'quantumult-x',
+  qx: 'quantumult-x',
+  loon: 'loon'
 };
 
 const SURGE_PROTOCOLS = new Set(['ss', 'shadowsocks', 'trojan', 'vmess']);
@@ -40,6 +48,20 @@ const SHADOWROCKET_CONF_PROTOCOLS = new Set([
   'hy2',
   'anytls',
   'tuic'
+]);
+const QUANTUMULT_X_PROTOCOLS = new Set(['ss', 'shadowsocks', 'vmess', 'vless', 'trojan']);
+const LOON_PROTOCOLS = new Set([
+  'ss',
+  'shadowsocks',
+  'ssr',
+  'shadowsocksr',
+  'vmess',
+  'vless',
+  'trojan',
+  'http',
+  'https',
+  'hysteria2',
+  'hy2'
 ]);
 
 export function normalizeTarget(value: unknown): CanonicalTarget | null {
@@ -68,6 +90,12 @@ function fatalResult(message: string): AdapterResult {
     unsupportedParams: [],
     skipReason: message
   };
+}
+
+function unsupportedResult(message: string, ...unsupportedParams: string[]): AdapterResult {
+  const result = fatalResult(message);
+  result.unsupportedParams = unsupportedParams;
+  return result;
 }
 
 function perfectResult(): AdapterResult {
@@ -114,7 +142,7 @@ function adaptToRawLinkTarget(node: NodeEnvelope, target: CanonicalTarget): Adap
 
 function adaptToGeneratedTarget(
   node: NodeEnvelope,
-  target: 'surge' | 'shadowrocket-conf',
+  target: 'surge' | 'surge-conf' | 'shadowrocket-conf',
   supportedProtocols: Set<string>
 ): AdapterResult {
   const protocol = (node.protocol || '').toLowerCase();
@@ -130,6 +158,111 @@ function adaptToGeneratedTarget(
   );
 }
 
+function transportType(node: NodeEnvelope): string {
+  const p: any = node.protocolData || {};
+  return String(p.transport?.type || p.network || p.net || 'tcp').toLowerCase();
+}
+
+function usesTls(node: NodeEnvelope): boolean {
+  const protocol = (node.protocol || '').toLowerCase();
+  const p: any = node.protocolData || {};
+  if (protocol === 'trojan' || protocol === 'hysteria2' || protocol === 'hy2') return true;
+  if (protocol === 'vless') return p.security === 'tls' || p.security === 'reality' || !!p.realityOpts;
+  if (p.tls?.enabled !== undefined) return !!p.tls.enabled;
+  return p.tls === true || p.tls === 'tls' || p.tls === 'true' || p.tls === 1;
+}
+
+function transportHost(node: NodeEnvelope): string {
+  const p: any = node.protocolData || {};
+  return String(
+    p.transport?.headers?.Host
+    || p.transport?.headers?.host
+    || p.host
+    || p['ws-opts']?.headers?.Host
+    || ''
+  );
+}
+
+function adaptToNativeClientTarget(
+  node: NodeEnvelope,
+  target: 'quantumult-x' | 'loon',
+  supportedProtocols: Set<string>
+): AdapterResult {
+  const protocol = (node.protocol || '').toLowerCase();
+  const p: any = node.protocolData || {};
+  if (!supportedProtocols.has(protocol)) {
+    return fatalResult(
+      `目标 ${target} 的生成器不支持节点 [${node.name}] 的协议 [${protocol || 'unknown'}]`
+    );
+  }
+
+  if ((protocol === 'ss' || protocol === 'shadowsocks') && p.plugin) {
+    const plugin = String(p.plugin).toLowerCase();
+    if (!['obfs-local', 'simple-obfs'].includes(plugin)) {
+      return unsupportedResult(
+        `目标 ${target} 无法等价转换节点 [${node.name}] 的 Shadowsocks 插件 [${p.plugin}]`,
+        'plugin'
+      );
+    }
+  }
+
+  if (protocol === 'vmess' || protocol === 'vless' || protocol === 'trojan') {
+    const transport = transportType(node);
+    const allowedTransports = target === 'quantumult-x'
+      ? new Set(['tcp', 'ws', 'http'])
+      : new Set(['tcp', 'ws', 'http']);
+    if (!allowedTransports.has(transport)) {
+      return unsupportedResult(
+        `目标 ${target} 不支持节点 [${node.name}] 的传输层 [${transport}]`,
+        'transport.type'
+      );
+    }
+
+    if (target === 'quantumult-x' && transport === 'http' && usesTls(node)) {
+      return unsupportedResult(
+        `Quantumult X 原生节点行无法同时表达节点 [${node.name}] 的 HTTP 传输与 TLS`,
+        'transport.type',
+        'tls'
+      );
+    }
+
+    if (target === 'loon' && (p.security === 'reality' || p.realityOpts)) {
+      return unsupportedResult(
+        `Loon 官方节点格式未声明节点 [${node.name}] 的 Reality 参数`,
+        'reality'
+      );
+    }
+
+    if (target === 'quantumult-x' && transport === 'ws' && usesTls(node)) {
+      const host = transportHost(node);
+      const sni = String(p.sni || p.servername || p['server-name'] || node.server);
+      if (host && sni && host.toLowerCase() !== sni.toLowerCase()) {
+        return unsupportedResult(
+          `Quantumult X 的 WSS obfs-host 同时用于 SNI 与 Host，无法无损表达节点 [${node.name}] 的不同取值`,
+          'transport.headers.Host',
+          'sni'
+        );
+      }
+    }
+  }
+
+  if ((protocol === 'hysteria2' || protocol === 'hy2') && target === 'loon') {
+    const unsupported = ['obfs', 'ports', 'hopInterval', 'certificateFingerprint']
+      .filter(field => p[field] !== undefined && p[field] !== null && p[field] !== '');
+    if (unsupported.length > 0) {
+      return unsupportedResult(
+        `Loon 官方节点格式未声明节点 [${node.name}] 的 Hysteria2 参数: ${unsupported.join(', ')}`,
+        ...unsupported
+      );
+    }
+  }
+
+  return warningResult(
+    `节点 [${node.name}] 将由 ${target} 原生节点生成器重建；已验证协议与关键传输参数`,
+    'target-parameter-mapping'
+  );
+}
+
 export function adaptNodeToTarget(node: NodeEnvelope, target: CanonicalTarget): AdapterResult {
   switch (target) {
     case 'mihomo':
@@ -141,8 +274,13 @@ export function adaptNodeToTarget(node: NodeEnvelope, target: CanonicalTarget): 
     case 'singbox':
       return adaptNodeToSingBox(node);
     case 'surge':
+    case 'surge-conf':
       return adaptToGeneratedTarget(node, target, SURGE_PROTOCOLS);
     case 'shadowrocket-conf':
       return adaptToGeneratedTarget(node, target, SHADOWROCKET_CONF_PROTOCOLS);
+    case 'quantumult-x':
+      return adaptToNativeClientTarget(node, target, QUANTUMULT_X_PROTOCOLS);
+    case 'loon':
+      return adaptToNativeClientTarget(node, target, LOON_PROTOCOLS);
   }
 }
