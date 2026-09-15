@@ -21,7 +21,7 @@
     "@types/node": "26.4.0",
     "acorn": "^8.18.0",
     "typescript": "^5.7.2",
-    "wrangler": "^4.45.0"
+    "wrangler": "^4.131.2"
   },
   "keywords": [
     "cloudflare-workers",
