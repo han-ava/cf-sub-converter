@@ -25,13 +25,13 @@ describe('generated routing rules', () => {
     const providers = config['rule-providers'] as Record<string, any>;
 
     expect(rules.slice(0, 7)).toEqual([
-      'DOMAIN,localhost,🎯 全球直连',
-      'DOMAIN-SUFFIX,localhost,🎯 全球直连',
-      'DOMAIN-SUFFIX,local,🎯 全球直连',
-      'DOMAIN-SUFFIX,lan,🎯 全球直连',
-      'DOMAIN-SUFFIX,localdomain,🎯 全球直连',
-      'DOMAIN-SUFFIX,internal,🎯 全球直连',
-      'DOMAIN-SUFFIX,home.arpa,🎯 全球直连'
+      'DOMAIN,localhost,DIRECT',
+      'DOMAIN-SUFFIX,localhost,DIRECT',
+      'DOMAIN-SUFFIX,local,DIRECT',
+      'DOMAIN-SUFFIX,lan,DIRECT',
+      'DOMAIN-SUFFIX,localdomain,DIRECT',
+      'DOMAIN-SUFFIX,internal,DIRECT',
+      'DOMAIN-SUFFIX,home.arpa,DIRECT'
     ]);
     expect(indexOfRule(rules, 'IP-CIDR,10.0.0.0/8,')).toBeLessThan(indexOfRule(rules, 'RULE-SET,reject,'));
     expect(indexOfRule(rules, 'IP-CIDR6,fc00::/7,')).toBeLessThan(indexOfRule(rules, 'RULE-SET,reject,'));
@@ -108,19 +108,19 @@ describe('generated routing rules', () => {
 
     expect(config['rule-providers']).toBeUndefined();
     expect(rules).toEqual(expect.arrayContaining([
-      'DOMAIN,localhost,🎯 全球直连',
-      'DOMAIN-SUFFIX,local,🎯 全球直连',
-      'DOMAIN-SUFFIX,lan,🎯 全球直连',
-      'IP-CIDR,10.0.0.0/8,🎯 全球直连,no-resolve',
-      'IP-CIDR,172.16.0.0/12,🎯 全球直连,no-resolve',
-      'IP-CIDR,192.168.0.0/16,🎯 全球直连,no-resolve',
-      'IP-CIDR,198.18.0.0/15,🎯 全球直连,no-resolve',
-      'IP-CIDR,224.0.0.0/3,🎯 全球直连,no-resolve',
-      'IP-CIDR6,fc00::/7,🎯 全球直连,no-resolve',
-      'IP-CIDR6,ff00::/8,🎯 全球直连,no-resolve',
-      'DOMAIN-SUFFIX,cn,🎯 全球直连',
-      'GEOSITE,CN,🎯 全球直连',
-      'GEOIP,CN,🎯 全球直连'
+      'DOMAIN,localhost,DIRECT',
+      'DOMAIN-SUFFIX,local,DIRECT',
+      'DOMAIN-SUFFIX,lan,DIRECT',
+      'IP-CIDR,10.0.0.0/8,DIRECT,no-resolve',
+      'IP-CIDR,172.16.0.0/12,DIRECT,no-resolve',
+      'IP-CIDR,192.168.0.0/16,DIRECT,no-resolve',
+      'IP-CIDR,198.18.0.0/15,DIRECT,no-resolve',
+      'IP-CIDR,224.0.0.0/3,DIRECT,no-resolve',
+      'IP-CIDR6,fc00::/7,DIRECT,no-resolve',
+      'IP-CIDR6,ff00::/8,DIRECT,no-resolve',
+      'DOMAIN-SUFFIX,cn,DIRECT',
+      'GEOSITE,CN,DIRECT',
+      'GEOIP,CN,DIRECT'
     ]));
     expect(rules.at(-1)).toBe('MATCH,🚀 节点选择');
   });

@@ -132,14 +132,14 @@ describe('Area Grouping and Multi-Preset Combinations', () => {
     const config: any = yaml.load(configYaml);
     const groupNames = config['proxy-groups'].map((g: any) => g.name);
 
-    // 仅包含基础组 + 大区组，完全没有任何单一国家分组
+    // 仅包含基础组 + 大区组，完全没有任何单一国家分组（全球直连已移除，国内流量直接走内核 DIRECT）
     expect(groupNames).toContain('🚀 节点选择');
     expect(groupNames).toContain('⚡ 自动选择');
     expect(groupNames).toContain('🌏 亚太节点');
     expect(groupNames).toContain('🌎 美洲节点');
     expect(groupNames).toContain('🌍 欧洲节点');
     expect(groupNames).toContain('🌐 其他地区');
-    expect(groupNames).toContain('🎯 全球直连');
+    expect(groupNames).not.toContain('🎯 全球直连');
     expect(groupNames).toContain('🛑 全球拦截');
     expect(groupNames).toContain('🐟 漏网之鱼');
 
@@ -147,8 +147,8 @@ describe('Area Grouping and Multi-Preset Combinations', () => {
     expect(groupNames).not.toContain('🇯🇵 日本节点');
     expect(groupNames).not.toContain('🇺🇸 美国节点');
 
-    // 总共仅 9 个策略组
-    expect(config['proxy-groups'].length).toBe(9);
+    // 总共仅 8 个策略组
+    expect(config['proxy-groups'].length).toBe(8);
   });
 
   test('Multi-preset combination: preset="ai,media" injects both AI and Media groups and rules', () => {
