@@ -66,6 +66,9 @@ export function toClashMeta(
   const isMinimal = presetSet.has('minimal');
   const enableAi = presetSet.has('ai');
   const enableMedia = presetSet.has('media');
+  const enableTelegram = presetSet.has('telegram') || presetSet.has('tg');
+  const enableDev = presetSet.has('dev') || presetSet.has('github');
+  const enableGame = presetSet.has('game') || presetSet.has('gaming');
 
   // 地区节点分组 (根据 groupType 分组策略生成对应 url-test 自动测速组)
   const countryNodeMap: Record<string, string[]> = {};
@@ -73,7 +76,46 @@ export function toClashMeta(
   const regionalGroups: any[] = [];
   const regionalGroupNames: string[] = [];
 
+  // 识别高价值特色节点 (专线 IPLC / Hysteria 2 极速)
+  const iplcProxies = proxies
+    .filter(p => /(?:专线|iplc|iepl|专载|bgp专)/i.test(p.name))
+    .map(p => p.name);
+  const hy2Proxies = proxies
+    .filter(p => p.type === 'hysteria2' || /(?:hy2|hysteria)/i.test(p.name))
+    .map(p => p.name);
+
+  const featureGroups: any[] = [];
+  const featureGroupNames: string[] = [];
+
   if (!isMinimal) {
+    if (iplcProxies.length >= 2) {
+      const name = '✈️ 专线专区';
+      featureGroupNames.push(name);
+      featureGroups.push({
+        name,
+        type: 'url-test',
+        url: testUrl,
+        interval: 300,
+        tolerance: 50,
+        lazy: true,
+        proxies: iplcProxies
+      });
+    }
+
+    if (hy2Proxies.length >= 2) {
+      const name = '🚀 极速加速';
+      featureGroupNames.push(name);
+      featureGroups.push({
+        name,
+        type: 'url-test',
+        url: testUrl,
+        interval: 300,
+        tolerance: 50,
+        lazy: true,
+        proxies: hy2Proxies
+      });
+    }
+
     for (const proxy of proxies) {
       const region = getRegionByNodeName(proxy.name);
       if (region) {
@@ -103,6 +145,7 @@ export function toClashMeta(
             url: testUrl,
             interval: 300,
             tolerance: 50,
+            lazy: true,
             proxies: matchedNodes
           });
         }
@@ -116,6 +159,7 @@ export function toClashMeta(
           url: testUrl,
           interval: 300,
           tolerance: 50,
+          lazy: true,
           proxies: areaNodeMap.OTHER
         });
       }
@@ -133,6 +177,7 @@ export function toClashMeta(
             url: testUrl,
             interval: 300,
             tolerance: 50,
+            lazy: true,
             proxies: matchedNodes
           });
         }
@@ -149,6 +194,7 @@ export function toClashMeta(
             url: testUrl,
             interval: 300,
             tolerance: 50,
+            lazy: true,
             proxies: matchedNodes
           });
         }
@@ -162,6 +208,7 @@ export function toClashMeta(
           url: testUrl,
           interval: 300,
           tolerance: 50,
+          lazy: true,
           proxies: areaNodeMap.OTHER
         });
       }
@@ -179,6 +226,7 @@ export function toClashMeta(
             url: testUrl,
             interval: 300,
             tolerance: 50,
+            lazy: true,
             proxies: matchedNodes
           });
         }
@@ -254,6 +302,66 @@ export function toClashMeta(
     );
   }
 
+  if (enableTelegram) {
+    extraGroups.push({
+      name: '📲 电报消息',
+      type: 'select',
+      proxies: ['🚀 节点选择', '⚡ 自动选择', ...regionalGroupNames, ...(proxyNames.length > 0 ? proxyNames : ['DIRECT'])]
+    });
+    extraRules.push(
+      'RULE-SET,telegramcidr,📲 电报消息,no-resolve',
+      'DOMAIN-SUFFIX,telegra.ph,📲 电报消息',
+      'DOMAIN-SUFFIX,telegram.org,📲 电报消息',
+      'DOMAIN-SUFFIX,t.me,📲 电报消息',
+      'DOMAIN-SUFFIX,tdesktop.com,📲 电报消息',
+      'DOMAIN-SUFFIX,telesco.pe,📲 电报消息'
+    );
+  }
+
+  if (enableDev) {
+    extraGroups.push({
+      name: '👨‍💻 程序员/开发',
+      type: 'select',
+      proxies: ['🚀 节点选择', '⚡ 自动选择', ...regionalGroupNames, ...(proxyNames.length > 0 ? proxyNames : ['DIRECT'])]
+    });
+    extraRules.push(
+      'DOMAIN-SUFFIX,github.com,👨‍💻 程序员/开发',
+      'DOMAIN-SUFFIX,githubusercontent.com,👨‍💻 程序员/开发',
+      'DOMAIN-SUFFIX,github.io,👨‍💻 程序员/开发',
+      'DOMAIN-SUFFIX,git-scm.com,👨‍💻 程序员/开发',
+      'DOMAIN-SUFFIX,docker.com,👨‍💻 程序员/开发',
+      'DOMAIN-SUFFIX,docker.io,👨‍💻 程序员/开发',
+      'DOMAIN-SUFFIX,npmjs.org,👨‍💻 程序员/开发',
+      'DOMAIN-SUFFIX,npmjs.com,👨‍💻 程序员/开发',
+      'DOMAIN-SUFFIX,huggingface.co,👨‍💻 程序员/开发',
+      'DOMAIN-SUFFIX,v2ex.com,👨‍💻 程序员/开发',
+      'DOMAIN-SUFFIX,stackoverflow.com,👨‍💻 程序员/开发'
+    );
+  }
+
+  if (enableGame) {
+    extraGroups.push({
+      name: '🎮 游戏平台',
+      type: 'select',
+      proxies: ['🚀 节点选择', '⚡ 自动选择', ...featureGroupNames, ...regionalGroupNames, ...(proxyNames.length > 0 ? proxyNames : ['DIRECT'])]
+    });
+    extraRules.push(
+      'DOMAIN-SUFFIX,steamcommunity.com,🎮 游戏平台',
+      'DOMAIN-SUFFIX,steampowered.com,🎮 游戏平台',
+      'DOMAIN-SUFFIX,steamstatic.com,🎮 游戏平台',
+      'DOMAIN-SUFFIX,epicgames.com,🎮 游戏平台',
+      'DOMAIN-SUFFIX,ea.com,🎮 游戏平台',
+      'DOMAIN-SUFFIX,origin.com,🎮 游戏平台',
+      'DOMAIN-SUFFIX,playstation.com,🎮 游戏平台',
+      'DOMAIN-SUFFIX,playstation.net,🎮 游戏平台',
+      'DOMAIN-SUFFIX,nintendo.com,🎮 游戏平台',
+      'DOMAIN-SUFFIX,nintendo.net,🎮 游戏平台',
+      'DOMAIN-SUFFIX,blizzard.com,🎮 游戏平台',
+      'DOMAIN-SUFFIX,battle.net,🎮 游戏平台',
+      'DOMAIN-SUFFIX,riotgames.com,🎮 游戏平台'
+    );
+  }
+
   // 构建默认 Proxy Groups (严格保持有向无环图 DAG，避免 Clash 报 loop is detected 错误)
   const defaultGroups = [
     {
@@ -261,6 +369,7 @@ export function toClashMeta(
       type: 'select',
       proxies: [
         '⚡ 自动选择',
+        ...featureGroupNames,
         ...regionalGroupNames,
         ...(regionalGroupNames.length === 0 && proxyNames.length > 0 ? proxyNames : []),
         'DIRECT'
@@ -272,8 +381,10 @@ export function toClashMeta(
       url: testUrl,
       interval: 300,
       tolerance: 50,
+      lazy: true,
       proxies: proxyNames.length > 0 ? proxyNames : ['DIRECT']
     },
+    ...featureGroups,
     ...regionalGroups,
     ...extraGroups,
     {
@@ -424,8 +535,43 @@ export function toSingBox(
 
   const regionalOutbounds: any[] = [];
   const regionalOutboundTags: string[] = [];
+  const featureOutbounds: any[] = [];
+  const featureOutboundTags: string[] = [];
 
   if (options.groupType) {
+    const iplcTags = taggedNodes
+      .filter(({ node, tag }) => /(?:专线|iplc|iepl|专载|bgp专)/i.test(node.name || tag))
+      .map(({ tag }) => tag);
+    const hy2Tags = taggedNodes
+      .filter(({ node, tag }) => node.protocol === 'hysteria2' || /(?:hy2|hysteria)/i.test(node.name || tag))
+      .map(({ tag }) => tag);
+
+    if (iplcTags.length >= 2) {
+      const tag = '✈️ 专线专区';
+      featureOutboundTags.push(tag);
+      featureOutbounds.push({
+        tag,
+        type: 'urltest',
+        outbounds: iplcTags,
+        url: 'https://cp.cloudflare.com/generate_204',
+        interval: '3m',
+        tolerance: 50
+      });
+    }
+
+    if (hy2Tags.length >= 2) {
+      const tag = '🚀 极速加速';
+      featureOutboundTags.push(tag);
+      featureOutbounds.push({
+        tag,
+        type: 'urltest',
+        outbounds: hy2Tags,
+        url: 'https://cp.cloudflare.com/generate_204',
+        interval: '3m',
+        tolerance: 50
+      });
+    }
+
     const countryNodeMap: Record<string, string[]> = {};
     const areaNodeMap: Record<MacroAreaCode, string[]> = { APAC: [], AMER: [], EMEA: [], OTHER: [] };
 
@@ -542,6 +688,7 @@ export function toSingBox(
       type: 'selector',
       outbounds: [
         '⚡ 自动选择',
+        ...featureOutboundTags,
         ...regionalOutboundTags,
         ...(regionalOutboundTags.length === 0 && nodeTags.length > 0 ? nodeTags : []),
         'direct'
@@ -555,6 +702,7 @@ export function toSingBox(
       interval: '3m',
       tolerance: 50
     },
+    ...featureOutbounds,
     ...regionalOutbounds,
     {
       tag: 'direct',

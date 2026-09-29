@@ -778,7 +778,7 @@ export interface RegionInfo {
 
 export const REGIONS: RegionInfo[] = [
   { code: 'HK', flag: '🇭🇰', name: '香港', regex: /(?:香港|Hong\s*Kong|HongKong|深港|沪港|广港|穗港|(?<![A-Za-z])(?:HK|HKG|HKT|HKBN|HGC|WTT)(?![A-Za-z]))/i },
-  { code: 'TW', flag: '🇹🇼', name: '台湾', regex: /(?:台湾|臺灣|Taiwan|Taipei|台中|台北|新北|(?<![A-Za-z])(?:TW|TWN|HINET|APOL|Kbro)(?![A-Za-z]))/i },
+  { code: 'TW', flag: '🧋', name: '台湾', regex: /(?:台湾|臺灣|Taiwan|Taipei|台中|台北|新北|(?<![A-Za-z])(?:TW|TWN|HINET|APOL|Kbro)(?![A-Za-z]))/i },
   { code: 'MO', flag: '🇲🇴', name: '澳门', regex: /(?:澳门|澳門|Macau|Macao|(?<![A-Za-z])MO(?![A-Za-z]))/i },
   { code: 'JP', flag: '🇯🇵', name: '日本', regex: /(?:日本|Japan|Tokyo|Osaka|东京|大阪|埼玉|名古|广岛|软银|(?<![A-Za-z])(?:JP|JPN|Softbank|KDDI|DOCOMO)(?![A-Za-z]))/i },
   { code: 'SG', flag: '🇸🇬', name: '新加坡', regex: /(?:新加坡|Singapore|狮城|星加坡|(?<![A-Za-z])(?:SG|SGP)(?![A-Za-z]))/i },
@@ -869,7 +869,11 @@ export function getRegionByNodeName(name: string): RegionInfo | null {
       return region;
     }
   }
-  // 2. 其次通过国旗 Emoji 兜底识别 (支持仅含 Emoji 的节点如 "🇸🇬高速流媒体")
+  // 2. 其次通过国旗 Emoji 兜底识别 (支持仅含 Emoji 的节点如 "🇸🇬高速流媒体" 或 "🇹🇼")
+  if (name.includes('🇹🇼') || name.includes('🧋')) {
+    const tw = REGIONS.find(r => r.code === 'TW');
+    if (tw) return tw;
+  }
   for (const region of REGIONS) {
     if (name.includes(region.flag)) {
       return region;
@@ -929,20 +933,35 @@ export function filterNodesByRegions(nodes: NodeEnvelope[], selectors: unknown):
 }
 
 /**
+ * 规范化节点名称并纠正误标国旗 (如将 🇨🇳 台湾 修正为 🧋 台湾，解决国行系统 🇹🇼 渲染为 ☒ 乱码黑框的问题)
+ */
+export function normalizeNodeName(name: string): string {
+  let s = (name || '').trim();
+  // 1. 纠正误标国旗，并将国行无法正常显示的 🇹🇼 统一替换为亲和美观的 🧋 珍珠奶茶
+  s = s.replace(/🇨🇳\s*(台湾|臺灣|Taipei|台中|台北)/gi, '🧋 $1')
+       .replace(/🇹🇼\s*/g, '🧋 ')
+       .replace(/🇨🇳\s*(香港|Hong\s*Kong)/gi, '🇭🇰 $1');
+  // 2. 规范国旗/图标后空格: 确保 Emoji 紧接着有且仅有一个空格
+  s = s.replace(/([\uD83C][\uDDE6-\uDDFF][\uD83C][\uDDE6-\uDDFF]|🧋)\s*/g, '$1 ');
+  return s.trim();
+}
+
+/**
  * 智能为节点名称添加国旗 Emoji 前缀
  */
 export function addFlagToNodeName(name: string): string {
-  const flagRegex = /[\uD83C][\uDDE6-\uDDFF][\uD83C][\uDDE6-\uDDFF]/;
-  if (flagRegex.test(name)) {
-    return name;
+  let s = normalizeNodeName(name);
+  const flagRegex = /([\uD83C][\uDDE6-\uDDFF][\uD83C][\uDDE6-\uDDFF]|🧋)/;
+  if (flagRegex.test(s)) {
+    return s;
   }
 
-  const region = getRegionByNodeName(name);
+  const region = getRegionByNodeName(s);
   if (region) {
-    return `${region.flag} ${name}`;
+    return `${region.flag} ${s}`;
   }
 
-  return `🌐 ${name}`;
+  return `🌐 ${s}`;
 }
 
 /**

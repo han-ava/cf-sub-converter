@@ -1308,6 +1308,18 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
             <span>🎬 国际流媒体 (YouTube / Netflix / Disney+)</span>
           </label>
           <label class="checkbox-tag">
+            <input type="checkbox" id="presetTelegram" value="telegram" onchange="refreshGeneratedLinkIfPresent()">
+            <span>📲 电报消息 (Telegram 低延迟分流)</span>
+          </label>
+          <label class="checkbox-tag">
+            <input type="checkbox" id="presetDev" value="dev" onchange="refreshGeneratedLinkIfPresent()">
+            <span>👨‍💻 程序员/开发 (GitHub / Docker / npm)</span>
+          </label>
+          <label class="checkbox-tag">
+            <input type="checkbox" id="presetGame" value="game" onchange="refreshGeneratedLinkIfPresent()">
+            <span>🎮 游戏平台 (Steam / Epic / 暴雪)</span>
+          </label>
+          <label class="checkbox-tag">
             <input type="checkbox" id="presetMinimal" value="minimal" onchange="refreshGeneratedLinkIfPresent()">
             <span>⚡ 极简轻量分流 (无 Rule-Provider 依赖)</span>
           </label>
@@ -1694,6 +1706,9 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       const presets = [];
       if (document.getElementById('presetAi') && document.getElementById('presetAi').checked) presets.push('ai');
       if (document.getElementById('presetMedia') && document.getElementById('presetMedia').checked) presets.push('media');
+      if (document.getElementById('presetTelegram') && document.getElementById('presetTelegram').checked) presets.push('telegram');
+      if (document.getElementById('presetDev') && document.getElementById('presetDev').checked) presets.push('dev');
+      if (document.getElementById('presetGame') && document.getElementById('presetGame').checked) presets.push('game');
       return presets.join(',');
     }
 
@@ -1704,6 +1719,9 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       if (document.getElementById('presetMinimal')) document.getElementById('presetMinimal').checked = isMinimal;
       if (document.getElementById('presetAi')) document.getElementById('presetAi').checked = !isMinimal && set.has('ai');
       if (document.getElementById('presetMedia')) document.getElementById('presetMedia').checked = !isMinimal && set.has('media');
+      if (document.getElementById('presetTelegram')) document.getElementById('presetTelegram').checked = !isMinimal && (set.has('telegram') || set.has('tg'));
+      if (document.getElementById('presetDev')) document.getElementById('presetDev').checked = !isMinimal && (set.has('dev') || set.has('github'));
+      if (document.getElementById('presetGame')) document.getElementById('presetGame').checked = !isMinimal && (set.has('game') || set.has('gaming'));
     }
 
     function buildConvertedUrl() {
@@ -1807,7 +1825,7 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
     function syncRulePresetAvailability(target) {
       const rulePresetField = document.getElementById('rulePresetField');
       const presetApplies = target === 'auto' || target === 'clash';
-      ['presetAi', 'presetMedia', 'presetMinimal'].forEach(id => {
+      ['presetAi', 'presetMedia', 'presetTelegram', 'presetDev', 'presetGame', 'presetMinimal'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.disabled = !presetApplies;
       });

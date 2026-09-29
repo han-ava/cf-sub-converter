@@ -222,4 +222,52 @@ describe('Area Grouping and Multi-Preset Combinations', () => {
     expect(mainGroup.proxies).not.toContain('🇯🇵 日本 01');
     expect(mainGroup.proxies).not.toContain('🇺🇸 美国 01');
   });
+
+  test('Taiwan icon uses bubble tea emoji to fix Apple iOS/Mac missing glyph', () => {
+    const twRegion = getRegionByNodeName('🇹🇼 台湾专线 01');
+    expect(twRegion).toBeDefined();
+    expect(twRegion?.flag).toBe('🧋');
+
+    const rawTaiwanNodes = [
+      createMockNode('🇹🇼 台湾专线 01'),
+      createMockNode('🇨🇳 台湾01 境外中转'),
+      createMockNode('🇹🇼 台湾专线 03')
+    ];
+    const cleaned = processNodes(rawTaiwanNodes, { addEmoji: true });
+    expect(cleaned[0]!.name).toBe('🧋 台湾专线 01');
+    expect(cleaned[1]!.name).toBe('🧋 台湾01 境外中转');
+
+    const config: any = yaml.load(toClashMeta(cleaned, undefined, 'standard', undefined, 'hybrid'));
+    const groupNames = config['proxy-groups'].map((g: any) => g.name);
+    expect(groupNames).toContain('🧋 台湾节点');
+  });
+
+  test('Dedicated IPLC and HY2 feature groups and extended presets (telegram, dev, game)', () => {
+    const nodesWithFeatures = [
+      createMockNode('🇭🇰 香港专线 01'),
+      createMockNode('🇭🇰 香港专线 02'),
+      createMockNode('🇯🇵 日本专线 01'),
+      { ...createMockNode('🇺🇸 美国-HY2-01'), protocol: 'hysteria2' },
+      { ...createMockNode('🇺🇸 美国-HY2-02'), protocol: 'hysteria2' }
+    ];
+
+    const config: any = yaml.load(toClashMeta(nodesWithFeatures, undefined, 'telegram,dev,game', undefined, 'hybrid'));
+    const groupNames = config['proxy-groups'].map((g: any) => g.name);
+
+    // 特色组
+    expect(groupNames).toContain('✈️ 专线专区');
+    expect(groupNames).toContain('🚀 极速加速');
+
+    // 扩展预设策略组
+    expect(groupNames).toContain('📲 电报消息');
+    expect(groupNames).toContain('👨‍💻 程序员/开发');
+    expect(groupNames).toContain('🎮 游戏平台');
+
+    // url-test 包含 lazy: true
+    const autoGroup = config['proxy-groups'].find((g: any) => g.name === '⚡ 自动选择');
+    expect(autoGroup.lazy).toBe(true);
+
+    const iplcGroup = config['proxy-groups'].find((g: any) => g.name === '✈️ 专线专区');
+    expect(iplcGroup.lazy).toBe(true);
+  });
 });
