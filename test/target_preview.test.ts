@@ -330,7 +330,7 @@ describe('target-aware preview contract', () => {
     expect(html).toContain('const requestId = ++latestInspectRequestId');
     expect(html).toContain('requestId !== latestInspectRequestId');
     expect(html).toContain("const presetApplies = target === 'auto' || target === 'clash'");
-    expect(html).toContain("(target === 'auto' || target === 'clash') && preset");
+    expect(html).toContain("(target === 'auto' || target === 'clash') && selectedPresets");
     expect(onTargetChange).toContain('syncRulePresetAvailability(target)');
     expect(html).toContain('AUTO → ');
     expect(html).not.toContain('➔ Mihomo');
