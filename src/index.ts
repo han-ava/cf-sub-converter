@@ -2,7 +2,7 @@
 import packageJson from '../package.json';
 import { Env, ProxyNode, NodeEnvelope } from './types';
 import { parseContent } from './parser';
-import { toClashMeta, toSingBox, toSurge, toSurgeConf, toShadowrocketConf, toQuantumultX, toLoon } from './generator';
+import { toClashMeta, toSingBox, toSurge, toSurgeConf, toShadowrocketConf, toQuantumultX, toLoon, GroupType } from './generator';
 import { toRawLinks, toBase64 } from './adapters/raw';
 import { adaptNodeToTarget, normalizeTarget } from './adapters/target';
 import { adaptNodesToSingBox } from './adapters/singbox';
@@ -409,6 +409,12 @@ export default {
         }
         // KV 中不保存服务鉴权密钥；短链作为私密能力 URL，解析时使用当前 Secret 完成内部鉴权。
         if (env.AUTH_TOKEN) resolvedTarget.searchParams.set('token', env.AUTH_TOKEN.trim());
+        // 允许通过短链直接覆盖参数（如 ?group_type=area&preset=ai,media&regions=HK）
+        for (const [key, value] of url.searchParams.entries()) {
+          if (key !== 'token') {
+            resolvedTarget.searchParams.set(key, value);
+          }
+        }
         url = resolvedTarget;
       }
     }
@@ -711,6 +717,7 @@ export default {
       let enableUdp = true;
       let showInfo = true;
       let preset = 'standard';
+      let groupType: GroupType = 'hybrid';
       let testUrl = 'https://cp.cloudflare.com/generate_204';
       let infoStrategy: 'first' | 'sum' | 'none' = 'first';
       let requestToken = extractRequestToken(request, url);
@@ -729,6 +736,14 @@ export default {
         enableUdp = url.searchParams.get('udp') !== '0';
         showInfo = url.searchParams.get('info') !== '0' && url.searchParams.get('show_info') !== '0';
         preset = (url.searchParams.get('preset') || 'standard').toLowerCase();
+        const groupParam = (url.searchParams.get('group_type') || url.searchParams.get('group_mode') || url.searchParams.get('groups') || '').toLowerCase();
+        if (groupParam === 'area' || groupParam === 'macro') {
+          groupType = 'area';
+        } else if (groupParam === 'country' || groupParam === 'legacy') {
+          groupType = 'country';
+        } else if (groupParam === 'hybrid') {
+          groupType = 'hybrid';
+        }
         testUrl = url.searchParams.get('test_url') || 'https://cp.cloudflare.com/generate_204';
         filename = url.searchParams.get('filename') || 'SubConverter';
 
@@ -752,6 +767,14 @@ export default {
           enableUdp = body.udp !== false;
           showInfo = body.info !== false && body.show_info !== false;
           preset = (body.preset || 'standard').toLowerCase();
+          const groupParam = String(body.group_type || body.group_mode || body.groups || '').toLowerCase();
+          if (groupParam === 'area' || groupParam === 'macro') {
+            groupType = 'area';
+          } else if (groupParam === 'country' || groupParam === 'legacy') {
+            groupType = 'country';
+          } else if (groupParam === 'hybrid') {
+            groupType = 'hybrid';
+          }
           testUrl = body.test_url || 'https://cp.cloudflare.com/generate_204';
           if (body.info_mode) infoStrategy = body.info_mode;
           if (body.token) requestToken = body.token;
@@ -861,7 +884,7 @@ export default {
 
         // 根据 target 输出对应配置
         if (target === 'clash' || target === 'meta' || target === 'mihomo') {
-          const yamlOutput = toClashMeta(processedNodes, undefined, preset, testUrl);
+          const yamlOutput = toClashMeta(processedNodes, undefined, preset, testUrl, groupType);
           responseHeaders['Content-Type'] = 'text/yaml; charset=utf-8';
           responseHeaders['Content-Disposition'] = formatContentDisposition(filename, 'yaml');
           return new Response(yamlOutput, { headers: responseHeaders });
@@ -898,7 +921,8 @@ export default {
           }
 
           const jsonOutput = toSingBox(processedNodes, undefined, {
-            includeTun: isGraphicalSingBoxClient(clientUserAgent)
+            includeTun: isGraphicalSingBoxClient(clientUserAgent),
+            groupType
           });
           responseHeaders['Content-Type'] = 'application/json; charset=utf-8';
           responseHeaders['Content-Disposition'] = formatContentDisposition(filename, 'json');

@@ -89,10 +89,11 @@ https://your-worker.workers.dev/sub?url=https://airport.com/sub?token=xxx&target
 | `url` | string | **是** | - | 原始机场订阅链接，或节点链接。支持 `\|` 或换行拼接多个订阅源 |
 | `token` | string | **是** | - | 访问鉴权 Token（需与 Worker 的 `AUTH_TOKEN` Secret 一致，亦支持 `Authorization: Bearer <token>` 请求头） |
 | `target` | string | 否 | `auto` | 目标格式：`auto` 会根据客户端 User-Agent 自动识别 Shadowrocket、v2rayN/v2rayNG、Quantumult X、Loon、Clash/Mihomo/Stash、Sing-box 或 Surge（未识别时返回 Clash Meta）；也可显式指定 `clash`, `singbox`, `shadowrocket`, `shadowrocket-conf`, `surge`, `surge-conf`, `quantumult-x`, `loon`, `base64`, `raw` |
-| `preset` | string | 否 | `standard` | 仅用于 Clash 的规则预设：`standard` (标准全能), `ai` (增强 AI/OpenAI 分流), `media` (增强流媒体分流), `minimal` (不使用远程 rule-provider，仅内联本地/局域网与 `.cn`，其余国内匹配依赖客户端内置 GeoSite/GeoIP) |
+| `group_type` | string | 否 | `hybrid` | 策略组结构/区域分组模式：`hybrid` (智能混合：亚太/美洲/欧洲大区 + 核心大国，自动收敛消除单节点组), `area` (纯大区极简模式：仅亚太/美洲/欧洲/其他，全局仅 9 个策略组), `country` (传统国家模式：所有匹配到的国家独立建组) |
+| `preset` | string | 否 | `standard` | Clash 规则预设，**支持多选组合叠加**（如 `preset=ai,media`）：`ai` (智算 AI 增强), `media` (国际流媒体增强), `minimal` (极简分流，无 Rule Provider) |
 | `test_url` | string | 否 | `https://cp.cloudflare.com/generate_204` | 自动选择/延迟测速使用的 URL |
 | `include` | string | 否 | - | 包含节点正则过滤，例如 `香港\|日本\|US` |
-| `regions` | string | 否 | - | 按地区分类码过滤，多个值用 `\|` 分隔，例如 `HK\|JP\|OTHER`；`OTHER` 表示未识别地区 |
+| `regions` | string | 否 | - | 按地区/大区分类码过滤，多个值用 `\|` 分隔，支持大区代码，例如 `APAC` (亚太), `AMER` (美洲), `EMEA` (欧洲), `HK\|JP\|OTHER`；`OTHER` 表示未识别地区 |
 | `exclude` | string | 否 | - | 排除节点正则过滤，例如 `剩余\|到期\|官网\|0.1x` |
 | `rename` | string | 否 | - | 节点重命名规则，格式为 `查找=替换`，多个规则可用换行或逗号隔开 |
 | `emoji` / `flag` | boolean | 否 | `1` | 是否自动为节点名称添加国旗 Emoji（`1` 开启，`0` 关闭） |

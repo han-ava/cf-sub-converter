@@ -779,11 +779,12 @@ export interface RegionInfo {
 export const REGIONS: RegionInfo[] = [
   { code: 'HK', flag: '🇭🇰', name: '香港', regex: /(?:香港|Hong\s*Kong|HongKong|深港|沪港|广港|穗港|(?<![A-Za-z])(?:HK|HKG|HKT|HKBN|HGC|WTT)(?![A-Za-z]))/i },
   { code: 'TW', flag: '🇹🇼', name: '台湾', regex: /(?:台湾|臺灣|Taiwan|Taipei|台中|台北|新北|(?<![A-Za-z])(?:TW|TWN|HINET|APOL|Kbro)(?![A-Za-z]))/i },
+  { code: 'MO', flag: '🇲🇴', name: '澳门', regex: /(?:澳门|澳門|Macau|Macao|(?<![A-Za-z])MO(?![A-Za-z]))/i },
   { code: 'JP', flag: '🇯🇵', name: '日本', regex: /(?:日本|Japan|Tokyo|Osaka|东京|大阪|埼玉|名古|广岛|软银|(?<![A-Za-z])(?:JP|JPN|Softbank|KDDI|DOCOMO)(?![A-Za-z]))/i },
   { code: 'SG', flag: '🇸🇬', name: '新加坡', regex: /(?:新加坡|Singapore|狮城|星加坡|(?<![A-Za-z])(?:SG|SGP)(?![A-Za-z]))/i },
   { code: 'US', flag: '🇺🇸', name: '美国', regex: /(?:美国|美國|United\s*States|America|洛杉矶|硅谷|西雅图|芝加哥|纽约|达拉斯|波特兰|旧金山|圣何塞|凤凰城|俄勒冈|弗吉尼亚|Fremont|Los\s*Angeles|San\s*Jose|Silicon\s*Valley|Seattle|Chicago|New\s*York|(?<![A-Za-z])(?:US|USA)(?![A-Za-z]))/i },
   { code: 'KR', flag: '🇰🇷', name: '韩国', regex: /(?:韩国|韓國|Korea|Seoul|首尔|釜山|(?<![A-Za-z])(?:KR|KOR|KT|SK|LG)(?![A-Za-z]))/i },
-  { code: 'GB', flag: '🇬🇧', name: '英国', regex: /(?:英国|英國|United\s*Kingdom|London|伦敦|曼彻斯特|(?<![A-Za-z])(?:UK|GB|GBR)(?![A-Za-z]))/i },
+  { code: 'GB', flag: '🇬🇧', name: '英国', regex: /(?:英国|英國|United\s*Kingdom|London|伦敦|曼彻斯特|(?<![\d.]\s*)(?<![A-Za-z])(?:UK|GB|GBR)(?![A-Za-z]))/i },
   { code: 'DE', flag: '🇩🇪', name: '德国', regex: /(?:德国|德國|Germany|Frankfurt|法兰克福|柏林|慕尼黑|(?<![A-Za-z])(?:DE|DEU)(?![A-Za-z]))/i },
   { code: 'FR', flag: '🇫🇷', name: '法国', regex: /(?:法国|法國|France|Paris|巴黎|(?<![A-Za-z])(?:FR|FRA)(?![A-Za-z]))/i },
   { code: 'CA', flag: '🇨🇦', name: '加拿大', regex: /(?:加拿大|Canada|Toronto|Vancouver|多伦多|温哥华|蒙特利尔|(?<![A-Za-z])(?:CA|CAN)(?![A-Za-z]))/i },
@@ -798,6 +799,9 @@ export const REGIONS: RegionInfo[] = [
   { code: 'TR', flag: '🇹🇷', name: '土耳其', regex: /(?:土耳其|Turkey|Istanbul|伊斯坦布尔|(?<![A-Za-z])(?:TR|TUR)(?![A-Za-z]))/i },
   { code: 'AR', flag: '🇦🇷', name: '阿根廷', regex: /(?:阿根廷|Argentina|(?<![A-Za-z])(?:AR|ARG)(?![A-Za-z]))/i },
   { code: 'BR', flag: '🇧🇷', name: '巴西', regex: /(?:巴西|Brazil|Sao\s*Paulo|圣保罗|(?<![A-Za-z])(?:BR|BRA)(?![A-Za-z]))/i },
+  { code: 'MX', flag: '🇲🇽', name: '墨西哥', regex: /(?:墨西哥|Mexico|(?<![A-Za-z])MX(?![A-Za-z]))/i },
+  { code: 'CL', flag: '🇨🇱', name: '智利', regex: /(?:智利|Chile|(?<![A-Za-z])CL(?![A-Za-z]))/i },
+  { code: 'CO', flag: '🇨🇴', name: '哥伦比亚', regex: /(?:哥伦比亚|Colombia|(?<![A-Za-z])CO(?![A-Za-z]))/i },
   { code: 'ZA', flag: '🇿🇦', name: '南非', regex: /(?:南非|South\s*Africa|Johannesburg|(?<![A-Za-z])(?:ZA|ZAF)(?![A-Za-z]))/i },
   { code: 'NL', flag: '🇳🇱', name: '荷兰', regex: /(?:荷兰|荷蘭|Netherlands|Amsterdam|阿姆斯特丹|(?<![A-Za-z])(?:NL|NLD)(?![A-Za-z]))/i },
   { code: 'CH', flag: '🇨🇭', name: '瑞士', regex: /(?:瑞士|Switzerland|Zurich|苏黎世|(?<![A-Za-z])(?:CH|CHE)(?![A-Za-z]))/i },
@@ -806,13 +810,66 @@ export const REGIONS: RegionInfo[] = [
   { code: 'ES', flag: '🇪🇸', name: '西班牙', regex: /(?:西班牙|Spain|Madrid|马德里|(?<![A-Za-z])(?:ES|ESP)(?![A-Za-z]))/i },
   { code: 'IE', flag: '🇮🇪', name: '爱尔兰', regex: /(?:爱尔兰|愛爾蘭|Ireland|Dublin|都柏林|(?<![A-Za-z])(?:IE|IRL)(?![A-Za-z]))/i },
   { code: 'AE', flag: '🇦🇪', name: '阿联酋', regex: /(?:阿联酋|迪拜|Dubai|(?<![A-Za-z])(?:UAE|AE|ARE)(?![A-Za-z]))/i },
+  { code: 'IL', flag: '🇮🇱', name: '以色列', regex: /(?:以色列|Israel|(?<![A-Za-z])IL(?![A-Za-z]))/i },
+  { code: 'SA', flag: '🇸🇦', name: '沙特', regex: /(?:沙特|Saudi|(?<![A-Za-z])SA(?![A-Za-z]))/i },
   { code: 'CN', flag: '🇨🇳', name: '中国', regex: /(?:中国|中國|China|回国|北京|上海|广州|深圳|杭州|(?<![A-Za-z])(?:CN|CHN)(?![A-Za-z]))/i },
 ];
+
+export type MacroAreaCode = 'APAC' | 'AMER' | 'EMEA' | 'OTHER';
+
+export interface MacroAreaInfo {
+  code: MacroAreaCode;
+  name: string;
+  flag: string;
+  groupName: string;
+  countryCodes: string[];
+}
+
+export const MACRO_AREAS: MacroAreaInfo[] = [
+  {
+    code: 'APAC',
+    name: '亚太',
+    flag: '🌏',
+    groupName: '🌏 亚太节点',
+    countryCodes: ['HK', 'TW', 'MO', 'JP', 'SG', 'KR', 'AU', 'NZ', 'TH', 'PH', 'MY', 'VN', 'ID', 'IN']
+  },
+  {
+    code: 'AMER',
+    name: '美洲',
+    flag: '🌎',
+    groupName: '🌎 美洲节点',
+    countryCodes: ['US', 'CA', 'MX', 'BR', 'AR', 'CL', 'CO']
+  },
+  {
+    code: 'EMEA',
+    name: '欧洲',
+    flag: '🌍',
+    groupName: '🌍 欧洲节点',
+    countryCodes: ['GB', 'DE', 'FR', 'NL', 'CH', 'IT', 'ES', 'IE', 'SE', 'RU']
+  }
+];
+
+export function getMacroAreaByCountryCode(countryCode: string): MacroAreaInfo | null {
+  for (const area of MACRO_AREAS) {
+    if (area.countryCodes.includes(countryCode)) {
+      return area;
+    }
+  }
+  return null;
+}
 
 /**
  * 识别节点地区并返回国旗
  */
 export function getRegionByNodeName(name: string): RegionInfo | null {
+  if (!name) return null;
+  // 1. 优先通过国旗 Emoji 识别
+  for (const region of REGIONS) {
+    if (name.includes(region.flag)) {
+      return region;
+    }
+  }
+  // 2. 通过地区关键字与正则识别
   for (const region of REGIONS) {
     if (region.regex.test(name)) {
       return region;
@@ -845,6 +902,18 @@ export function filterNodesByRegions(nodes: NodeEnvelope[], selectors: unknown):
     }
 
     const upperToken = token.toUpperCase();
+    const macroArea = MACRO_AREAS.find(item => (
+      item.code === upperToken ||
+      item.name === token ||
+      `${item.flag} ${item.name}` === token ||
+      `${item.name}地区` === token ||
+      `${item.name}节点` === token
+    ));
+    if (macroArea) {
+      macroArea.countryCodes.forEach(code => selectedCodes.add(code));
+      continue;
+    }
+
     const region = REGIONS.find(item => (
       item.code === upperToken ||
       item.name === token ||

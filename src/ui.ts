@@ -339,6 +339,49 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       gap: 1rem;
     }
 
+    /* 多选预设标签组件 */
+    .preset-checkbox-group {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.65rem;
+      margin-top: 0.25rem;
+    }
+
+    .checkbox-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 0.55rem 0.85rem;
+      font-size: 0.825rem;
+      font-weight: 500;
+      color: var(--text-main);
+      cursor: pointer;
+      user-select: none;
+      transition: all 0.2s ease;
+    }
+
+    .checkbox-tag:hover {
+      border-color: var(--border-focus);
+      background: var(--bg-input-focus);
+    }
+
+    .checkbox-tag input[type="checkbox"] {
+      width: 16px;
+      height: 16px;
+      accent-color: var(--primary);
+      cursor: pointer;
+      margin: 0;
+    }
+
+    .checkbox-tag:has(input:checked) {
+      border-color: var(--primary);
+      background: rgba(59, 130, 246, 0.08);
+      color: var(--primary);
+    }
+
     /* 优雅的开关组件 (Switch) */
     .switch-row {
       display: flex;
@@ -1220,7 +1263,7 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
         <textarea id="subUrl" placeholder="请输入订阅链接 (支持 http/https/base64)"></textarea>
       </div>
 
-      <!-- 目标配置格式与规则预设 -->
+      <!-- 目标配置格式与策略组结构 -->
       <div class="grid-2 form-group">
         <div>
           <label for="targetClient">目标配置格式</label>
@@ -1239,14 +1282,35 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
           </select>
         </div>
 
-        <div id="rulePresetField">
-          <label for="rulePreset">分流规则预设 <span class="label-hint">Clash 专用</span></label>
-          <select id="rulePreset">
-            <option value="standard" selected>标准全能分流 (国内直连+自动测速)</option>
-            <option value="ai">智算 AI 增强 (ChatGPT/Claude/Copilot)</option>
-            <option value="media">国际流媒体 (YouTube/Netflix/Disney+)</option>
-            <option value="minimal">极简分流 (无 Rule Provider)</option>
+        <div id="groupTypeField">
+          <label for="groupType">策略组结构 <span class="label-hint">区域分组</span></label>
+          <select id="groupType" onchange="refreshGeneratedLinkIfPresent()">
+            <option value="hybrid" selected>智能混合模式 (亚太/欧美大区 + 核心大国)</option>
+            <option value="area">纯大区模式 (仅亚太/美洲/欧洲/其他 - 极致精简)</option>
+            <option value="country">传统国家模式 (全部国家独立成组)</option>
           </select>
+        </div>
+      </div>
+
+      <!-- 分流规则预设 (多选组合) -->
+      <div id="rulePresetField" class="form-group">
+        <label>
+          <span>分流规则预设</span>
+          <span class="label-hint">支持多选组合叠加 (Clash/Mihomo)</span>
+        </label>
+        <div class="preset-checkbox-group">
+          <label class="checkbox-tag">
+            <input type="checkbox" id="presetAi" value="ai" onchange="refreshGeneratedLinkIfPresent()">
+            <span>🤖 智算 AI 增强 (ChatGPT / Claude / Copilot)</span>
+          </label>
+          <label class="checkbox-tag">
+            <input type="checkbox" id="presetMedia" value="media" onchange="refreshGeneratedLinkIfPresent()">
+            <span>🎬 国际流媒体 (YouTube / Netflix / Disney+)</span>
+          </label>
+          <label class="checkbox-tag">
+            <input type="checkbox" id="presetMinimal" value="minimal" onchange="refreshGeneratedLinkIfPresent()">
+            <span>⚡ 极简轻量分流 (无 Rule-Provider 依赖)</span>
+          </label>
         </div>
       </div>
 
@@ -1613,6 +1677,24 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       return labels[target] || String(target || 'Unknown');
     }
 
+    function getSelectedPresets() {
+      const isMinimal = document.getElementById('presetMinimal') && document.getElementById('presetMinimal').checked;
+      if (isMinimal) return 'minimal';
+      const presets = [];
+      if (document.getElementById('presetAi') && document.getElementById('presetAi').checked) presets.push('ai');
+      if (document.getElementById('presetMedia') && document.getElementById('presetMedia').checked) presets.push('media');
+      return presets.join(',');
+    }
+
+    function setSelectedPresets(presetVal) {
+      const tokens = String(presetVal || '').split(/[,|]/).map(t => t.trim().toLowerCase());
+      const set = new Set(tokens);
+      const isMinimal = set.has('minimal');
+      if (document.getElementById('presetMinimal')) document.getElementById('presetMinimal').checked = isMinimal;
+      if (document.getElementById('presetAi')) document.getElementById('presetAi').checked = !isMinimal && set.has('ai');
+      if (document.getElementById('presetMedia')) document.getElementById('presetMedia').checked = !isMinimal && set.has('media');
+    }
+
     function buildConvertedUrl() {
       const rawUrl = document.getElementById('subUrl').value.trim();
       if (!rawUrl) {
@@ -1624,7 +1706,8 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       saveAuthToken();
 
       const target = document.getElementById('targetClient').value;
-      const preset = document.getElementById('rulePreset').value;
+      const selectedPresets = getSelectedPresets();
+      const groupType = document.getElementById('groupType') ? document.getElementById('groupType').value : 'hybrid';
       const includeRegex = document.getElementById('includeRegex').value.trim();
       const excludeRegex = document.getElementById('excludeRegex').value.trim();
       const renameRules = document.getElementById('renameRules').value.trim();
@@ -1638,8 +1721,11 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       params.set('target', target);
       if (authToken) params.set('token', authToken);
 
-      if ((target === 'auto' || target === 'clash') && preset && preset !== 'standard') {
-        params.set('preset', preset);
+      if ((target === 'auto' || target === 'clash') && selectedPresets) {
+        params.set('preset', selectedPresets);
+      }
+      if (groupType && groupType !== 'hybrid') {
+        params.set('group_type', groupType);
       }
       if (includeRegex) params.set('include', includeRegex);
       if (excludeRegex) params.set('exclude', excludeRegex);
@@ -1706,13 +1792,12 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
     }
 
     function syncRulePresetAvailability(target) {
-      const rulePreset = document.getElementById('rulePreset');
       const rulePresetField = document.getElementById('rulePresetField');
       const presetApplies = target === 'auto' || target === 'clash';
-      rulePreset.disabled = !presetApplies;
-      rulePreset.title = presetApplies
-        ? (target === 'auto' ? 'Auto 仅在识别为 Clash/Mihomo 时应用' : '')
-        : '该预设仅用于 Clash/Mihomo 输出';
+      ['presetAi', 'presetMedia', 'presetMinimal'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.disabled = !presetApplies;
+      });
       if (rulePresetField) rulePresetField.style.opacity = presetApplies ? '1' : '0.55';
     }
 
@@ -1743,7 +1828,8 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       document.getElementById('renameRules').value = '';
       currentRegionFilters = [];
       document.getElementById('targetClient').value = 'auto';
-      document.getElementById('rulePreset').value = 'standard';
+      if (document.getElementById('groupType')) document.getElementById('groupType').value = 'hybrid';
+      setSelectedPresets('standard');
       onTargetChange();
       document.getElementById('addEmoji').checked = true;
       document.getElementById('enableUdp').checked = true;
@@ -2467,7 +2553,8 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
         name: name.trim(),
         subUrl,
         target: document.getElementById('targetClient').value,
-        preset: document.getElementById('rulePreset').value,
+        groupType: document.getElementById('groupType') ? document.getElementById('groupType').value : 'hybrid',
+        preset: getSelectedPresets(),
         include: document.getElementById('includeRegex').value.trim(),
         exclude: document.getElementById('excludeRegex').value.trim(),
         rename: document.getElementById('renameRules').value.trim(),
@@ -2499,7 +2586,8 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
 
       document.getElementById('subUrl').value = item.subUrl || '';
       document.getElementById('targetClient').value = item.target || 'auto';
-      document.getElementById('rulePreset').value = item.preset || 'standard';
+      if (document.getElementById('groupType')) document.getElementById('groupType').value = item.groupType || 'hybrid';
+      setSelectedPresets(item.preset || 'standard');
       document.getElementById('includeRegex').value = item.include || '';
       document.getElementById('excludeRegex').value = item.exclude || '';
       document.getElementById('renameRules').value = item.rename || '';

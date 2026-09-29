@@ -2,12 +2,14 @@
 import yaml from 'js-yaml';
 import { NodeEnvelope } from './types';
 import { DEFAULT_CLASH_TEMPLATE, DEFAULT_SINGBOX_TEMPLATE } from './templates';
-import { getRegionByNodeName, REGIONS } from './utils';
+import { getRegionByNodeName, REGIONS, MACRO_AREAS, getMacroAreaByCountryCode, MacroAreaCode } from './utils';
 import { nodeToClashProxy, adaptNodeToMihomo } from './adapters/mihomo';
 import { adaptNodesToSingBox, nodeToSingBoxOutbound } from './adapters/singbox';
 import { adaptNodeToTarget } from './adapters/target';
 
 export { nodeToClashProxy, nodeToSingBoxOutbound };
+
+export type GroupType = 'hybrid' | 'area' | 'country';
 
 /**
  * 转换为 Clash Meta / Mihomo 配置文件 (YAML)
@@ -16,7 +18,8 @@ export function toClashMeta(
   nodes: NodeEnvelope[],
   customTemplateYaml?: string,
   preset: string = 'standard',
-  testUrl: string = 'https://cp.cloudflare.com/generate_204'
+  testUrl: string = 'https://cp.cloudflare.com/generate_204',
+  groupType: GroupType = 'hybrid'
 ): string {
   let config: any = null;
   let usesDefaultTemplate = false;
@@ -56,10 +59,17 @@ export function toClashMeta(
 
   const proxyNames = proxies.map(p => p.name);
 
-  const isMinimal = preset === 'minimal';
+  const presetTokens = (Array.isArray(preset) ? preset : String(preset || '').split(/[,|]/))
+    .map(p => p.trim().toLowerCase())
+    .filter(Boolean);
+  const presetSet = new Set(presetTokens);
+  const isMinimal = presetSet.has('minimal');
+  const enableAi = presetSet.has('ai');
+  const enableMedia = presetSet.has('media');
 
-  // 地区节点分组 (非极简模式下自动按国家/地区生成 url-test 自动测速组)
-  const regionNodeMap: Record<string, string[]> = {};
+  // 地区节点分组 (根据 groupType 分组策略生成对应 url-test 自动测速组)
+  const countryNodeMap: Record<string, string[]> = {};
+  const areaNodeMap: Record<MacroAreaCode, string[]> = { APAC: [], AMER: [], EMEA: [], OTHER: [] };
   const regionalGroups: any[] = [];
   const regionalGroupNames: string[] = [];
 
@@ -67,24 +77,108 @@ export function toClashMeta(
     for (const proxy of proxies) {
       const region = getRegionByNodeName(proxy.name);
       if (region) {
-        if (!regionNodeMap[region.code]) regionNodeMap[region.code] = [];
-        regionNodeMap[region.code]!.push(proxy.name);
+        if (!countryNodeMap[region.code]) countryNodeMap[region.code] = [];
+        countryNodeMap[region.code]!.push(proxy.name);
+        const area = getMacroAreaByCountryCode(region.code);
+        if (area) {
+          areaNodeMap[area.code].push(proxy.name);
+        } else {
+          areaNodeMap.OTHER.push(proxy.name);
+        }
+      } else {
+        areaNodeMap.OTHER.push(proxy.name);
       }
     }
 
-    for (const region of REGIONS) {
-      const matchedNodes = regionNodeMap[region.code];
-      if (matchedNodes && matchedNodes.length > 0) {
-        const groupName = `${region.flag} ${region.name}节点`;
-        regionalGroupNames.push(groupName);
+    if (groupType === 'area') {
+      // 纯大区分组模式 (极致精简：仅亚太、美洲、欧洲、其他)
+      for (const area of MACRO_AREAS) {
+        const matchedNodes = areaNodeMap[area.code];
+        if (matchedNodes && matchedNodes.length > 0) {
+          regionalGroupNames.push(area.groupName);
+          regionalGroups.push({
+            name: area.groupName,
+            type: 'url-test',
+            url: testUrl,
+            interval: 300,
+            tolerance: 50,
+            proxies: matchedNodes
+          });
+        }
+      }
+      if (areaNodeMap.OTHER.length > 0) {
+        const otherName = '🌐 其他地区';
+        regionalGroupNames.push(otherName);
         regionalGroups.push({
-          name: groupName,
+          name: otherName,
           type: 'url-test',
           url: testUrl,
           interval: 300,
           tolerance: 50,
-          proxies: matchedNodes
+          proxies: areaNodeMap.OTHER
         });
+      }
+    } else if (groupType === 'country') {
+      // 传统国家分组模式 (每个有节点的国家都独立成组，保持旧版兼容)
+      for (const region of REGIONS) {
+        const matchedNodes = countryNodeMap[region.code];
+        if (matchedNodes && matchedNodes.length > 0) {
+          const groupName = `${region.flag} ${region.name}节点`;
+          regionalGroupNames.push(groupName);
+          regionalGroups.push({
+            name: groupName,
+            type: 'url-test',
+            url: testUrl,
+            interval: 300,
+            tolerance: 50,
+            proxies: matchedNodes
+          });
+        }
+      }
+    } else {
+      // hybrid (智能混合模式，默认推荐)：大区聚合组 + 节点数 >= 3 的高频核心国家独立组
+      for (const area of MACRO_AREAS) {
+        const matchedNodes = areaNodeMap[area.code];
+        if (matchedNodes && matchedNodes.length > 0) {
+          regionalGroupNames.push(area.groupName);
+          regionalGroups.push({
+            name: area.groupName,
+            type: 'url-test',
+            url: testUrl,
+            interval: 300,
+            tolerance: 50,
+            proxies: matchedNodes
+          });
+        }
+      }
+      if (areaNodeMap.OTHER.length > 0) {
+        const otherName = '🌐 其他地区';
+        regionalGroupNames.push(otherName);
+        regionalGroups.push({
+          name: otherName,
+          type: 'url-test',
+          url: testUrl,
+          interval: 300,
+          tolerance: 50,
+          proxies: areaNodeMap.OTHER
+        });
+      }
+
+      // 仅当国家节点数 >= 3 时生成独立国家组，消灭单节点冷门组
+      for (const region of REGIONS) {
+        const matchedNodes = countryNodeMap[region.code];
+        if (matchedNodes && matchedNodes.length >= 3) {
+          const groupName = `${region.flag} ${region.name}节点`;
+          regionalGroupNames.push(groupName);
+          regionalGroups.push({
+            name: groupName,
+            type: 'url-test',
+            url: testUrl,
+            interval: 300,
+            tolerance: 50,
+            proxies: matchedNodes
+          });
+        }
       }
     }
   }
@@ -93,7 +187,7 @@ export function toClashMeta(
   const extraGroups: any[] = [];
   const extraRules: string[] = [];
 
-  if (preset === 'ai') {
+  if (enableAi) {
     extraGroups.push({
       name: '🤖 智算 AI',
       type: 'select',
@@ -138,7 +232,9 @@ export function toClashMeta(
       'DOMAIN,android.clients.google.com,🤖 智算 AI',
       'DOMAIN,update.googleapis.com,🤖 智算 AI'
     );
-  } else if (preset === 'media') {
+  }
+
+  if (enableMedia) {
     extraGroups.push({
       name: '🎬 国际流媒体',
       type: 'select',
@@ -252,7 +348,7 @@ export function toClashMeta(
 export function toSingBox(
   nodes: NodeEnvelope[],
   customTemplateJson?: string,
-  options: { includeTun?: boolean } = {}
+  options: { includeTun?: boolean; groupType?: GroupType } = {}
 ): string {
   let config: any = null;
   let usesDefaultTemplate = false;
@@ -328,11 +424,122 @@ export function toSingBox(
   });
   const nodeTags = taggedNodes.map(({ tag }) => tag);
 
+  const regionalOutbounds: any[] = [];
+  const regionalOutboundTags: string[] = [];
+
+  if (options.groupType) {
+    const countryNodeMap: Record<string, string[]> = {};
+    const areaNodeMap: Record<MacroAreaCode, string[]> = { APAC: [], AMER: [], EMEA: [], OTHER: [] };
+
+    for (const { tag } of taggedNodes) {
+      const region = getRegionByNodeName(tag);
+      if (region) {
+        if (!countryNodeMap[region.code]) countryNodeMap[region.code] = [];
+        countryNodeMap[region.code]!.push(tag);
+        const area = getMacroAreaByCountryCode(region.code);
+        if (area) {
+          areaNodeMap[area.code].push(tag);
+        } else {
+          areaNodeMap.OTHER.push(tag);
+        }
+      } else {
+        areaNodeMap.OTHER.push(tag);
+      }
+    }
+
+    if (options.groupType === 'area') {
+      for (const area of MACRO_AREAS) {
+        const matched = areaNodeMap[area.code];
+        if (matched && matched.length > 0) {
+          regionalOutboundTags.push(area.groupName);
+          regionalOutbounds.push({
+            tag: area.groupName,
+            type: 'urltest',
+            outbounds: matched,
+            url: 'https://cp.cloudflare.com/generate_204',
+            interval: '3m',
+            tolerance: 50
+          });
+        }
+      }
+      if (areaNodeMap.OTHER.length > 0) {
+        const otherTag = '🌐 其他地区';
+        regionalOutboundTags.push(otherTag);
+        regionalOutbounds.push({
+          tag: otherTag,
+          type: 'urltest',
+          outbounds: areaNodeMap.OTHER,
+          url: 'https://cp.cloudflare.com/generate_204',
+          interval: '3m',
+          tolerance: 50
+        });
+      }
+    } else if (options.groupType === 'country') {
+      for (const region of REGIONS) {
+        const matched = countryNodeMap[region.code];
+        if (matched && matched.length > 0) {
+          const groupTag = `${region.flag} ${region.name}节点`;
+          regionalOutboundTags.push(groupTag);
+          regionalOutbounds.push({
+            tag: groupTag,
+            type: 'urltest',
+            outbounds: matched,
+            url: 'https://cp.cloudflare.com/generate_204',
+            interval: '3m',
+            tolerance: 50
+          });
+        }
+      }
+    } else if (options.groupType === 'hybrid') {
+      for (const area of MACRO_AREAS) {
+        const matched = areaNodeMap[area.code];
+        if (matched && matched.length > 0) {
+          regionalOutboundTags.push(area.groupName);
+          regionalOutbounds.push({
+            tag: area.groupName,
+            type: 'urltest',
+            outbounds: matched,
+            url: 'https://cp.cloudflare.com/generate_204',
+            interval: '3m',
+            tolerance: 50
+          });
+        }
+      }
+      if (areaNodeMap.OTHER.length > 0) {
+        const otherTag = '🌐 其他地区';
+        regionalOutboundTags.push(otherTag);
+        regionalOutbounds.push({
+          tag: otherTag,
+          type: 'urltest',
+          outbounds: areaNodeMap.OTHER,
+          url: 'https://cp.cloudflare.com/generate_204',
+          interval: '3m',
+          tolerance: 50
+        });
+      }
+      for (const region of REGIONS) {
+        const matched = countryNodeMap[region.code];
+        if (matched && matched.length >= 3) {
+          const groupTag = `${region.flag} ${region.name}节点`;
+          regionalOutboundTags.push(groupTag);
+          regionalOutbounds.push({
+            tag: groupTag,
+            type: 'urltest',
+            outbounds: matched,
+            url: 'https://cp.cloudflare.com/generate_204',
+            interval: '3m',
+            tolerance: 50
+          });
+        }
+      }
+    }
+  }
+
   const defaultOutbounds = [
     {
       tag: '🚀 节点选择',
       type: 'selector',
-      outbounds: ['⚡ 自动选择', 'direct', ...(nodeTags.length > 0 ? nodeTags : [])]
+      outbounds: ['⚡ 自动选择', 'direct', ...regionalOutboundTags, ...(nodeTags.length > 0 ? nodeTags : [])]
     },
     {
       tag: '⚡ 自动选择',
@@ -342,6 +549,7 @@ export function toSingBox(
       interval: '3m',
       tolerance: 50
     },
+    ...regionalOutbounds,
     {
       tag: 'direct',
       type: 'direct'
