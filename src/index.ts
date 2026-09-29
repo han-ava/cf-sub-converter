@@ -562,7 +562,8 @@ export default {
             excludeRegex: body.exclude,
             renameRules,
             addEmoji: body.emoji !== false,
-            enableUdp: body.udp !== false
+            enableUdp: body.udp !== false,
+            filterNotices: body.filter_notices !== false && body.drop_announcements !== false && body.notices !== true
           }),
           body.regions
         );
@@ -716,6 +717,7 @@ export default {
       let addEmoji = true;
       let enableUdp = true;
       let showInfo = true;
+      let filterNotices = true;
       let preset = 'standard';
       let groupType: GroupType = 'hybrid';
       let testUrl = 'https://cp.cloudflare.com/generate_204';
@@ -735,6 +737,7 @@ export default {
         addEmoji = url.searchParams.get('emoji') !== '0' && url.searchParams.get('flag') !== '0';
         enableUdp = url.searchParams.get('udp') !== '0';
         showInfo = url.searchParams.get('info') !== '0' && url.searchParams.get('show_info') !== '0';
+        filterNotices = url.searchParams.get('filter_notices') !== '0' && url.searchParams.get('drop_announcements') !== '0' && url.searchParams.get('notices') !== '1';
         preset = (url.searchParams.get('preset') || 'standard').toLowerCase();
         const groupParam = (url.searchParams.get('group_type') || url.searchParams.get('group_mode') || url.searchParams.get('groups') || '').toLowerCase();
         if (groupParam === 'area' || groupParam === 'macro') {
@@ -766,6 +769,7 @@ export default {
           addEmoji = body.emoji !== false && body.flag !== false;
           enableUdp = body.udp !== false;
           showInfo = body.info !== false && body.show_info !== false;
+          filterNotices = body.filter_notices !== false && body.drop_announcements !== false && body.notices !== true;
           preset = (body.preset || 'standard').toLowerCase();
           const groupParam = String(body.group_type || body.group_mode || body.groups || '').toLowerCase();
           if (groupParam === 'area' || groupParam === 'macro') {
@@ -858,7 +862,8 @@ export default {
           excludeRegex,
           renameRules,
           addEmoji,
-          enableUdp
+          enableUdp,
+          filterNotices
         });
         processedNodes = filterNodesByRegions(processedNodes, regionSelectors);
 

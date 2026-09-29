@@ -261,9 +261,9 @@ export function toClashMeta(
       type: 'select',
       proxies: [
         '⚡ 自动选择',
-        'DIRECT',
         ...regionalGroupNames,
-        ...(proxyNames.length > 0 ? proxyNames : [])
+        ...(regionalGroupNames.length === 0 && proxyNames.length > 0 ? proxyNames : []),
+        'DIRECT'
       ]
     },
     {
@@ -540,7 +540,12 @@ export function toSingBox(
     {
       tag: '🚀 节点选择',
       type: 'selector',
-      outbounds: ['⚡ 自动选择', 'direct', ...regionalOutboundTags, ...(nodeTags.length > 0 ? nodeTags : [])]
+      outbounds: [
+        '⚡ 自动选择',
+        ...regionalOutboundTags,
+        ...(regionalOutboundTags.length === 0 && nodeTags.length > 0 ? nodeTags : []),
+        'direct'
+      ]
     },
     {
       tag: '⚡ 自动选择',

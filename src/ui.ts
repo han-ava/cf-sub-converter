@@ -1365,6 +1365,17 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
 
         <div class="switch-row">
           <div class="switch-info">
+            <span class="switch-title">过滤公告与伪节点</span>
+            <span class="switch-desc">自动排除“剩余流量/到期时间/测试专用/镜像官网”等连不通的提示节点</span>
+          </div>
+          <label class="switch">
+            <input type="checkbox" id="filterNotices" checked onchange="refreshGeneratedLinkIfPresent()">
+            <span class="slider"></span>
+          </label>
+        </div>
+
+        <div class="switch-row">
+          <div class="switch-info">
             <span class="switch-title">智能添加国旗 Emoji</span>
             <span class="switch-desc">根据节点所属国家或地区自动添加国家代码或旗帜前缀</span>
           </div>
@@ -1714,6 +1725,7 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       const addEmoji = document.getElementById('addEmoji').checked;
       const showInfo = document.getElementById('showInfo').checked;
       const enableUdp = document.getElementById('enableUdp').checked;
+      const filterNotices = document.getElementById('filterNotices') ? document.getElementById('filterNotices').checked : true;
 
       const origin = window.location.origin;
       const params = new URLSearchParams();
@@ -1734,6 +1746,7 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       if (!addEmoji) params.set('emoji', '0');
       if (!showInfo) params.set('info', '0');
       if (!enableUdp) params.set('udp', '0');
+      if (!filterNotices) params.set('filter_notices', '0');
 
       return \`\${origin}/sub?\${params.toString()}\`;
     }
@@ -1834,6 +1847,7 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       document.getElementById('addEmoji').checked = true;
       document.getElementById('enableUdp').checked = true;
       document.getElementById('showInfo').checked = true;
+      if (document.getElementById('filterNotices')) document.getElementById('filterNotices').checked = true;
       showToast('已重置配置表单');
     }
 
@@ -1855,7 +1869,8 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
           rename: document.getElementById('renameRules').value.trim(),
           regions: [...currentRegionFilters],
           emoji: document.getElementById('addEmoji').checked,
-          udp: document.getElementById('enableUdp').checked
+          udp: document.getElementById('enableUdp').checked,
+          filter_notices: document.getElementById('filterNotices') ? document.getElementById('filterNotices').checked : true
         };
 
         const resp = await fetch('/api/preview', {
@@ -2562,6 +2577,7 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
         addEmoji: document.getElementById('addEmoji').checked,
         showInfo: document.getElementById('showInfo').checked,
         enableUdp: document.getElementById('enableUdp').checked,
+        filterNotices: document.getElementById('filterNotices') ? document.getElementById('filterNotices').checked : true,
         date: new Date().toISOString()
       };
 
@@ -2595,6 +2611,9 @@ export function renderHtmlPage(version: string = '3.0.0-hardened'): string {
       document.getElementById('addEmoji').checked = item.addEmoji !== false;
       document.getElementById('showInfo').checked = item.showInfo !== false;
       document.getElementById('enableUdp').checked = item.enableUdp !== false;
+      if (document.getElementById('filterNotices')) {
+        document.getElementById('filterNotices').checked = item.filterNotices !== false;
+      }
 
       syncRulePresetAvailability(document.getElementById('targetClient').value);
       generateLink();

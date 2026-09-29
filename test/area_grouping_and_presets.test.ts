@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import yaml from 'js-yaml';
 import { toClashMeta, toSingBox } from '../src/generator';
 import { NodeEnvelope } from '../src/types';
-import { getRegionByNodeName, filterNodesByRegions } from '../src/utils';
+import { getRegionByNodeName, filterNodesByRegions, processNodes, ANNOUNCEMENT_NODE_REGEX } from '../src/utils';
 
 function createMockNode(name: string, server = '1.1.1.1', port = 443): NodeEnvelope {
   return {
@@ -182,5 +182,44 @@ describe('Area Grouping and Multi-Preset Combinations', () => {
     const selector = config.outbounds.find((o: any) => o.tag === '🚀 节点选择');
     expect(selector.outbounds).toContain('🌏 亚太节点');
     expect(selector.outbounds).toContain('🌎 美洲节点');
+  });
+
+  test('processNodes filters out announcement / fake dead nodes by default', () => {
+    const rawNodes = [
+      createMockNode('🇭🇰 香港 01'),
+      createMockNode('🌐 666中秋快乐666'),
+      createMockNode('剩余流量：1019.5 GB'),
+      createMockNode('🌐 套餐到期：长期有效'),
+      createMockNode('🌐 节点超时请手动更新订阅'),
+      createMockNode('🌐 Gemini解锁请使用VLESS节点'),
+      createMockNode('🌐 [naa.la] 镜像官网 1000B#S1'),
+      createMockNode('🇯🇵 日本 01')
+    ];
+
+    // 默认开启过滤
+    const cleaned = processNodes(rawNodes, {});
+    expect(cleaned.length).toBe(2);
+    expect(cleaned.map(n => n.name)).toEqual(['🇭🇰 香港 01', '🇯🇵 日本 01']);
+
+    // 显式关闭过滤
+    const kept = processNodes(rawNodes, { filterNotices: false });
+    expect(kept.length).toBe(rawNodes.length);
+  });
+
+  test('Main selector group maintains pure hierarchical tree structure without dumping 100+ raw proxies', () => {
+    const configYaml = toClashMeta(sampleNodes, undefined, 'standard', undefined, 'hybrid');
+    const config: any = yaml.load(configYaml);
+    const mainGroup = config['proxy-groups'].find((g: any) => g.name === '🚀 节点选择');
+
+    expect(mainGroup).toBeDefined();
+    // 应该只包含自动选择、各大区/国家策略组、DIRECT
+    expect(mainGroup.proxies).toContain('⚡ 自动选择');
+    expect(mainGroup.proxies).toContain('🌏 亚太节点');
+    expect(mainGroup.proxies).toContain('DIRECT');
+
+    // 绝不应该直接平铺所有单节点名字
+    expect(mainGroup.proxies).not.toContain('🇭🇰 香港 01');
+    expect(mainGroup.proxies).not.toContain('🇯🇵 日本 01');
+    expect(mainGroup.proxies).not.toContain('🇺🇸 美国 01');
   });
 });

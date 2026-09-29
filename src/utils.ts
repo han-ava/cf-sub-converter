@@ -1062,6 +1062,8 @@ export function parseRenameRules(rulesStr?: string): Array<{ search: string; rep
   return result.slice(0, 30);
 }
 
+export const ANNOUNCEMENT_NODE_REGEX = /(?:剩余|到期|过期|重置|套餐|额度|官网|网址|发布页|镜像|公告|通知|提示|更新订阅|超时请|测试专用|测速专用|中秋快乐|新年快乐|故障|维护|备用群|Tg群|返利|AFF|请使用)/i;
+
 /**
  * 节点过滤、重命名与特征去重综合处理
  */
@@ -1073,9 +1075,15 @@ export function processNodes(
     renameRules?: Array<{ search: string; replace: string }>;
     addEmoji?: boolean;
     enableUdp?: boolean;
+    filterNotices?: boolean;
   }
 ): NodeEnvelope[] {
   let nodes = deduplicateNodesByFingerprint(rawNodes);
+
+  // 1. 过滤机场公告与伪节点 (默认开启，自动排除连不通的信息提示节点)
+  if (options.filterNotices !== false) {
+    nodes = nodes.filter(n => !ANNOUNCEMENT_NODE_REGEX.test(n.name));
+  }
 
   nodes = nodes.map(node => {
     let cleanName = (node.name || '')

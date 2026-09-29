@@ -100,6 +100,7 @@ https://your-worker.workers.dev/sub?url=https://airport.com/sub?token=xxx&target
 | `info` / `show_info` | boolean | 否 | `1` | 是否在节点列表顶部插入剩余流量与到期时间展示节点（适用于 Base64 / Shadowrocket） |
 | `info_mode` | string | 否 | `first` | 多订阅流量合并策略：`first` (仅保留首个订阅), `sum` (合并累加流量), `none` (不显示流量) |
 | `udp` | boolean | 否 | `1` | 是否强制开启 UDP 转发（`1` 开启，`0` 关闭） |
+| `filter_notices` / `notices` | boolean | 否 | `1` | 是否自动过滤机场公告与伪节点（如“剩余流量/到期时间/测试专用/镜像官网”等连不通的死节点，`1` 开启自动净化，`0` 保留） |
 | `filename` | string | 否 | `SubConverter` | 导出的配置文件名称 |
 | `nocache` | string | 否 | `0` | 设为 `1` 时强制穿透边缘缓存，实时向上游机场拉取 |
 | `cache_ttl` | number | 否 | `180` | 边缘缓存有效期（单位：秒，默认 3 分钟） |
