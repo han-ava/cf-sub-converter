@@ -863,15 +863,15 @@ export function getMacroAreaByCountryCode(countryCode: string): MacroAreaInfo | 
  */
 export function getRegionByNodeName(name: string): RegionInfo | null {
   if (!name) return null;
-  // 1. 优先通过国旗 Emoji 识别
+  // 1. 优先通过地区关键字与正则识别 (文字地名明确，避免形如 "🇨🇳 台湾01" 因国旗前缀被误判为中国大陆)
   for (const region of REGIONS) {
-    if (name.includes(region.flag)) {
+    if (region.regex.test(name)) {
       return region;
     }
   }
-  // 2. 通过地区关键字与正则识别
+  // 2. 其次通过国旗 Emoji 兜底识别 (支持仅含 Emoji 的节点如 "🇸🇬高速流媒体")
   for (const region of REGIONS) {
-    if (region.regex.test(name)) {
+    if (name.includes(region.flag)) {
       return region;
     }
   }

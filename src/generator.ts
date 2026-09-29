@@ -77,6 +77,7 @@ export function toClashMeta(
     for (const proxy of proxies) {
       const region = getRegionByNodeName(proxy.name);
       if (region) {
+        if (region.code === 'CN') continue; // 翻墙配置排除中国节点进入代理/测速策略组
         if (!countryNodeMap[region.code]) countryNodeMap[region.code] = [];
         countryNodeMap[region.code]!.push(proxy.name);
         const area = getMacroAreaByCountryCode(region.code);
@@ -121,6 +122,7 @@ export function toClashMeta(
     } else if (groupType === 'country') {
       // 传统国家分组模式 (每个有节点的国家都独立成组，保持旧版兼容)
       for (const region of REGIONS) {
+        if (region.code === 'CN') continue;
         const matchedNodes = countryNodeMap[region.code];
         if (matchedNodes && matchedNodes.length > 0) {
           const groupName = `${region.flag} ${region.name}节点`;
@@ -166,6 +168,7 @@ export function toClashMeta(
 
       // 仅当国家节点数 >= 3 时生成独立国家组，消灭单节点冷门组
       for (const region of REGIONS) {
+        if (region.code === 'CN') continue;
         const matchedNodes = countryNodeMap[region.code];
         if (matchedNodes && matchedNodes.length >= 3) {
           const groupName = `${region.flag} ${region.name}节点`;
@@ -434,6 +437,7 @@ export function toSingBox(
     for (const { tag } of taggedNodes) {
       const region = getRegionByNodeName(tag);
       if (region) {
+        if (region.code === 'CN') continue; // 翻墙配置排除中国节点进入代理/测速策略组
         if (!countryNodeMap[region.code]) countryNodeMap[region.code] = [];
         countryNodeMap[region.code]!.push(tag);
         const area = getMacroAreaByCountryCode(region.code);
@@ -476,6 +480,7 @@ export function toSingBox(
       }
     } else if (options.groupType === 'country') {
       for (const region of REGIONS) {
+        if (region.code === 'CN') continue;
         const matched = countryNodeMap[region.code];
         if (matched && matched.length > 0) {
           const groupTag = `${region.flag} ${region.name}节点`;
@@ -518,6 +523,7 @@ export function toSingBox(
         });
       }
       for (const region of REGIONS) {
+        if (region.code === 'CN') continue;
         const matched = countryNodeMap[region.code];
         if (matched && matched.length >= 3) {
           const groupTag = `${region.flag} ${region.name}节点`;
